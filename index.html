@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Lummy Designs - Creaciones de lujo personalizadas. Rotulación y serigrafía en termos, tumblers y madera.">
+  <title>Lummy Designs | Creaciones de Lujo Personalizadas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav class="nav" id="navbar">
+    <div class="nav__container">
+      <a href="#inicio" class="nav__logo">
+        <span class="nav__logo-monogram">LD</span>
+        <div class="nav__logo-text">
+          <span class="nav__logo-brand">Lummy</span>
+          <span class="nav__logo-sub">Designs</span>
+        </div>
+      </a>
+      <ul class="nav__links" id="navLinks">
+        <li><a href="#inicio" class="nav__link">Inicio</a></li>
+        <li><a href="#nosotros" class="nav__link">Nosotros</a></li>
+        <li><a href="#productos" class="nav__link">Productos</a></li>
+        <li><a href="#galeria" class="nav__link">Galería</a></li>
+        <li><a href="#proceso" class="nav__link">Proceso</a></li>
+        <li><a href="#contacto" class="nav__link nav__link--cta">Ordenar</a></li>
+      </ul>
+      <button class="nav__hamburger" id="hamburger" aria-label="Abrir menú">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero" id="inicio">
+    <div class="hero__bg"></div>
+    <div class="hero__overlay"></div>
+    <div class="hero__content">
+      <p class="hero__pre-title reveal">Creaciones de lujo personalizadas</p>
+      <h1 class="hero__title reveal">Lummy<br>Designs</h1>
+      <p class="hero__subtitle reveal">Arte y elegancia en cada pieza</p>
+      <a href="https://wa.me/1234567890?text=Hola%2C%20me%20gustar%C3%ADa%20ordenar%20con%20Lummy%20Designs"
+         class="btn btn--gold reveal" target="_blank" rel="noopener">
+        Ordena ahora
+      </a>
+    </div>
+    <div class="hero__scroll">
+      <span class="hero__scroll-text">Descubrir</span>
+      <div class="hero__scroll-line"></div>
+    </div>
+  </section>
+
+  <!-- About Section -->
+  <section class="about" id="nosotros">
+    <div class="about__content-wrap">
+      <div class="container">
+        <div class="reveal">
+          <div class="section-label">Nuestra esencia</div>
+          <h2 class="about__title">Experimente la elegancia<br><em>de Lummy Designs</em></h2>
+          <div class="gold-line"></div>
+          <p class="about__text">
+            En Lummy Designs transformamos objetos ordinarios en piezas de arte personalizadas.
+            Cada trazo, cada grabado, cada serigrafía es una expresión de lujo que perdura.
+            Especializados en rotulación de termos, tumblers y madera, creamos memorias
+            únicas para momentos especiales.
+          </p>
+        </div>
+        <div class="about__stats reveal">
+          <div class="about__stat">
+            <span class="about__stat-num">100%</span>
+            <span class="about__stat-label">Personalizado</span>
+          </div>
+          <div class="about__stat-divider"></div>
+          <div class="about__stat">
+            <span class="about__stat-num">Premium</span>
+            <span class="about__stat-label">Calidad</span>
+          </div>
+          <div class="about__stat-divider"></div>
+          <div class="about__stat">
+            <span class="about__stat-num">Único</span>
+            <span class="about__stat-label">Cada pieza</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="about__image-col reveal">
+      <div class="about__image-frame">
+        <img src="images/products-banner.jpg" alt="Productos Lummy Designs" class="about__image"
+             onerror="this.parentElement.classList.add('about__image-frame--placeholder')">
+        <div class="about__image-shine"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Products Section -->
+  <section class="products" id="productos">
+    <div class="container">
+      <div class="section-header reveal">
+        <div class="section-label">Lo que hacemos</div>
+        <h2 class="section-title">Nuestros servicios</h2>
+        <div class="gold-line gold-line--center"></div>
+      </div>
+      <div class="products__grid">
+
+        <article class="product-card reveal">
+          <div class="product-card__icon">
+            <svg viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M22 8h16v4l3 40H19L22 12V8z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+              <path d="M19 16c3-2 8-3 11-3s8 1 11 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M28 28l4 4-4 4-4-4 4-4z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <h3 class="product-card__title">Termos & Tumblers</h3>
+          <div class="product-card__line"></div>
+          <p class="product-card__desc">
+            Rotulación personalizada en termos y vasos térmicos con monogramas,
+            nombres y diseños exclusivos. Acabado dorado que no se borra.
+          </p>
+          <a href="#contacto" class="product-card__link">Ordenar →</a>
+        </article>
+
+        <article class="product-card product-card--featured reveal">
+          <div class="product-card__badge">Popular</div>
+          <div class="product-card__icon">
+            <svg viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="10" y="20" width="40" height="28" rx="2" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M20 20V15a10 10 0 0120 0v5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M23 34l4 4 10-10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <h3 class="product-card__title">Cajas & Sets de Regalo</h3>
+          <div class="product-card__line"></div>
+          <p class="product-card__desc">
+            Presentaciones de lujo para regalar. Sets personalizados con caja
+            premium, moño dorado y artículos rotulados. Ideal para empresas y eventos.
+          </p>
+          <a href="#contacto" class="product-card__link">Ordenar →</a>
+        </article>
+
+        <article class="product-card reveal">
+          <div class="product-card__icon">
+            <svg viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="8" y="14" width="44" height="30" rx="2" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M16 44v4M44 44v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M20 25h20M20 31h14M20 37h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <h3 class="product-card__title">Madera & Serigrafía</h3>
+          <div class="product-card__line"></div>
+          <p class="product-card__desc">
+            Grabado y rotulación en piezas de madera. Serigrafía de alta calidad
+            en múltiples materiales con pigmentos dorados y tintas premium.
+          </p>
+          <a href="#contacto" class="product-card__link">Ordenar →</a>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Gallery Section -->
+  <section class="gallery" id="galeria">
+    <div class="container">
+      <div class="section-header reveal">
+        <div class="section-label">Nuestro trabajo</div>
+        <h2 class="section-title">Galería</h2>
+        <div class="gold-line gold-line--center"></div>
+      </div>
+    </div>
+    <div class="gallery__grid">
+
+      <div class="gallery__item gallery__item--large reveal">
+        <img src="images/hero-bg.jpg" alt="Termo rotulado Lummy Designs"
+             onerror="this.style.display='none'; this.parentElement.classList.add('gallery__item--placeholder')">
+        <div class="gallery__placeholder-inner"><span class="gallery__pl-mono">LD</span></div>
+        <div class="gallery__item-overlay"><span>Termos Premium</span></div>
+      </div>
+
+      <div class="gallery__item reveal">
+        <img src="images/product-mug.jpg" alt="Taza personalizada"
+             onerror="this.style.display='none'; this.parentElement.classList.add('gallery__item--placeholder')">
+        <div class="gallery__placeholder-inner"><span class="gallery__pl-mono">LD</span></div>
+        <div class="gallery__item-overlay"><span>Tazas Personalizadas</span></div>
+      </div>
+
+      <div class="gallery__item reveal">
+        <img src="images/products-banner.jpg" alt="Set de lujo Lummy Designs"
+             onerror="this.style.display='none'; this.parentElement.classList.add('gallery__item--placeholder')">
+        <div class="gallery__placeholder-inner"><span class="gallery__pl-mono">LD</span></div>
+        <div class="gallery__item-overlay"><span>Sets de Lujo</span></div>
+      </div>
+
+      <div class="gallery__item gallery__item--placeholder reveal">
+        <div class="gallery__placeholder-inner">
+          <span class="gallery__pl-mono">LD</span>
+          <span class="gallery__pl-label">Próximamente</span>
+        </div>
+        <div class="gallery__item-overlay"><span>Madera Grabada</span></div>
+      </div>
+
+      <div class="gallery__item gallery__item--placeholder reveal">
+        <div class="gallery__placeholder-inner">
+          <span class="gallery__pl-mono">LD</span>
+          <span class="gallery__pl-label">Próximamente</span>
+        </div>
+        <div class="gallery__item-overlay"><span>Serigrafía</span></div>
+      </div>
+
+      <div class="gallery__item gallery__item--brand reveal">
+        <img src="images/logo.png" alt="Lummy Designs Logo" class="gallery__logo-img"
+             onerror="this.style.display='none'">
+        <div class="gallery__brand-overlay">
+          <span class="gallery__brand-name">Lummy Designs</span>
+          <small>Creaciones de lujo personalizadas</small>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Process Section -->
+  <section class="process" id="proceso">
+    <div class="container">
+      <div class="section-header reveal">
+        <div class="section-label">¿Cómo ordenar?</div>
+        <h2 class="section-title">Proceso simple,<br><em>resultado extraordinario</em></h2>
+        <div class="gold-line gold-line--center"></div>
+      </div>
+      <div class="process__steps">
+
+        <div class="process__step reveal">
+          <div class="process__connector"></div>
+          <div class="process__step-num">01</div>
+          <div class="process__step-content">
+            <h3>Elige tu producto</h3>
+            <p>Selecciona entre nuestra gama de termos, tumblers, piezas de madera o sets de regalo.</p>
+          </div>
+        </div>
+
+        <div class="process__step reveal">
+          <div class="process__connector"></div>
+          <div class="process__step-num">02</div>
+          <div class="process__step-content">
+            <h3>Personaliza tu diseño</h3>
+            <p>Comparte tu nombre, monograma o diseño. Nuestros artistas lo llevan al siguiente nivel.</p>
+          </div>
+        </div>
+
+        <div class="process__step reveal">
+          <div class="process__connector"></div>
+          <div class="process__step-num">03</div>
+          <div class="process__step-content">
+            <h3>Confirma tu pedido</h3>
+            <p>Aprueba la muestra digital y realiza tu pago de forma segura.</p>
+          </div>
+        </div>
+
+        <div class="process__step reveal">
+          <div class="process__step-num">04</div>
+          <div class="process__step-content">
+            <h3>Recibe en casa</h3>
+            <p>Tu pieza única, empacada con lujo, llega directamente a tu puerta.</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Testimonials Section -->
+  <section class="testimonials">
+    <div class="container">
+      <div class="section-header reveal">
+        <div class="section-label">Lo que dicen</div>
+        <h2 class="section-title">Clientes satisfechos</h2>
+        <div class="gold-line gold-line--center"></div>
+      </div>
+      <div class="testimonials__grid">
+
+        <div class="testimonial-card reveal">
+          <div class="testimonial-card__quote-mark">"</div>
+          <div class="testimonial-card__stars">★★★★★</div>
+          <blockquote class="testimonial-card__quote">
+            El termo quedó increíble. El grabado dorado es perfecto y la calidad supera mis expectativas. ¡Lo recomiendo al 100%!
+          </blockquote>
+          <div class="testimonial-card__author">
+            <div class="testimonial-card__avatar">M</div>
+            <div>
+              <strong>María González</strong>
+              <span>Cliente frecuente</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="testimonial-card reveal">
+          <div class="testimonial-card__quote-mark">"</div>
+          <div class="testimonial-card__stars">★★★★★</div>
+          <blockquote class="testimonial-card__quote">
+            Pedí sets de regalo para mi empresa y quedamos fascinados. Presentación de lujo, tiempo de entrega perfecto.
+          </blockquote>
+          <div class="testimonial-card__author">
+            <div class="testimonial-card__avatar">C</div>
+            <div>
+              <strong>Carlos Mendoza</strong>
+              <span>Empresario</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="testimonial-card reveal">
+          <div class="testimonial-card__quote-mark">"</div>
+          <div class="testimonial-card__stars">★★★★★</div>
+          <blockquote class="testimonial-card__quote">
+            El detalle en madera grabada para mi boda fue el toque perfecto. Único, elegante y lleno de significado.
+          </blockquote>
+          <div class="testimonial-card__author">
+            <div class="testimonial-card__avatar">A</div>
+            <div>
+              <strong>Ana Rodríguez</strong>
+              <span>Novia satisfecha</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Contact Section -->
+  <section class="contact" id="contacto">
+    <div class="container">
+      <div class="section-header reveal">
+        <div class="section-label">Hablemos</div>
+        <h2 class="section-title">Ordena tu pieza<br><em>única hoy</em></h2>
+        <div class="gold-line gold-line--center"></div>
+      </div>
+      <div class="contact__grid">
+
+        <div class="contact__info reveal">
+          <h3 class="contact__info-title">Contáctanos</h3>
+          <div class="contact__channels">
+
+            <a href="https://wa.me/1234567890?text=Hola%2C%20me%20gustar%C3%ADa%20ordenar%20con%20Lummy%20Designs"
+               class="contact__channel" target="_blank" rel="noopener">
+              <div class="contact__channel-icon contact__channel-icon--wa">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+              </div>
+              <div>
+                <strong>WhatsApp</strong>
+                <span>Escríbenos y ordena fácil</span>
+              </div>
+            </a>
+
+            <a href="https://instagram.com/lummydesigns" class="contact__channel" target="_blank" rel="noopener">
+              <div class="contact__channel-icon contact__channel-icon--ig">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+              </div>
+              <div>
+                <strong>Instagram</strong>
+                <span>@lummydesigns</span>
+              </div>
+            </a>
+
+            <a href="mailto:contacto@lummydesigns.com" class="contact__channel">
+              <div class="contact__channel-icon contact__channel-icon--em">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
+              </div>
+              <div>
+                <strong>Email</strong>
+                <span>contacto@lummydesigns.com</span>
+              </div>
+            </a>
+
+          </div>
+        </div>
+
+        <form class="contact__form reveal" id="contactForm" novalidate>
+          <div class="form-group">
+            <label for="name">Nombre completo</label>
+            <input type="text" id="name" name="name" placeholder="Tu nombre" required>
+          </div>
+          <div class="form-group">
+            <label for="email">Correo electrónico</label>
+            <input type="email" id="email" name="email" placeholder="tu@email.com" required>
+          </div>
+          <div class="form-group">
+            <label for="type">Tipo de pedido</label>
+            <select id="type" name="type" required>
+              <option value="" disabled selected>Selecciona una opción</option>
+              <option value="Termo / Tumbler">Termo / Tumbler</option>
+              <option value="Set de regalo">Set de regalo</option>
+              <option value="Madera grabada">Madera grabada</option>
+              <option value="Serigrafía">Serigrafía</option>
+              <option value="Otro">Otro</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="message">Descripción de tu pedido</label>
+            <textarea id="message" name="message" rows="4" placeholder="Cuéntanos qué diseño tienes en mente..." required></textarea>
+          </div>
+          <button type="submit" class="btn btn--gold btn--full">Enviar por WhatsApp →</button>
+        </form>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer__logo">
+        <span class="footer__logo-monogram">LD</span>
+        <div class="footer__logo-text">
+          <span>Lummy</span>
+          <span>Designs</span>
+        </div>
+      </div>
+      <p class="footer__tagline">Creaciones de lujo personalizadas</p>
+      <nav class="footer__nav">
+        <a href="#inicio">Inicio</a>
+        <a href="#nosotros">Nosotros</a>
+        <a href="#productos">Productos</a>
+        <a href="#galeria">Galería</a>
+        <a href="#proceso">Proceso</a>
+        <a href="#contacto">Contacto</a>
+      </nav>
+      <div class="footer__social">
+        <a href="https://wa.me/1234567890" target="_blank" rel="noopener" aria-label="WhatsApp">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        </a>
+        <a href="https://instagram.com/lummydesigns" target="_blank" rel="noopener" aria-label="Instagram">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+        </a>
+        <a href="mailto:contacto@lummydesigns.com" aria-label="Email">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
+        </a>
+      </div>
+      <div class="footer__bottom">
+        <p>© 2025 Lummy Designs. Todos los derechos reservados.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Floating WhatsApp Button -->
+  <a href="https://wa.me/1234567890?text=Hola%2C%20me%20gustar%C3%ADa%20ordenar%20con%20Lummy%20Designs"
+     class="whatsapp-float" target="_blank" rel="noopener" aria-label="Chatear por WhatsApp">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+  </a>
+
+  <script src="js/main.js"></script>
+</body>
+</html>
