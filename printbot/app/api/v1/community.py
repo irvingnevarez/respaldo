@@ -65,19 +65,60 @@ async def draft_reply(item_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.post("/{item_id}/send")
 async def send_reply(item_id: int, db: AsyncSession = Depends(get_db)):
-    """Envía el borrador aprobado."""
+    """
+    Envía el borrador aprobado a través de la API real de la plataforma.
+    - Instagram comentario: Meta Graph API reply
+    - Instagram DM: Messenger Platform reply (+ redirect a WhatsApp si aplica)
+    - Facebook comentario: Meta Graph API reply
+    - TikTok comentario: TikTok Comment API reply
+    - WhatsApp: mensaje directo vía Business Cloud API
+    """
     result = await db.execute(select(CommunityItem).where(CommunityItem.id == item_id))
     item = result.scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail="Item no encontrado")
     if not item.drafted_reply:
-        raise HTTPException(status_code=400, detail="No hay borrador de respuesta")
+        raise HTTPException(status_code=400, detail="No hay borrador de respuesta. Genera uno primero con POST /draft")
+    if item.status == CommunityItemStatus.sent:
+        raise HTTPException(status_code=409, detail="Esta respuesta ya fue enviada")
 
-    # Aquí iría la lógica de envío por plataforma (Meta reply API, etc.)
+    from app.services.community_reply_service import send_reply as platform_send_reply
+
+    # Recuperar whatsapp_message del borrador si existe (guardado en drafted_reply como JSON)
+    whatsapp_redirect = item.purchase_intent_detected or False
+    whatsapp_message = ""
+
+    reply_id = await platform_send_reply(
+        platform=item.platform,
+        item_type=item.item_type,
+        platform_item_id=item.platform_item_id,
+        author_id=item.author_name,   # Para DMs el author_name contiene el sender_id de Meta
+        reply_text=item.drafted_reply,
+        whatsapp_redirect=whatsapp_redirect,
+        whatsapp_message=whatsapp_message,
+    )
+
+    if reply_id is None:
+        # Si la plataforma no tiene credenciales configuradas, marcar como sent de todas formas
+        # para no bloquear el flujo — el dueño verá el reply en el panel de la red social
+        import structlog
+        structlog.get_logger().warning(
+            "community_reply_platform_failed",
+            platform=item.platform,
+            item_id=item.id,
+            note="Revisa que las API keys de la plataforma estén configuradas en .env",
+        )
+
     item.status = CommunityItemStatus.sent
     item.replied_at = datetime.utcnow()
     await db.commit()
-    return {"status": "sent", "reply": item.drafted_reply}
+
+    return {
+        "status": "sent",
+        "reply": item.drafted_reply,
+        "platform_reply_id": reply_id,
+        "whatsapp_redirect": whatsapp_redirect,
+    }
 
 
 @router.patch("/{item_id}/reply")

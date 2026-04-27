@@ -46,19 +46,20 @@ def start_scheduler() -> AsyncIOScheduler:
 
 
 async def _daily_analytics_job() -> None:
-    """Tarea diaria: actualiza métricas de redes sociales."""
+    """Tarea diaria: jala métricas reales de Meta/TikTok y ajusta estrategia."""
     try:
+        from app.agents.analytics import AnalyticsAgent
+        from app.agents.base import AgentTask
         from app.db.base import SessionLocal
         from app.dependencies import get_anthropic
+        from app.knowledge.retriever import retrieve_brand_context
 
         async with SessionLocal() as db:
-            from app.agents.analytics import AnalyticsAgent
-            from app.agents.base import AgentTask
-
+            brand_ctx = await retrieve_brand_context("estrategia contenido desempeño métricas")
             agent = AnalyticsAgent(get_anthropic(), db)
             result = await agent.run(AgentTask(
                 task_type="daily_refresh",
-                inputs={"snapshots": [], "top_posts": [], "current_pillar_mix": {}},
+                inputs={"brand_context": brand_ctx, "force_refresh": False},
             ))
             logger.info("daily_analytics_done", success=result.success)
     except Exception as e:
