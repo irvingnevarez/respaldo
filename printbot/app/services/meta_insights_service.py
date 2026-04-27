@@ -3,7 +3,7 @@ Servicio para obtener métricas reales desde Meta Insights API.
 Soporta Instagram Business y Facebook Page insights.
 """
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import httpx
 import structlog
@@ -179,7 +179,8 @@ async def fetch_fb_page_metrics(days: int = 30) -> dict:
         logger.warning("fb_metrics_skipped", reason="missing credentials")
         return {}
 
-    since = int((date.today() - timedelta(days=days)).strftime("%s") if hasattr(date.today(), "strftime") else 0)
+    since_date = date.today() - timedelta(days=days)
+    since = int(datetime.combine(since_date, datetime.min.time()).timestamp())
 
     async with httpx.AsyncClient(timeout=30) as client:
         try:
