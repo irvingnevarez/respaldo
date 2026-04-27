@@ -1,0 +1,32 @@
+{
+  "name": "testimonial_quote",
+  "description": "Cita de cliente con producto de fondo — 15 segundos",
+  "duration_seconds": 15,
+  "resolution": "1080x1920",
+  "fps": 30,
+  "default_scenes": [
+    {
+      "start": 0, "end": 2,
+      "text_overlay": "Esto nos escribió una clienta 🖤",
+      "animation": "fade_in",
+      "background_color": "#0a0a0a"
+    },
+    {
+      "start": 2, "end": 11,
+      "text_overlay": "\"Nunca pensé que quedaría tan bien. Es exactamente lo que imaginé.\"",
+      "animation": "slide_up",
+      "background_color": "#0a0a0a",
+      "text_color": "#ffffff",
+      "font_size": 38
+    },
+    {
+      "start": 11, "end": 15,
+      "text_overlay": "Tu historia, en nuestras manos ✨",
+      "animation": "fade_in",
+      "background_color": "#0a0a0a",
+      "text_color": "#C9A84C"
+    }
+  ],
+  "logo_position": "bottom_right",
+  "color_overlay": "#0a0a0a80"
+}

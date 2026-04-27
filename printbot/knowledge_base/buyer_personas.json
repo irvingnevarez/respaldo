@@ -1,0 +1,99 @@
+{
+  "personas": [
+    {
+      "id": "organizadora_corporativa",
+      "name": "La Organizadora Corporativa",
+      "age_range": "28-40",
+      "occupation": "Coordinadora de RRHH o Marketing en empresa mediana",
+      "location": "CDMX, Monterrey, Guadalajara",
+      "needs": "50-200 piezas para kit de bienvenida, regalo navideño o evento corporativo",
+      "pain_points": [
+        "Proveedores que no cumplen tiempos",
+        "Calidad inconsistente en lotes grandes",
+        "No recibe prueba digital antes de producir"
+      ],
+      "motivations": "Quedar bien con su jefe, impresionar a los empleados/clientes",
+      "preferred_channels": ["LinkedIn", "Instagram", "WhatsApp", "Email"],
+      "budget_mxn": "5000-50000 por pedido",
+      "decision_time": "1-3 semanas",
+      "hook": "Pedidos corporativos desde 20 piezas. Muestra digital antes de producir.",
+      "instagram_cta": "Cotiza tu pedido corporativo por WhatsApp 📲"
+    },
+    {
+      "id": "mamá_detallista",
+      "name": "La Mamá Detallista",
+      "age_range": "30-45",
+      "occupation": "Ama de casa o trabajadora, mamá activa",
+      "location": "Todo México, ciudades medianas",
+      "needs": "Regalo único para cumpleaños, baby shower, día del maestro, graduación",
+      "pain_points": [
+        "Los regalos de tienda se sienten impersonales",
+        "Quiere algo memorable pero no carísimo",
+        "Le da pereza buscar opciones; quiere soluciones listas"
+      ],
+      "motivations": "Ser recordada como la que da los mejores regalos",
+      "preferred_channels": ["Facebook", "Instagram", "WhatsApp"],
+      "budget_mxn": "300-1500 por regalo",
+      "decision_time": "1-3 días",
+      "hook": "Regala algo que nadie más tiene. Con tu nombre, para siempre.",
+      "instagram_cta": "Pide el tuyo por WhatsApp, lo personalizamos juntos ✨"
+    },
+    {
+      "id": "emprendedor_merch",
+      "name": "El Emprendedor de Merch",
+      "age_range": "22-32",
+      "occupation": "Dueño de marca pequeña, creador de contenido, negocio local",
+      "location": "Todo México",
+      "needs": "Merch para su audiencia: hoodies, termos, camisetas con su logo",
+      "pain_points": [
+        "MOQ alto en imprentas grandes (500+ piezas)",
+        "No tiene experiencia con archivos de diseño",
+        "Quiere calidad que no avergüence su marca"
+      ],
+      "motivations": "Revenue adicional, fortalecer identidad de marca, dar algo a sus fans",
+      "preferred_channels": ["TikTok", "Instagram", "Twitter/X"],
+      "budget_mxn": "2000-15000 por corrida",
+      "decision_time": "1 semana",
+      "hook": "Merch personalizado desde 10 piezas. Sin mínimos imposibles.",
+      "instagram_cta": "¿Lista tu marca para tener merch? Escríbenos 🎨"
+    },
+    {
+      "id": "novia_organizadora",
+      "name": "La Novia Organizadora",
+      "age_range": "25-35",
+      "occupation": "Cualquiera, planeando boda o XV años",
+      "location": "Todo México",
+      "needs": "Recuerdos personalizados para invitados, regalos para damas de honor",
+      "pain_points": [
+        "Todo debe ser cohesivo con la paleta del evento",
+        "Necesita muchas piezas con diseños únicos (nombres individuales)",
+        "Ciclo de planeación largo, muchos cambios de opinión"
+      ],
+      "motivations": "Que cada detalle del evento sea perfecto y memorable",
+      "preferred_channels": ["Instagram", "Pinterest", "WhatsApp"],
+      "budget_mxn": "3000-25000 total para recuerdos",
+      "decision_time": "2-6 semanas",
+      "hook": "Recuerdos de boda que no terminan en el cajón.",
+      "instagram_cta": "Cuéntanos tu tema y lo diseñamos juntas 💍"
+    },
+    {
+      "id": "joven_detallero",
+      "name": "El Joven Detallero",
+      "age_range": "18-27",
+      "occupation": "Estudiante universitario o joven profesional",
+      "location": "Todo México, ciudades universitarias",
+      "needs": "Regalo único para cumpleaños, aniversario, amistad",
+      "pain_points": [
+        "Presupuesto limitado pero quiere causar impacto",
+        "Quiere que el regalo se vea caro aunque no lo sea tanto",
+        "Quiere que el receptor lo postee en Instagram"
+      ],
+      "motivations": "Ser el que da el regalo más memorable, ganar puntos sociales",
+      "preferred_channels": ["TikTok", "Instagram"],
+      "budget_mxn": "299-700",
+      "decision_time": "1-2 días",
+      "hook": "El regalo más instagrameable del año. Desde $299.",
+      "instagram_cta": "Sorprende a alguien hoy 🎁 Link en bio"
+    }
+  ]
+}

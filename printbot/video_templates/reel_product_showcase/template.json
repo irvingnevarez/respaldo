@@ -1,0 +1,40 @@
+{
+  "name": "reel_product_showcase",
+  "description": "Showcase de producto terminado — 15 segundos, 9:16",
+  "duration_seconds": 15,
+  "resolution": "1080x1920",
+  "fps": 30,
+  "default_scenes": [
+    {
+      "start": 0, "end": 3,
+      "text_overlay": "Cada detalle, hecho para ti",
+      "animation": "fade_in",
+      "background_color": "#0a0a0a"
+    },
+    {
+      "start": 3, "end": 10,
+      "text_overlay": "",
+      "animation": "zoom",
+      "background_color": "#0a0a0a"
+    },
+    {
+      "start": 10, "end": 13,
+      "text_overlay": "Personalizado desde el primer hilo",
+      "animation": "slide_up",
+      "background_color": "#0a0a0a"
+    },
+    {
+      "start": 13, "end": 15,
+      "text_overlay": "Pide el tuyo por WhatsApp",
+      "animation": "fade_in",
+      "background_color": "#0a0a0a",
+      "text_color": "#C9A84C"
+    }
+  ],
+  "logo_position": "bottom_right",
+  "watermark_opacity": 0.7,
+  "color_overlay": "#0a0a0a80",
+  "font": "Montserrat-Bold",
+  "font_size_large": 52,
+  "font_size_small": 36
+}

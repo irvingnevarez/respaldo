@@ -1,0 +1,24 @@
+{
+  "events": [
+    {"date": "01-01", "name": "Año Nuevo", "type": "holiday", "lead_days": 7, "relevant_products": ["sets_regalo", "termos"]},
+    {"date": "05-01", "name": "Día del Trabajo", "type": "holiday", "lead_days": 5, "relevant_products": ["serigrafía_textil"]},
+    {"date": "14-02", "name": "Día del Amor y la Amistad", "type": "commercial", "lead_days": 14, "relevant_products": ["sets_regalo", "termos", "madera_grabado"], "priority": "high"},
+    {"month": "03", "week": 3, "name": "Día del Padre (3er domingo junio)", "type": "commercial", "lead_days": 14, "relevant_products": ["termos", "madera_grabado"], "priority": "high"},
+    {"date": "30-04", "name": "Día del Niño", "type": "commercial", "lead_days": 7, "relevant_products": ["sets_regalo"]},
+    {"month": "05", "week": 2, "name": "Día de la Madre (2do domingo mayo)", "type": "commercial", "lead_days": 21, "relevant_products": ["sets_regalo", "termos", "madera_grabado"], "priority": "high"},
+    {"month": "06", "week": 3, "name": "Día del Padre (3er domingo junio)", "type": "commercial", "lead_days": 14, "relevant_products": ["termos", "madera_grabado"], "priority": "high"},
+    {"date": "15-09", "name": "Independencia de México", "type": "national", "lead_days": 7, "relevant_products": ["serigrafía_textil"]},
+    {"date": "12-10", "name": "Día de la Raza", "type": "holiday", "lead_days": 3, "relevant_products": []},
+    {"date": "01-11", "name": "Día de Todos los Santos / Día de Muertos prep", "type": "cultural", "lead_days": 10, "relevant_products": ["madera_grabado"]},
+    {"date": "02-11", "name": "Día de Muertos", "type": "cultural", "lead_days": 14, "relevant_products": ["madera_grabado", "sets_regalo"], "priority": "medium"},
+    {"date": "20-11", "name": "Revolución Mexicana", "type": "holiday", "lead_days": 3, "relevant_products": []},
+    {"date": "12-12", "name": "Día de la Virgen de Guadalupe", "type": "cultural", "lead_days": 7, "relevant_products": ["serigrafía_textil"]},
+    {"date": "24-12", "name": "Nochebuena", "type": "commercial", "lead_days": 21, "relevant_products": ["sets_regalo", "termos", "madera_grabado"], "priority": "high"},
+    {"date": "25-12", "name": "Navidad", "type": "commercial", "lead_days": 21, "relevant_products": ["sets_regalo", "termos"], "priority": "high"},
+    {"date": "31-12", "name": "Año Nuevo", "type": "commercial", "lead_days": 14, "relevant_products": ["sets_regalo"]},
+    {"recurring": "november-december", "name": "Temporada de graduaciones", "type": "seasonal", "lead_days": 10, "relevant_products": ["sets_regalo", "termos"], "priority": "medium"},
+    {"recurring": "may-june-november-december", "name": "Temporada de XV años", "type": "seasonal", "lead_days": 30, "relevant_products": ["sets_regalo", "termos", "serigrafía_textil"], "priority": "medium"},
+    {"recurring": "year-round", "name": "Bodas", "type": "evergreen", "lead_days": 60, "relevant_products": ["sets_regalo", "termos", "serigrafía_textil"], "priority": "medium"},
+    {"recurring": "back-to-school-august-january", "name": "Regreso a clases / uniformes", "type": "seasonal", "lead_days": 21, "relevant_products": ["serigrafía_textil"], "priority": "low"}
+  ]
+}

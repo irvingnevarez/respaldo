@@ -1,0 +1,31 @@
+{
+  "name": "process_timelapse",
+  "description": "Proceso de serigrafía en timelapse — 25 segundos",
+  "duration_seconds": 25,
+  "resolution": "1080x1920",
+  "fps": 30,
+  "default_scenes": [
+    {
+      "start": 0, "end": 3,
+      "text_overlay": "Así nace cada pieza 🎨",
+      "animation": "fade_in",
+      "background_color": "#0a0a0a"
+    },
+    {
+      "start": 3, "end": 20,
+      "text_overlay": "",
+      "animation": "none",
+      "background_color": "#0a0a0a"
+    },
+    {
+      "start": 20, "end": 25,
+      "text_overlay": "Hecho con tus manos, terminado con las nuestras",
+      "animation": "slide_up",
+      "background_color": "#0a0a0a",
+      "text_color": "#C9A84C"
+    }
+  ],
+  "logo_position": "bottom_left",
+  "use_process_audio": true,
+  "color_overlay": "#0a0a0a40"
+}

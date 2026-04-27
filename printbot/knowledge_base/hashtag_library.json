@@ -1,0 +1,43 @@
+{
+  "by_pillar": {
+    "proceso_artesanal": {
+      "instagram": ["#serigrafía", "#procesoCreativo", "#behindTheScenes", "#artesaníaMexicana", "#estampado", "#DTF", "#serigraphyart", "#handmade", "#impresión", "#printmaking"],
+      "tiktok": ["#serigrafía", "#procesoCreativo", "#fyp", "#hechoenMéxico", "#printprocess"],
+      "facebook": ["#serigrafía", "#artesanía", "#procesoCreativo", "#HechoEnMéxico"]
+    },
+    "producto_terminado": {
+      "instagram": ["#productosPersonalizados", "#regalosPersonalizados", "#termoPersonalizado", "#camisetasPersonalizadas", "#grabadoPersonalizado", "#lummydesigns", "#unboxing", "#luxurygift", "#personalized"],
+      "tiktok": ["#regalosPersonalizados", "#productosPersonalizados", "#fyp", "#unboxing"],
+      "facebook": ["#regalosPersonalizados", "#productosPersonalizados", "#serigrafía"]
+    },
+    "regalos_ocasiones": {
+      "instagram": ["#ideasDeRegalo", "#regalosOriginales", "#regalosPersonalizados", "#gifting", "#giftideas", "#regaloBonito", "#giftsforher", "#giftsforhim", "#birthdaygift"],
+      "tiktok": ["#ideasDeRegalo", "#regalosOriginales", "#fyp", "#giftideas"],
+      "facebook": ["#ideasDeRegalo", "#regalosPersonalizados", "#ocasionesespeciales"]
+    },
+    "storytelling_cliente": {
+      "instagram": ["#clientefeliz", "#testimonio", "#unboxing", "#sorpresa", "#reactionsreels", "#satisfiedcustomer"],
+      "tiktok": ["#clientefeliz", "#unboxing", "#sorpresa", "#fyp"],
+      "facebook": ["#clientefeliz", "#testimonio"]
+    },
+    "educativo": {
+      "instagram": ["#serigrafíaVsDTF", "#queEsSerigrafía", "#tipsDeDiseño", "#serigraphytutorial", "#impresión101"],
+      "tiktok": ["#aprendeConTikTok", "#serigrafía101", "#fyp", "#diseñoGráfico"],
+      "facebook": ["#educación", "#serigrafía", "#tipsDeDiseño"]
+    },
+    "venta_directa": {
+      "instagram": ["#encargosAbiertos", "#pedidosPersonalizados", "#shop", "#shopnow", "#disponible"],
+      "tiktok": ["#encargos", "#pedidosPersonalizados", "#fyp"],
+      "facebook": ["#encargosAbiertos", "#pedidosPersonalizados"]
+    }
+  },
+  "brand_always_include": ["#LummyDesigns", "#serigrafíaMéxico", "#productosPersonalizadosMéxico"],
+  "location_tags": ["#CDMX", "#México", "#HechoEnMéxico", "#MéxicoCity"],
+  "seasonal": {
+    "14-feb": ["#SanValentín", "#DíaDelAmor", "#RegalosDeAmor", "#valentinesday"],
+    "dia-madre": ["#DíaDeLaMadre", "#MamáTeLoveo", "#RegaloParaMamá"],
+    "navidad": ["#Navidad", "#RegaloNavideño", "#Christmas", "#GiftWrapping"],
+    "graduacion": ["#Graduación", "#Egresados", "#RegalosDeGraduación"],
+    "boda": ["#Boda", "#WeddingFavors", "#RecuerdosDeBoda", "#Novias2025"]
+  }
+}

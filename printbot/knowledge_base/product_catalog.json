@@ -1,0 +1,61 @@
+{
+  "categories": [
+    {
+      "id": "termos_tumblers",
+      "name": "Termos y Tumblers",
+      "description": "Termos y vasos personalizados con serigrafía, grabado o vinil",
+      "techniques": ["serigrafía", "grabado laser", "vinil rotulación"],
+      "variants": ["termo 500ml", "tumbler 20oz", "termo Stanley compatible", "vaso skinny"],
+      "price_range_mxn": [299, 850],
+      "lead_time_days": "3-5",
+      "min_order": 1,
+      "best_sellers": true,
+      "instagram_hashtags": ["#termoPersonalizado", "#tumblerpersonalizado", "#termosgravados"],
+      "buyer_personas": ["mamá_detallista", "joven_detallero", "novia_organizadora"]
+    },
+    {
+      "id": "cajas_sets_regalo",
+      "name": "Cajas y Sets de Regalo",
+      "description": "Sets de regalo armados con packaging de lujo negro y dorado",
+      "techniques": ["estampado de caja", "papel de china personalizado", "tarjeta grabada"],
+      "variants": ["set básico", "set premium", "set corporativo", "set boda/XV"],
+      "price_range_mxn": [450, 2500],
+      "lead_time_days": "5-7",
+      "min_order": 1,
+      "best_sellers": true,
+      "instagram_hashtags": ["#cajasDeRegalo", "#giftset", "#regalosPersonalizados"],
+      "buyer_personas": ["organizadora_corporativa", "novia_organizadora", "mamá_detallista"]
+    },
+    {
+      "id": "serigrafía_textil",
+      "name": "Serigrafía en Textil",
+      "description": "Estampado en camisetas, hoodies, gorras y más con técnica serigráfica",
+      "techniques": ["serigrafía manual", "DTF (Direct to Film)", "transfer"],
+      "variants": ["camiseta básica", "hoodie", "gorra", "polo", "camiseta niño"],
+      "price_range_mxn": [150, 600],
+      "lead_time_days": "5-10",
+      "min_order": "10 piezas para serigrafía; 1 para DTF",
+      "best_sellers": false,
+      "instagram_hashtags": ["#serigrafía", "#camisetasPersonalizadas", "#merch", "#DTF"],
+      "buyer_personas": ["emprendedor_merch", "organizadora_corporativa"]
+    },
+    {
+      "id": "madera_grabado",
+      "name": "Madera y Grabado",
+      "description": "Placas, marcos, tablas y artículos de madera con grabado laser",
+      "techniques": ["grabado laser", "corte laser"],
+      "variants": ["placa decorativa", "tabla de cocina", "portaretrato", "llavero madera"],
+      "price_range_mxn": [199, 1200],
+      "lead_time_days": "3-5",
+      "min_order": 1,
+      "best_sellers": false,
+      "instagram_hashtags": ["#grabadoEnMadera", "#grabadoLaser", "#regaloPersonalizado"],
+      "buyer_personas": ["mamá_detallista", "novia_organizadora", "joven_detallero"]
+    }
+  ],
+  "techniques_explained": {
+    "serigrafía": "Técnica de impresión con malla y tinta. Colores vivos, duraderos, ideal para textil y corridas de 10+ piezas.",
+    "DTF": "Direct to Film — transferencia digital en caliente. Admite diseños multicolor y degradados. Desde 1 pieza.",
+    "grabado_laser": "Grabado permanente con láser. Ideal para madera, metal, vidrio. No se borra ni decolora."
+  }
+}
