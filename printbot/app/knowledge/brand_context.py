@@ -116,8 +116,11 @@ async def reindex() -> dict:
     """Re-indexa completamente la knowledge base. Borra y recrea colecciones."""
     try:
         client = _get_chroma()
-        client.delete_collection(COLLECTION_NAME)
-        client.delete_collection(SEASONAL_COLLECTION)
+        for name in (COLLECTION_NAME, SEASONAL_COLLECTION):
+            try:
+                client.delete_collection(name)
+            except Exception:
+                pass  # collection didn't exist yet — fine on first run
 
         global _brand_collection, _seasonal_collection
         _brand_collection = client.get_or_create_collection(name=COLLECTION_NAME)
