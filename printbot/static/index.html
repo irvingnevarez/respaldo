@@ -1,0 +1,1524 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PrintBot — Lummy Designs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+/* ═══════════════════════════════════════
+   RESET + VARIABLES
+═══════════════════════════════════════ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:         #0d0d0d;
+  --s1:         #111111;
+  --s2:         #171717;
+  --s3:         #1e1e1e;
+  --s4:         #252525;
+  --bd:         #2a2a2a;
+  --bd2:        #333333;
+  --gold:       #C9A84C;
+  --gold-h:     #dbb85e;
+  --gold-d:     rgba(201,168,76,.12);
+  --gold-g:     rgba(201,168,76,.22);
+  --txt:        #f0f0f0;
+  --txt2:       #9a9a9a;
+  --txt3:       #555555;
+  --green:      #22c55e;
+  --amber:      #f59e0b;
+  --red:        #ef4444;
+  --blue:       #3b82f6;
+  --purple:     #a855f7;
+  --ig:         #e1306c;
+  --fb:         #1877f2;
+  --tt:         #ff2d55;
+  --wa:         #25d366;
+  --sw: 248px;
+  --th: 56px;
+  --r:  10px;
+  --rs: 6px;
+  --rl: 14px;
+}
+
+html,body{height:100%;font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--txt);font-size:14px;-webkit-font-smoothing:antialiased}
+
+/* ═══════════════════════════════════════
+   APP LAYOUT
+═══════════════════════════════════════ */
+#app{display:flex;height:100vh;overflow:hidden}
+
+/* ═══════════════════════════════════════
+   SIDEBAR
+═══════════════════════════════════════ */
+#sidebar{
+  width:var(--sw);flex-shrink:0;
+  background:var(--s1);border-right:1px solid var(--bd);
+  display:flex;flex-direction:column;overflow:hidden;
+  transition:width .2s ease;
+}
+
+.sb-logo{
+  padding:18px 16px 14px;border-bottom:1px solid var(--bd);
+  display:flex;align-items:center;gap:10px;flex-shrink:0;
+}
+.sb-logo-icon{
+  width:36px;height:36px;background:var(--gold);border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:17px;flex-shrink:0;
+}
+.sb-logo-name{font-size:15px;font-weight:700;color:var(--txt);letter-spacing:-.3px}
+.sb-logo-sub{font-size:10px;color:var(--txt2);margin-top:1px}
+
+.sb-nav{flex:1;overflow-y:auto;padding:8px}
+
+.nav-sec{
+  font-size:10px;font-weight:600;letter-spacing:.8px;
+  text-transform:uppercase;color:var(--txt3);
+  padding:12px 8px 4px;
+}
+
+.nav-a{
+  display:flex;align-items:center;gap:9px;
+  padding:8px 10px;margin-bottom:1px;border-radius:var(--rs);
+  cursor:pointer;color:var(--txt2);font-size:13.5px;font-weight:400;
+  transition:background .12s,color .12s;user-select:none;
+}
+.nav-a:hover{background:var(--s3);color:var(--txt)}
+.nav-a.on{background:var(--gold-d);color:var(--gold);font-weight:500}
+.nav-a i{width:18px;text-align:center;font-size:13px;flex-shrink:0}
+.nav-a span{flex:1}
+.nav-badge{
+  background:var(--red);color:#fff;
+  font-size:10px;font-weight:700;
+  padding:1px 6px;border-radius:20px;min-width:18px;text-align:center;
+}
+
+.sb-budget{
+  margin:10px;padding:14px;flex-shrink:0;
+  background:var(--s2);border:1px solid var(--bd);border-radius:var(--r);
+}
+.sbg-hd{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--txt3);margin-bottom:10px}
+.sbg-nums{display:flex;align-items:baseline;gap:4px;margin-bottom:8px}
+.sbg-val{font-size:22px;font-weight:700;color:var(--txt);line-height:1}
+.sbg-max{font-size:11px;color:var(--txt2)}
+.sbg-bar{height:4px;background:var(--bd);border-radius:2px;overflow:hidden}
+.sbg-fill{height:100%;border-radius:2px;transition:width .5s ease,background .3s}
+.sbg-fill.ok{background:var(--green)}
+.sbg-fill.warning{background:var(--amber)}
+.sbg-fill.critical{background:var(--red)}
+.sbg-st{font-size:11px;margin-top:6px}
+.sbg-st.ok{color:var(--green)}
+.sbg-st.warning{color:var(--amber)}
+.sbg-st.critical{color:var(--red)}
+
+/* ═══════════════════════════════════════
+   MAIN AREA
+═══════════════════════════════════════ */
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+
+#topbar{
+  height:var(--th);flex-shrink:0;
+  background:var(--s1);border-bottom:1px solid var(--bd);
+  display:flex;align-items:center;padding:0 24px;gap:12px;
+}
+.tb-title{font-size:15px;font-weight:600;color:var(--txt)}
+.tb-right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.conn-dot{
+  width:8px;height:8px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 6px var(--green);transition:all .3s;
+}
+.conn-dot.off{background:var(--red);box-shadow:0 0 6px var(--red)}
+
+#view{flex:1;overflow-y:auto;padding:24px}
+
+/* ═══════════════════════════════════════
+   BUTTONS
+═══════════════════════════════════════ */
+.btn{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:7px 14px;border-radius:var(--rs);
+  font-size:13px;font-weight:500;cursor:pointer;border:none;
+  font-family:inherit;transition:all .12s;white-space:nowrap;
+}
+.btn-primary{background:var(--gold);color:#0a0a0a}
+.btn-primary:hover{background:var(--gold-h);transform:translateY(-1px);box-shadow:0 4px 12px var(--gold-g)}
+.btn-ghost{background:transparent;color:var(--txt2);border:1px solid var(--bd2)}
+.btn-ghost:hover{background:var(--s3);color:var(--txt)}
+.btn-success{background:rgba(34,197,94,.12);color:var(--green);border:1px solid rgba(34,197,94,.25)}
+.btn-success:hover{background:rgba(34,197,94,.2)}
+.btn-danger{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.25)}
+.btn-danger:hover{background:rgba(239,68,68,.2)}
+.btn-warning{background:rgba(245,158,11,.12);color:var(--amber);border:1px solid rgba(245,158,11,.25)}
+.btn-warning:hover{background:rgba(245,158,11,.2)}
+.btn-blue{background:rgba(59,130,246,.12);color:var(--blue);border:1px solid rgba(59,130,246,.25)}
+.btn-blue:hover{background:rgba(59,130,246,.2)}
+.btn-sm{padding:5px 10px;font-size:12px;gap:5px}
+.btn-lg{padding:10px 22px;font-size:14px}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none!important;box-shadow:none!important}
+
+/* ═══════════════════════════════════════
+   CARDS
+═══════════════════════════════════════ */
+.card{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:20px}
+.card-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--txt2);margin-bottom:16px}
+
+/* Stats */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin-bottom:20px}
+.stat{
+  background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);
+  padding:18px;cursor:pointer;transition:border-color .15s,transform .15s;
+}
+.stat:hover{border-color:var(--bd2);transform:translateY(-1px)}
+.stat.hi{border-color:rgba(201,168,76,.3)}
+.stat-n{font-size:32px;font-weight:700;line-height:1;margin-bottom:4px}
+.stat-l{font-size:12px;color:var(--txt2)}
+.stat.hi .stat-n{color:var(--gold)}
+
+/* ═══════════════════════════════════════
+   BADGES
+═══════════════════════════════════════ */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.b-ig{background:rgba(225,48,108,.13);color:var(--ig)}
+.b-fb{background:rgba(24,119,242,.13);color:var(--fb)}
+.b-tt{background:rgba(255,45,85,.13);color:var(--tt)}
+.b-wa{background:rgba(37,211,102,.13);color:var(--wa)}
+.b-pending{background:rgba(245,158,11,.13);color:var(--amber)}
+.b-approved{background:rgba(59,130,246,.13);color:var(--blue)}
+.b-scheduled{background:rgba(59,130,246,.13);color:var(--blue)}
+.b-published{background:rgba(34,197,94,.13);color:var(--green)}
+.b-rejected{background:rgba(239,68,68,.13);color:var(--red)}
+.b-failed{background:rgba(239,68,68,.13);color:var(--red)}
+.b-generating{background:rgba(245,158,11,.13);color:var(--amber)}
+.b-ready{background:rgba(34,197,94,.13);color:var(--green)}
+.b-cancelled{background:rgba(239,68,68,.13);color:var(--red)}
+.b-draft_ready{background:rgba(201,168,76,.13);color:var(--gold)}
+.b-sent{background:rgba(34,197,94,.13);color:var(--green)}
+.b-gold{background:var(--gold-d);color:var(--gold)}
+
+/* ═══════════════════════════════════════
+   POST CARDS (preview)
+═══════════════════════════════════════ */
+.posts-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.pc{
+  background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);
+  overflow:hidden;display:flex;flex-direction:column;
+  transition:border-color .15s,transform .15s;
+}
+.pc:hover{border-color:var(--bd2);transform:translateY(-2px)}
+.pc-thumb{
+  position:relative;height:165px;background:var(--s2);
+  display:flex;align-items:center;justify-content:center;overflow:hidden;
+}
+.pc-thumb img{width:100%;height:100%;object-fit:cover}
+.pc-no-img{font-size:36px;color:var(--txt3)}
+.pc-badges{position:absolute;top:8px;left:8px;right:8px;display:flex;justify-content:space-between;align-items:flex-start;gap:4px}
+.pc-body{padding:13px;flex:1;display:flex;flex-direction:column;gap:7px}
+.pc-pillar{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--gold)}
+.pc-cap{font-size:12.5px;color:var(--txt2);line-height:1.55;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.pc-tags{font-size:11px;color:var(--blue);opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pc-footer{display:flex;justify-content:space-between;align-items:center;margin-top:auto}
+.pc-date{font-size:11px;color:var(--txt3)}
+.pc-cost{font-size:10px;color:var(--txt3)}
+.pc-actions{padding:10px 12px;border-top:1px solid var(--bd);display:flex;gap:6px;flex-wrap:wrap}
+
+/* ═══════════════════════════════════════
+   CAMPAIGNS LIST
+═══════════════════════════════════════ */
+.camp-row{
+  display:flex;align-items:center;gap:12px;
+  padding:12px 16px;
+  background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);
+  margin-bottom:8px;transition:border-color .15s;
+}
+.camp-row:hover{border-color:var(--bd2)}
+.camp-icon{width:36px;height:36px;background:var(--gold-d);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.camp-name{font-size:13px;font-weight:500;color:var(--txt)}
+.camp-meta{font-size:11px;color:var(--txt2);margin-top:2px}
+
+/* ═══════════════════════════════════════
+   FORMS
+═══════════════════════════════════════ */
+.fg{margin-bottom:16px}
+.fg:last-child{margin-bottom:0}
+.lbl{display:block;font-size:12px;font-weight:500;color:var(--txt2);margin-bottom:6px;letter-spacing:.2px}
+.inp,.sel,.ta{
+  width:100%;background:var(--s2);border:1px solid var(--bd);
+  border-radius:var(--rs);color:var(--txt);font-size:13.5px;
+  padding:9px 12px;font-family:inherit;outline:none;
+  transition:border-color .15s;-webkit-appearance:none;
+}
+.inp:focus,.sel:focus,.ta:focus{border-color:var(--gold)}
+.inp::placeholder,.ta::placeholder{color:var(--txt3)}
+.ta{resize:vertical;min-height:90px;line-height:1.6}
+.sel{cursor:pointer}
+.sel option{background:var(--s2)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+
+.pills{display:flex;gap:8px;flex-wrap:wrap}
+.pill{
+  display:flex;align-items:center;gap:7px;
+  padding:7px 13px;background:var(--s2);
+  border:1px solid var(--bd);border-radius:30px;
+  cursor:pointer;font-size:13px;color:var(--txt2);
+  transition:all .15s;user-select:none;
+}
+.pill input{display:none}
+.pill.on{border-color:var(--gold);color:var(--gold);background:var(--gold-d)}
+.pdot{width:8px;height:8px;border-radius:50%}
+
+hr.div{border:none;border-top:1px solid var(--bd);margin:20px 0}
+
+.info-box{
+  background:var(--gold-d);border:1px solid rgba(201,168,76,.25);
+  border-radius:var(--rs);padding:12px 14px;
+  font-size:12.5px;color:var(--gold);line-height:1.6;
+}
+
+/* ═══════════════════════════════════════
+   FILTER BAR
+═══════════════════════════════════════ */
+.fbar{display:flex;gap:8px;margin-bottom:18px;align-items:center;flex-wrap:wrap}
+.fbar .sel{width:auto;min-width:150px}
+.fcount{font-size:12px;color:var(--txt2);margin-left:4px}
+
+/* ═══════════════════════════════════════
+   CALENDAR
+═══════════════════════════════════════ */
+.cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.cal-day{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);min-height:130px;padding:10px}
+.cal-day.today{border-color:var(--gold)}
+.cal-dname{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--txt3)}
+.cal-dnum{font-size:20px;font-weight:700;color:var(--txt);margin:4px 0 8px}
+.cal-chip{font-size:10px;padding:3px 7px;border-radius:4px;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default}
+
+/* ═══════════════════════════════════════
+   COMMUNITY
+═══════════════════════════════════════ */
+.comm-list{display:flex;flex-direction:column;gap:10px}
+.cc{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:16px}
+.cc-hd{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.cc-author{font-weight:600;font-size:13px}
+.cc-time{font-size:11px;color:var(--txt2);margin-left:auto}
+.cc-body{font-size:13px;color:var(--txt2);line-height:1.55;margin-bottom:12px}
+.cc-draft{background:var(--s2);border-left:3px solid var(--gold);border-radius:0 var(--rs) var(--rs) 0;padding:10px 12px;font-size:13px;line-height:1.55;margin-bottom:10px}
+.cc-intent{font-size:11px;color:var(--amber);margin-top:6px}
+.cc-acts{display:flex;gap:6px;flex-wrap:wrap}
+
+/* ═══════════════════════════════════════
+   ANALYTICS
+═══════════════════════════════════════ */
+.ring-wrap{position:relative;width:140px;height:140px}
+.ring-svg{transform:rotate(-90deg)}
+.ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ring-pct{font-size:28px;font-weight:700;line-height:1}
+.ring-lbl{font-size:11px;color:var(--txt2)}
+.budget-center{display:flex;flex-direction:column;align-items:center;padding:28px;gap:16px}
+.bnums{display:flex;gap:28px;text-align:center}
+.bnum-v{font-size:22px;font-weight:700;line-height:1}
+.bnum-l{font-size:11px;color:var(--txt2);margin-top:4px}
+.breakdown{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;width:100%;max-width:380px}
+.bdr{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--s2);border-radius:var(--rs)}
+.bdr-k{font-size:12px;color:var(--txt2)}
+.bdr-v{font-size:12px;font-weight:600}
+.met-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.met{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:18px}
+.met-hd{display:flex;align-items:center;gap:8px;margin-bottom:14px;font-size:14px;font-weight:600}
+.met-row{display:flex;justify-content:space-between;margin-bottom:7px;font-size:13px}
+.met-k{color:var(--txt2)}
+
+/* ═══════════════════════════════════════
+   KNOWLEDGE
+═══════════════════════════════════════ */
+.kb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.kb-item{display:flex;align-items:center;gap:12px;background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:14px}
+.kb-emoji{font-size:26px;flex-shrink:0}
+.kb-name{font-size:13px;font-weight:600}
+.kb-desc{font-size:11px;color:var(--txt2);margin-top:2px}
+
+/* ═══════════════════════════════════════
+   PROMPTS
+═══════════════════════════════════════ */
+.prow{display:flex;align-items:center;gap:12px;background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:14px 16px;margin-bottom:8px}
+.prow-icon{font-size:18px;width:32px;text-align:center}
+.prow-name{font-size:14px;font-weight:600;flex:0 0 auto}
+.prow-vers{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
+.prow-note{font-size:12px;color:var(--txt2);flex:1;margin:0 12px}
+
+/* ═══════════════════════════════════════
+   MODAL
+═══════════════════════════════════════ */
+#modal-ov{
+  position:fixed;inset:0;background:rgba(0,0,0,.75);
+  display:flex;align-items:center;justify-content:center;
+  z-index:900;opacity:0;pointer-events:none;transition:opacity .2s;
+}
+#modal-ov.open{opacity:1;pointer-events:all}
+#modal-box{
+  background:var(--s1);border:1px solid var(--bd2);border-radius:var(--rl);
+  padding:26px;width:92%;max-width:540px;max-height:88vh;overflow-y:auto;
+  box-shadow:0 20px 60px rgba(0,0,0,.6);
+  transform:translateY(-18px);transition:transform .2s;
+}
+#modal-ov.open #modal-box{transform:translateY(0)}
+.m-title{font-size:16px;font-weight:700;margin-bottom:20px}
+.m-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+
+/* ═══════════════════════════════════════
+   TOASTS
+═══════════════════════════════════════ */
+#toasts{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:999;pointer-events:none}
+.toast{display:flex;align-items:center;gap:10px;padding:11px 16px;border-radius:var(--rs);font-size:13px;font-weight:500;min-width:250px;max-width:340px;pointer-events:all;animation:tIn .3s ease,tOut .3s ease 3.7s forwards}
+.t-ok{background:#16301f;color:var(--green);border:1px solid rgba(34,197,94,.3)}
+.t-err{background:#301616;color:var(--red);border:1px solid rgba(239,68,68,.3)}
+.t-warn{background:#302516;color:var(--amber);border:1px solid rgba(245,158,11,.3)}
+.t-info{background:#161e30;color:var(--blue);border:1px solid rgba(59,130,246,.3)}
+@keyframes tIn{from{transform:translateX(110%);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes tOut{from{opacity:1}to{opacity:0}}
+
+/* ═══════════════════════════════════════
+   UTILITY
+═══════════════════════════════════════ */
+.spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--bd);border-top-color:var(--gold);border-radius:50%;animation:spin .65s linear infinite}
+.sp-sm{width:13px;height:13px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.cstate{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:64px 32px;gap:14px}
+.cstate i{font-size:42px;color:var(--txt3)}
+.cstate p{font-size:13px;color:var(--txt2);text-align:center}
+.sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.sh-title{font-size:18px;font-weight:700}
+.sh-sub{font-size:13px;color:var(--txt2);margin-top:3px}
+.coming-soon{display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:16px}
+.coming-soon i{font-size:48px;color:var(--txt3)}
+.coming-soon h2{font-size:20px;font-weight:600;color:var(--txt)}
+.coming-soon p{font-size:13px;color:var(--txt2)}
+.coming-soon .badge{font-size:11px;padding:4px 12px}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:4px}
+::-webkit-scrollbar-track{background:transparent}
+
+/* responsive */
+@media(max-width:768px){
+  :root{--sw:54px}
+  .sb-logo-name,.sb-logo-sub,.nav-a span,.nav-sec,.sb-budget{display:none}
+  .nav-a{justify-content:center;padding:10px}
+  .sb-logo{justify-content:center;padding:14px 8px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ══════════════ SIDEBAR ══════════════ -->
+<aside id="sidebar">
+  <div class="sb-logo">
+    <div class="sb-logo-icon">🖨️</div>
+    <div>
+      <div class="sb-logo-name">PrintBot</div>
+      <div class="sb-logo-sub">Lummy Designs · MX</div>
+    </div>
+  </div>
+  <nav class="sb-nav">
+    <div class="nav-sec">General</div>
+    <div class="nav-a on" data-v="dashboard" onclick="go('dashboard')">
+      <i class="fa-solid fa-gauge-high"></i><span>Dashboard</span>
+    </div>
+    <div class="nav-a" data-v="campaigns" onclick="go('campaigns')">
+      <i class="fa-solid fa-rocket"></i><span>Nueva Campaña</span>
+    </div>
+    <div class="nav-sec">Contenido</div>
+    <div class="nav-a" data-v="posts" onclick="go('posts')">
+      <i class="fa-solid fa-list-check"></i><span>Posts</span>
+      <span class="nav-badge" id="nb-posts" style="display:none">0</span>
+    </div>
+    <div class="nav-a" data-v="calendar" onclick="go('calendar')">
+      <i class="fa-solid fa-calendar-days"></i><span>Calendario</span>
+    </div>
+    <div class="nav-sec">Comunidad</div>
+    <div class="nav-a" data-v="community" onclick="go('community')">
+      <i class="fa-solid fa-comments"></i><span>Comentarios & DMs</span>
+      <span class="nav-badge" id="nb-comm" style="display:none">0</span>
+    </div>
+    <div class="nav-sec">Datos</div>
+    <div class="nav-a" data-v="analytics" onclick="go('analytics')">
+      <i class="fa-solid fa-chart-line"></i><span>Analítica</span>
+    </div>
+    <div class="nav-sec">Config</div>
+    <div class="nav-a" data-v="knowledge" onclick="go('knowledge')">
+      <i class="fa-solid fa-book-open"></i><span>Conocimiento</span>
+    </div>
+    <div class="nav-a" data-v="prompts" onclick="go('prompts')">
+      <i class="fa-solid fa-sliders"></i><span>Prompts</span>
+    </div>
+  </nav>
+  <div class="sb-budget">
+    <div class="sbg-hd">Presupuesto mensual</div>
+    <div class="sbg-nums">
+      <span class="sbg-val" id="sbg-val">$0.00</span>
+      <span class="sbg-max">/ $30 USD</span>
+    </div>
+    <div class="sbg-bar"><div class="sbg-fill ok" id="sbg-fill" style="width:0%"></div></div>
+    <div class="sbg-st ok" id="sbg-st">● Sin uso este mes</div>
+  </div>
+</aside>
+
+<!-- ══════════════ MAIN ══════════════ -->
+<main id="main">
+  <div id="topbar">
+    <div class="tb-title" id="tb-title">Dashboard</div>
+    <div class="tb-right">
+      <div class="conn-dot" id="conn-dot" title="Estado de conexión"></div>
+      <div id="tb-actions"></div>
+    </div>
+  </div>
+  <div id="view"><div class="cstate"><div class="spinner"></div></div></div>
+</main>
+</div>
+
+<!-- ══════════════ MODAL ══════════════ -->
+<div id="modal-ov" onclick="if(event.target===this)closeModal()">
+  <div id="modal-box"></div>
+</div>
+
+<!-- ══════════════ TOASTS ══════════════ -->
+<div id="toasts"></div>
+
+<script>
+'use strict';
+// ─────────────────────────────────────────────────────
+// CONFIG
+// ─────────────────────────────────────────────────────
+const API = location.protocol === 'file:'
+  ? 'http://localhost:8000/api/v1'
+  : '/api/v1';
+
+const PLATFORM = {
+  instagram: { cls:'b-ig', icon:'fa-instagram', label:'Instagram', dot:'#e1306c' },
+  facebook:  { cls:'b-fb', icon:'fa-facebook',  label:'Facebook',  dot:'#1877f2' },
+  tiktok:    { cls:'b-tt', icon:'fa-tiktok',    label:'TikTok',    dot:'#ff2d55' },
+  whatsapp:  { cls:'b-wa', icon:'fa-whatsapp',  label:'WhatsApp',  dot:'#25d366' },
+};
+const STATUS_LABEL = {
+  pending:'Pendiente', approved:'Aprobado', scheduled:'Programado',
+  published:'Publicado', rejected:'Rechazado', failed:'Fallido',
+  generating:'Generando', ready:'Listo', cancelled:'Cancelado',
+  draft_ready:'Borrador', sent:'Enviado',
+};
+const PILLAR_LABEL = {
+  proceso_artesanal:'Proceso Artesanal', producto_terminado:'Producto Terminado',
+  regalos_ocasiones:'Regalos & Ocasiones', storytelling_cliente:'Storytelling',
+  educativo:'Educativo', venta_directa:'Venta Directa',
+};
+const AGENT_ICON = {
+  orchestrator:'fa-brain', strategist:'fa-calendar-check', copywriter:'fa-pencil',
+  visual_designer:'fa-palette', video_editor:'fa-film',
+  community_manager:'fa-comments', analytics:'fa-chart-line', content_assembler:'fa-puzzle-piece',
+};
+const PAGE_TITLE = {
+  dashboard:'Dashboard', campaigns:'Nueva Campaña', posts:'Posts & Aprobaciones',
+  calendar:'Calendario Editorial', community:'Comentarios & DMs',
+  analytics:'Analítica', knowledge:'Base de Conocimiento', prompts:'Prompts',
+};
+const KB_META = {
+  'brand_identity.json':     { icon:'🏷️', desc:'Colores, fuentes, tono de voz' },
+  'product_catalog.json':    { icon:'🛍️', desc:'Productos, precios, variantes' },
+  'buyer_personas.json':     { icon:'👥', desc:'Perfiles de clientes ideales' },
+  'content_pillars.json':    { icon:'🏛️', desc:'6 pilares y sus pesos %' },
+  'seasonal_calendar.json':  { icon:'📅', desc:'Fechas clave en México' },
+  'competitor_insights.json':{ icon:'🔭', desc:'Información de competidores' },
+  'hashtag_library.json':    { icon:'#️⃣', desc:'Sets de hashtags por pilar' },
+};
+
+// ─────────────────────────────────────────────────────
+// API LAYER
+// ─────────────────────────────────────────────────────
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(API + path, {
+    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+    ...opts,
+  });
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try { const j = await res.json(); msg = j.detail || j.message || msg; } catch(_) {}
+    throw new Error(msg);
+  }
+  const txt = await res.text();
+  return txt ? JSON.parse(txt) : {};
+}
+const GET   = p     => apiFetch(p);
+const POST  = (p,b) => apiFetch(p, { method:'POST',  body: b !== undefined ? JSON.stringify(b) : undefined });
+const PATCH = (p,b) => apiFetch(p, { method:'PATCH', body: JSON.stringify(b) });
+
+// ─────────────────────────────────────────────────────
+// CONNECTIVITY
+// ─────────────────────────────────────────────────────
+async function checkConn() {
+  try {
+    await fetch(API + '/analytics/budget', { signal: AbortSignal.timeout(3000) });
+    document.getElementById('conn-dot').classList.remove('off');
+  } catch(_) {
+    document.getElementById('conn-dot').classList.add('off');
+  }
+}
+
+// ─────────────────────────────────────────────────────
+// TOAST
+// ─────────────────────────────────────────────────────
+function toast(msg, type = 'info') {
+  const icons = { success:'fa-circle-check', error:'fa-circle-xmark', warning:'fa-triangle-exclamation', info:'fa-circle-info' };
+  const cls   = { success:'t-ok', error:'t-err', warning:'t-warn', info:'t-info' };
+  const el = document.createElement('div');
+  el.className = `toast ${cls[type] || 't-info'}`;
+  el.innerHTML = `<i class="fa-solid ${icons[type] || icons.info}"></i>${esc(msg)}`;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 4200);
+}
+
+// ─────────────────────────────────────────────────────
+// MODAL
+// ─────────────────────────────────────────────────────
+function openModal(html) {
+  document.getElementById('modal-box').innerHTML = html;
+  document.getElementById('modal-ov').classList.add('open');
+}
+function closeModal() {
+  document.getElementById('modal-ov').classList.remove('open');
+}
+
+// ─────────────────────────────────────────────────────
+// NAVIGATION
+// ─────────────────────────────────────────────────────
+let currentView = 'dashboard';
+function go(view) {
+  currentView = view;
+  document.querySelectorAll('.nav-a').forEach(n => n.classList.toggle('on', n.dataset.v === view));
+  document.getElementById('tb-title').textContent = PAGE_TITLE[view] || view;
+  document.getElementById('tb-actions').innerHTML = '';
+  (VIEWS[view] || viewComingSoon)(view);
+}
+
+// ─────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────
+function setView(html) { document.getElementById('view').innerHTML = html; }
+function loading() { setView(`<div class="cstate"><div class="spinner"></div><p>Cargando...</p></div>`); }
+function emptyState(msg, icon = 'fa-inbox') {
+  return `<div class="cstate"><i class="fa-solid ${icon}"></i><p>${esc(msg)}</p></div>`;
+}
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function pbadge(p) {
+  const c = PLATFORM[p] || { cls:'b-gold', icon:'fa-globe', label: p };
+  return `<span class="badge ${c.cls}"><i class="fa-brands ${c.icon}"></i>${c.label}</span>`;
+}
+function sbadge(s) {
+  return `<span class="badge b-${s}">${STATUS_LABEL[s] || s}</span>`;
+}
+function fmtDT(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleString('es-MX', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+function fmtD(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' });
+}
+function isoWeek(d = new Date()) {
+  const dt = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = dt.getUTCDay() || 7;
+  dt.setUTCDate(dt.getUTCDate() + 4 - day);
+  const y = dt.getUTCFullYear();
+  const w = Math.ceil(((dt - new Date(Date.UTC(y,0,1))) / 864e5 + 1) / 7);
+  return `${y}-W${String(w).padStart(2,'0')}`;
+}
+function numFmt(n) { return n != null ? Number(n).toLocaleString('es-MX') : '—'; }
+
+// ─────────────────────────────────────────────────────
+// BUDGET WIDGET (sidebar)
+// ─────────────────────────────────────────────────────
+async function refreshBudget() {
+  try {
+    const b = await GET('/analytics/budget');
+    const pct = Math.min(100, ((b.spent_usd || 0) / (b.hard_stop_usd || 28)) * 100);
+    document.getElementById('sbg-val').textContent = `$${(b.spent_usd||0).toFixed(2)}`;
+    const fill = document.getElementById('sbg-fill');
+    fill.style.width = pct + '%';
+    fill.className = `sbg-fill ${b.status || 'ok'}`;
+    const st = document.getElementById('sbg-st');
+    const msgs = { ok:'● En presupuesto', warning:'⚠ Alerta de gasto', critical:'🔴 Límite alcanzado' };
+    st.textContent = msgs[b.status] || msgs.ok;
+    st.className = `sbg-st ${b.status || 'ok'}`;
+  } catch(_) {}
+
+  // Badges
+  try {
+    const ps = await GET('/posts?status=pending');
+    const n = Array.isArray(ps) ? ps.length : 0;
+    const el = document.getElementById('nb-posts');
+    el.textContent = n; el.style.display = n ? '' : 'none';
+  } catch(_) {}
+  try {
+    const cs = await GET('/community?status=pending');
+    const n = Array.isArray(cs) ? cs.length : 0;
+    const el = document.getElementById('nb-comm');
+    el.textContent = n; el.style.display = n ? '' : 'none';
+  } catch(_) {}
+}
+
+// ─────────────────────────────────────────────────────
+// VIEW: DASHBOARD
+// ─────────────────────────────────────────────────────
+async function viewDashboard() {
+  loading();
+  try {
+    const [bR, pR, cR, camR] = await Promise.allSettled([
+      GET('/analytics/budget'),
+      GET('/posts'),
+      GET('/community'),
+      GET('/campaigns'),
+    ]);
+    const budget = bR.status   === 'fulfilled' ? bR.value   : {};
+    const posts  = pR.status   === 'fulfilled' ? (pR.value  || []) : [];
+    const comm   = cR.status   === 'fulfilled' ? (cR.value  || []) : [];
+    const camps  = camR.status === 'fulfilled' ? (camR.value|| []) : [];
+
+    const pending   = posts.filter(p => p.status === 'pending').length;
+    const scheduled = posts.filter(p => p.status === 'scheduled').length;
+    const published = posts.filter(p => p.status === 'published').length;
+    const commPend  = comm.filter(c => c.status  === 'pending').length;
+
+    // Update community badge
+    const el = document.getElementById('nb-comm');
+    el.textContent = commPend; el.style.display = commPend ? '' : 'none';
+
+    const pct = (budget.usage_pct || 0).toFixed(1);
+
+    setView(`
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat hi" onclick="go('posts')" title="Ver posts pendientes">
+          <div class="stat-n">${pending}</div>
+          <div class="stat-l">⏳ Por aprobar</div>
+        </div>
+        <div class="stat" onclick="go('posts')">
+          <div class="stat-n" style="color:var(--blue)">${scheduled}</div>
+          <div class="stat-l">📅 Programados</div>
+        </div>
+        <div class="stat" onclick="go('posts')">
+          <div class="stat-n" style="color:var(--green)">${published}</div>
+          <div class="stat-l">✅ Publicados</div>
+        </div>
+        <div class="stat" onclick="go('community')">
+          <div class="stat-n" style="color:var(--amber)">${commPend}</div>
+          <div class="stat-l">💬 Sin responder</div>
+        </div>
+        <div class="stat" onclick="go('analytics')">
+          <div class="stat-n" style="font-size:22px">${pct}%</div>
+          <div class="stat-l">💰 Presupuesto · $${(budget.spent_usd||0).toFixed(2)}</div>
+        </div>
+      </div>
+
+      <!-- Quick actions -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px">
+        <div class="card" style="cursor:pointer;transition:border-color .15s" onclick="go('campaigns')"
+             onmouseover="this.style.borderColor='var(--bd2)'" onmouseout="this.style.borderColor='var(--bd)'">
+          <div style="display:flex;align-items:center;gap:14px">
+            <div style="width:46px;height:46px;background:var(--gold-d);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">🚀</div>
+            <div style="flex:1">
+              <div style="font-size:14px;font-weight:600">Crear campaña</div>
+              <div style="font-size:12px;color:var(--txt2);margin-top:2px">Genera contenido para la semana</div>
+            </div>
+            <i class="fa-solid fa-chevron-right" style="color:var(--txt3)"></i>
+          </div>
+        </div>
+        <div class="card" style="cursor:pointer;transition:border-color .15s" onclick="go('posts')"
+             onmouseover="this.style.borderColor='var(--bd2)'" onmouseout="this.style.borderColor='var(--bd)'">
+          <div style="display:flex;align-items:center;gap:14px">
+            <div style="width:46px;height:46px;background:var(--gold-d);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">✅</div>
+            <div style="flex:1">
+              <div style="font-size:14px;font-weight:600">Aprobar posts</div>
+              <div style="font-size:12px;color:var(--txt2);margin-top:2px">${pending} post${pending !== 1 ? 's' : ''} esperando revisión</div>
+            </div>
+            <i class="fa-solid fa-chevron-right" style="color:var(--txt3)"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent campaigns -->
+      ${camps.length > 0 ? `
+        <div class="sh" style="margin-bottom:14px">
+          <div>
+            <div style="font-size:14px;font-weight:600">Campañas recientes</div>
+          </div>
+        </div>
+        <div style="margin-bottom:24px">
+          ${camps.slice(0,5).map(c => `
+            <div class="camp-row">
+              <div class="camp-icon">🚀</div>
+              <div style="flex:1;min-width:0">
+                <div class="camp-name">${esc(c.name)}</div>
+                <div class="camp-meta">${c.week_label || ''} · ${fmtD(c.created_at)}</div>
+              </div>
+              ${sbadge(c.status)}
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+
+      <!-- Pending posts preview -->
+      ${pending > 0 ? `
+        <div class="sh">
+          <div>
+            <div style="font-size:14px;font-weight:600">Posts pendientes de aprobación</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="go('posts')">Ver todos <i class="fa-solid fa-arrow-right"></i></button>
+        </div>
+        <div class="posts-grid" id="dash-posts"></div>
+      ` : `
+        ${camps.length === 0 ? `
+          <div class="card" style="text-align:center;padding:40px">
+            <div style="font-size:40px;margin-bottom:14px">🚀</div>
+            <div style="font-size:16px;font-weight:600;margin-bottom:8px">Crea tu primera campaña</div>
+            <div style="font-size:13px;color:var(--txt2);margin-bottom:20px">El agente generará contenido completo para Instagram, Facebook, TikTok y WhatsApp.</div>
+            <button class="btn btn-primary btn-lg" onclick="go('campaigns')"><i class="fa-solid fa-rocket"></i> Generar contenido</button>
+          </div>
+        ` : ''}
+      `}
+    `);
+
+    // Load pending posts preview (max 3)
+    if (pending > 0) {
+      try {
+        const pp = await GET('/posts?status=pending');
+        renderPostCards((pp || []).slice(0, 3), 'dash-posts', false);
+      } catch(_) {}
+    }
+  } catch(e) {
+    setView(`
+      <div class="cstate">
+        <i class="fa-solid fa-triangle-exclamation" style="color:var(--red)"></i>
+        <p style="font-size:15px;font-weight:600">No se puede conectar al servidor</p>
+        <p>Asegúrate de que PrintBot esté corriendo en <code style="color:var(--gold)">localhost:8000</code></p>
+        <button class="btn btn-ghost" style="margin-top:8px" onclick="viewDashboard()"><i class="fa-solid fa-rotate-right"></i> Reintentar</button>
+      </div>
+    `);
+  }
+}
+
+// ─────────────────────────────────────────────────────
+// POST CARD RENDERER (shared)
+// ─────────────────────────────────────────────────────
+function renderPostCards(posts, containerId, showActions = true) {
+  const el = document.getElementById(containerId);
+  if (el) el.innerHTML = posts.map(p => postCardHTML(p, showActions)).join('');
+}
+
+function postCardHTML(p, showActions = true) {
+  const imgHTML = p.image_url
+    ? `<img src="${esc(p.image_url)}" onerror="this.style.display='none'" loading="lazy">`
+    : `<i class="fa-solid fa-image pc-no-img"></i>`;
+
+  let actions = '';
+  if (showActions) {
+    if (p.status === 'pending') {
+      actions = `
+        <button class="btn btn-success btn-sm" onclick="approvePost(${p.id},event)"><i class="fa-solid fa-check"></i> Aprobar</button>
+        <button class="btn btn-blue btn-sm"    onclick="editPost(${p.id},event)"><i class="fa-solid fa-pen"></i> Editar</button>
+        <button class="btn btn-danger btn-sm"  onclick="openRejectModal(${p.id},event)"><i class="fa-solid fa-xmark"></i> Rechazar</button>
+      `;
+    } else if (p.status === 'scheduled' || p.status === 'approved') {
+      actions = `<button class="btn btn-warning btn-sm" onclick="publishNow(${p.id},event)"><i class="fa-solid fa-bolt"></i> Publicar ya</button>`;
+    } else if (p.status === 'rejected') {
+      actions = `<button class="btn btn-blue btn-sm" onclick="editPost(${p.id},event)"><i class="fa-solid fa-rotate-right"></i> Editar y reactivar</button>`;
+    }
+  }
+
+  return `
+    <div class="pc" id="pc-${p.id}">
+      <div class="pc-thumb">
+        ${imgHTML}
+        <div class="pc-badges">
+          ${pbadge(p.platform)}
+          ${sbadge(p.status)}
+        </div>
+        ${p.video_url ? `<span class="badge b-gold" style="position:absolute;bottom:8px;right:8px"><i class="fa-solid fa-film"></i> Video</span>` : ''}
+      </div>
+      <div class="pc-body">
+        <div class="pc-pillar">${PILLAR_LABEL[p.pillar] || p.pillar || ''}</div>
+        <div class="pc-cap">${esc(p.caption || 'Sin texto generado')}</div>
+        ${p.hashtags ? `<div class="pc-tags">${esc(p.hashtags.slice(0,80))}</div>` : ''}
+        <div class="pc-footer">
+          <span class="pc-date"><i class="fa-regular fa-clock"></i> ${fmtDT(p.scheduled_at)}</span>
+          ${p.generation_cost_usd ? `<span class="pc-cost">$${p.generation_cost_usd.toFixed(3)}</span>` : ''}
+        </div>
+      </div>
+      ${actions ? `<div class="pc-actions">${actions}</div>` : ''}
+    </div>
+  `;
+}
+
+// ─────────────────────────────────────────────────────
+// VIEW: CAMPAIGNS
+// ─────────────────────────────────────────────────────
+function viewCampaigns() {
+  const week = isoWeek();
+  setView(`
+    <div style="max-width:640px">
+      <div class="sh"><div><div class="sh-title">Nueva Campaña</div><div class="sh-sub">El agente genera contenido completo para las plataformas seleccionadas</div></div></div>
+      <div class="card" style="margin-bottom:14px">
+        <div class="fg">
+          <label class="lbl">Nombre de la campaña</label>
+          <input class="inp" id="c-name" placeholder="Ej: Semana del Día de la Madre" value="Campaña ${week}">
+        </div>
+        <div class="grid2">
+          <div class="fg">
+            <label class="lbl">Tipo</label>
+            <select class="sel" id="c-type">
+              <option value="weekly">Semanal (12-15 posts)</option>
+              <option value="monthly">Mensual (40+ posts)</option>
+              <option value="seasonal">Estacional</option>
+              <option value="single">Post único</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label class="lbl">Semana objetivo</label>
+            <input class="inp" id="c-week" placeholder="2025-W18" value="${week}">
+          </div>
+        </div>
+        <div class="fg">
+          <label class="lbl">Redes sociales</label>
+          <div class="pills" id="c-plats">
+            ${Object.entries(PLATFORM).map(([k,v]) => `
+              <label class="pill on" onclick="togglePill(this)">
+                <input type="checkbox" value="${k}" checked>
+                <span class="pdot" style="background:${v.dot}"></span>${v.label}
+              </label>`).join('')}
+          </div>
+        </div>
+        <div class="fg">
+          <label class="lbl">Brief adicional (opcional)</label>
+          <textarea class="ta" id="c-brief" placeholder="Ej: Esta semana destacar regalos para el Día de la Madre con 15% de descuento..."></textarea>
+        </div>
+        <hr class="div">
+        <div class="info-box" style="margin-bottom:16px">
+          ⏱ Tiempo estimado: 2-5 min &nbsp;·&nbsp; 💰 Costo: ~$0.80-1.20 USD &nbsp;·&nbsp; 📸 Incluye textos, hashtags e imágenes IA
+        </div>
+        <button class="btn btn-primary btn-lg" id="c-btn" onclick="createCampaign()">
+          <i class="fa-solid fa-rocket"></i> Generar campaña
+        </button>
+      </div>
+      <div id="c-result"></div>
+    </div>
+  `);
+}
+
+function togglePill(label) {
+  const cb = label.querySelector('input');
+  cb.checked = !cb.checked;
+  label.classList.toggle('on', cb.checked);
+}
+
+async function createCampaign() {
+  const name      = document.getElementById('c-name').value.trim();
+  const type      = document.getElementById('c-type').value;
+  const week      = document.getElementById('c-week').value.trim();
+  const brief     = document.getElementById('c-brief').value.trim();
+  const platforms = [...document.querySelectorAll('#c-plats input:checked')].map(i => i.value);
+
+  if (!name)             { toast('Escribe un nombre para la campaña', 'warning'); return; }
+  if (!platforms.length) { toast('Selecciona al menos una red social', 'warning'); return; }
+
+  const btn = document.getElementById('c-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner sp-sm"></div> Generando...';
+
+  document.getElementById('c-result').innerHTML = `
+    <div class="card" style="border-color:rgba(201,168,76,.3);text-align:center;padding:36px">
+      <div class="spinner" style="margin:0 auto 16px"></div>
+      <div style="font-size:15px;font-weight:600;margin-bottom:8px">El agente está trabajando...</div>
+      <div style="font-size:13px;color:var(--txt2);line-height:1.7">
+        Leyendo base de conocimiento → Creando plan editorial<br>
+        Redactando textos → Generando imágenes → Guardando posts
+      </div>
+    </div>`;
+
+  try {
+    const body = { name, type, week_label: week || undefined, platforms, brief: brief || undefined };
+    const res  = await POST('/campaigns', body);
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-rocket"></i> Generar campaña';
+    document.getElementById('c-result').innerHTML = `
+      <div class="card" style="border-color:rgba(34,197,94,.3)">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+          <i class="fa-solid fa-circle-check" style="font-size:26px;color:var(--green)"></i>
+          <div>
+            <div style="font-size:15px;font-weight:600">¡Campaña en proceso!</div>
+            <div style="font-size:12px;color:var(--txt2);margin-top:2px">ID: ${res.id || '—'} · El agente genera el contenido en segundo plano</div>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="go('posts')">
+          <i class="fa-solid fa-list-check"></i> Ver posts cuando estén listos
+        </button>
+      </div>`;
+    toast('Campaña iniciada', 'success');
+    refreshBudget();
+  } catch(e) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-rocket"></i> Generar campaña';
+    document.getElementById('c-result').innerHTML = `
+      <div class="card" style="border-color:rgba(239,68,68,.3);padding:16px">
+        <div style="color:var(--red);font-size:13px"><i class="fa-solid fa-triangle-exclamation"></i> Error: ${esc(e.message)}</div>
+      </div>`;
+    toast(e.message, 'error');
+  }
+}
+
+// ─────────────────────────────────────────────────────
+// VIEW: POSTS (HITL)
+// ─────────────────────────────────────────────────────
+let pf = { status:'pending', platform:'' };
+
+async function viewPosts() {
+  document.getElementById('tb-actions').innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="viewPosts()"><i class="fa-solid fa-rotate-right"></i></button>`;
+  loading();
+  try {
+    let url = '/posts?';
+    if (pf.status)   url += `status=${pf.status}&`;
+    if (pf.platform) url += `platform=${pf.platform}&`;
+    const posts = await GET(url);
+    const list  = Array.isArray(posts) ? posts : [];
+
+    setView(`
+      <div class="fbar">
+        <select class="sel" onchange="pf.status=this.value;viewPosts()">
+          <option value=""          ${pf.status===''          ?'selected':''}>Todos los estados</option>
+          <option value="pending"   ${pf.status==='pending'   ?'selected':''}>⏳ Pendientes</option>
+          <option value="approved"  ${pf.status==='approved'  ?'selected':''}>👍 Aprobados</option>
+          <option value="scheduled" ${pf.status==='scheduled' ?'selected':''}>📅 Programados</option>
+          <option value="published" ${pf.status==='published' ?'selected':''}>✅ Publicados</option>
+          <option value="rejected"  ${pf.status==='rejected'  ?'selected':''}>❌ Rechazados</option>
+        </select>
+        <select class="sel" onchange="pf.platform=this.value;viewPosts()">
+          <option value="">Todas las plataformas</option>
+          ${Object.entries(PLATFORM).map(([k,v])=>`<option value="${k}" ${pf.platform===k?'selected':''}>${v.label}</option>`).join('')}
+        </select>
+        <span class="fcount">${list.length} resultado${list.length!==1?'s':''}</span>
+        ${pf.status==='pending'&&list.length>0?`<button class="btn btn-success btn-sm" style="margin-left:auto" onclick="approveAll()"><i class="fa-solid fa-check-double"></i> Aprobar todos</button>`:''}
+      </div>
+      <div class="posts-grid" id="posts-grid">
+        ${list.length===0 ? emptyState('No hay posts con este filtro','fa-images') : ''}
+      </div>`);
+    if (list.length > 0) renderPostCards(list, 'posts-grid', true);
+  } catch(e) { setView(emptyState(e.message,'fa-triangle-exclamation')); }
+}
+
+async function approvePost(id, e) {
+  e && e.stopPropagation();
+  try {
+    await POST(`/posts/${id}/approve`);
+    toast('Post aprobado ✅', 'success');
+    document.getElementById(`pc-${id}`)?.remove();
+    refreshBudget();
+  } catch(err) { toast(err.message, 'error'); }
+}
+
+async function approveAll() {
+  const ids = [...document.querySelectorAll('[id^="pc-"]')].map(el => el.id.replace('pc-',''));
+  let n = 0;
+  for (const id of ids) {
+    try { await POST(`/posts/${id}/approve`); document.getElementById(`pc-${id}`)?.remove(); n++; } catch(_) {}
+  }
+  toast(`${n} posts aprobados`, 'success');
+  refreshBudget();
+}
+
+async function publishNow(id, e) {
+  e && e.stopPropagation();
+  if (!confirm('¿Publicar este post ahora en la plataforma?')) return;
+  try {
+    await POST(`/posts/${id}/publish-now`);
+    toast('Post publicado 🚀', 'success');
+    viewPosts();
+  } catch(err) { toast(err.message, 'error'); }
+}
+
+function openRejectModal(id, e) {
+  e && e.stopPropagation();
+  openModal(`
+    <div class="m-title"><i class="fa-solid fa-xmark" style="color:var(--red)"></i> Rechazar post</div>
+    <div class="fg">
+      <label class="lbl">Motivo (opcional)</label>
+      <textarea class="ta" id="rj-reason" placeholder="Ej: El texto no menciona la promoción vigente"></textarea>
+    </div>
+    <div class="m-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-danger" onclick="confirmReject(${id})"><i class="fa-solid fa-xmark"></i> Rechazar</button>
+    </div>`);
+}
+
+async function confirmReject(id) {
+  const reason = document.getElementById('rj-reason').value || '';
+  try {
+    await POST(`/posts/${id}/reject`, { reason });
+    closeModal();
+    toast('Post rechazado', 'warning');
+    document.getElementById(`pc-${id}`)?.remove();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function editPost(id, e) {
+  e && e.stopPropagation();
+  try {
+    const p = await GET(`/posts/${id}`);
+    openModal(`
+      <div class="m-title"><i class="fa-solid fa-pen" style="color:var(--gold)"></i> Editar post #${id}</div>
+      <div class="fg">
+        <label class="lbl">Caption / Texto</label>
+        <textarea class="ta" id="ep-cap" style="min-height:130px">${esc(p.caption||'')}</textarea>
+      </div>
+      <div class="fg">
+        <label class="lbl">Hashtags</label>
+        <input class="inp" id="ep-tags" value="${esc(p.hashtags||'')}">
+      </div>
+      <div class="fg">
+        <label class="lbl">Hook line</label>
+        <input class="inp" id="ep-hook" value="${esc(p.hook_line||'')}" placeholder="Primera frase que engancha">
+      </div>
+      <div class="fg">
+        <label class="lbl">Fecha de publicación</label>
+        <input class="inp" id="ep-date" type="datetime-local" value="${p.scheduled_at?p.scheduled_at.slice(0,16):''}">
+      </div>
+      <div class="m-foot">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-success" onclick="savePost(${id},${p.status==='rejected'})">
+          <i class="fa-solid fa-floppy-disk"></i> Guardar${p.status==='rejected'?' y reactivar':''}
+        </button>
+      </div>`);
+  } catch(err) { toast('No se pudo cargar: ' + err.message, 'error'); }
+}
+
+async function savePost(id, reactivate) {
+  const body = {
+    caption:  document.getElementById('ep-cap').value,
+    hashtags: document.getElementById('ep-tags').value,
+  };
+  const hook  = document.getElementById('ep-hook').value;
+  const sched = document.getElementById('ep-date').value;
+  if (hook)  body.hook_line    = hook;
+  if (sched) body.scheduled_at = sched;
+  try {
+    await PATCH(`/posts/${id}`, body);
+    if (reactivate) await POST(`/posts/${id}/approve`);
+    closeModal();
+    toast('Post guardado' + (reactivate?' y reactivado':''), 'success');
+    viewPosts();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ─────────────────────────────────────────────────────
+// VIEW: CALENDAR
+// ─────────────────────────────────────────────────────
+let calW = isoWeek();
+
+async function viewCalendar() {
+  document.getElementById('tb-actions').innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="calW=isoWeek();viewCalendar()">Hoy</button>
+    <button class="btn btn-primary btn-sm" onclick="go('campaigns')"><i class="fa-solid fa-plus"></i> Campaña</button>`;
+  loading();
+  try {
+    const entries = await GET(`/calendar?week=${calW}`);
+    const list    = Array.isArray(entries) ? entries : [];
+
+    const [yr, wn] = calW.split('-W').map(Number);
+    const jan4 = new Date(Date.UTC(yr,0,4));
+    const mon  = new Date(jan4);
+    mon.setUTCDate(jan4.getUTCDate() - ((jan4.getUTCDay()+6)%7) + (wn-1)*7);
+
+    const todayS = new Date().toDateString();
+    const DAYS   = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+
+    const daysHTML = DAYS.map((name, i) => {
+      const day    = new Date(mon); day.setUTCDate(mon.getUTCDate()+i);
+      const dateS  = day.toISOString().slice(0,10);
+      const isToday= day.toDateString() === todayS;
+      const dayEnt = list.filter(e => (e.scheduled_date||'').startsWith(dateS));
+      const chips  = dayEnt.map(e => {
+        const cfg = PLATFORM[e.platform] || {};
+        return `<div class="cal-chip" style="background:${cfg.dot||'#888'}20;color:${cfg.dot||'#888'};border-left:2px solid ${cfg.dot||'#888'}">${PILLAR_LABEL[e.pillar]||e.pillar||'Post'}</div>`;
+      }).join('');
+      return `<div class="cal-day${isToday?' today':''}">
+        <div class="cal-dname">${name}</div>
+        <div class="cal-dnum">${day.getUTCDate()}</div>
+        ${chips||`<div style="font-size:10px;color:var(--txt3)">Sin posts</div>`}
+      </div>`;
+    }).join('');
+
+    setView(`
+      <div class="cal-nav">
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="btn btn-ghost btn-sm" onclick="shiftW(-1)"><i class="fa-solid fa-chevron-left"></i></button>
+          <span style="font-size:15px;font-weight:600">Semana ${calW}</span>
+          <button class="btn btn-ghost btn-sm" onclick="shiftW(1)"><i class="fa-solid fa-chevron-right"></i></button>
+        </div>
+        <span style="font-size:12px;color:var(--txt2)">${list.length} entradas</span>
+      </div>
+      <div class="cal-grid">${daysHTML}</div>`);
+  } catch(e) { setView(emptyState(e.message,'fa-calendar-xmark')); }
+}
+
+function shiftW(d) {
+  const [y,w] = calW.split('-W').map(Number);
+  let nw = w+d, ny = y;
+  if (nw>52){nw=1;ny++;} if(nw<1){nw=52;ny--;}
+  calW = `${ny}-W${String(nw).padStart(2,'0')}`;
+  viewCalendar();
+}
+
+// ─────────────────────────────────────────────────────
+// VIEW: COMMUNITY
+// ─────────────────────────────────────────────────────
+let cf = { platform:'', status:'' };
+
+async function viewCommunity() {
+  document.getElementById('tb-actions').innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="viewCommunity()"><i class="fa-solid fa-rotate-right"></i></button>`;
+  loading();
+  try {
+    let url = '/community?';
+    if (cf.platform) url += `platform=${cf.platform}&`;
+    if (cf.status)   url += `status=${cf.status}&`;
+    const items = await GET(url);
+    const list  = Array.isArray(items) ? items : [];
+
+    setView(`
+      <div class="fbar">
+        <select class="sel" onchange="cf.platform=this.value;viewCommunity()">
+          <option value="">Todas las plataformas</option>
+          ${Object.entries(PLATFORM).map(([k,v])=>`<option value="${k}" ${cf.platform===k?'selected':''}>${v.label}</option>`).join('')}
+        </select>
+        <select class="sel" onchange="cf.status=this.value;viewCommunity()">
+          <option value=""            ${cf.status===''            ?'selected':''}>Todos los estados</option>
+          <option value="pending"     ${cf.status==='pending'     ?'selected':''}>⏳ Sin atender</option>
+          <option value="draft_ready" ${cf.status==='draft_ready' ?'selected':''}>📝 Borrador listo</option>
+          <option value="sent"        ${cf.status==='sent'        ?'selected':''}>✅ Enviados</option>
+        </select>
+        <span class="fcount">${list.length} elemento${list.length!==1?'s':''}</span>
+      </div>
+      <div class="comm-list">
+        ${list.length===0 ? emptyState('Sin comentarios ni DMs con este filtro','fa-comments') : list.map(commCardHTML).join('')}
+      </div>`);
+  } catch(e) { setView(emptyState(e.message,'fa-triangle-exclamation')); }
+}
+
+function commCardHTML(item) {
+  const typeIcon = item.item_type==='dm' ? 'fa-envelope' : 'fa-comment';
+  const hasDraft = !!item.drafted_reply && item.status !== 'sent';
+  const isSent   = item.status === 'sent';
+  return `
+    <div class="cc" id="cc-${item.id}">
+      <div class="cc-hd">
+        <i class="fa-solid ${typeIcon}" style="color:var(--txt3)"></i>
+        ${pbadge(item.platform)}
+        <span class="cc-author">${esc(item.author_name||'Anónimo')}</span>
+        <span class="badge b-gold" style="font-size:10px">${item.item_type}</span>
+        ${sbadge(item.status)}
+        <span class="cc-time">${fmtDT(item.created_at)}</span>
+      </div>
+      <div class="cc-body">"${esc((item.content||'').slice(0,240))}"</div>
+      ${hasDraft?`
+        <div>
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gold);margin-bottom:6px">Borrador</div>
+          <div class="cc-draft" id="dr-${item.id}">${esc(item.drafted_reply||'')}</div>
+          ${item.purchase_intent_detected?`<div class="cc-intent"><i class="fa-solid fa-cart-shopping"></i> Intención de compra — se incluirá enlace de WhatsApp</div>`:''}
+        </div>`:''}
+      <div class="cc-acts">
+        ${!isSent&&!hasDraft?`<button class="btn btn-blue btn-sm" onclick="genDraft(${item.id})"><i class="fa-solid fa-wand-magic-sparkles"></i> Generar respuesta</button>`:''}
+        ${hasDraft?`
+          <button class="btn btn-blue btn-sm"  onclick="genDraft(${item.id})"><i class="fa-solid fa-rotate-right"></i> Regenerar</button>
+          <button class="btn btn-ghost btn-sm" onclick="openEditDraft(${item.id})"><i class="fa-solid fa-pen"></i> Editar</button>
+          <button class="btn btn-success btn-sm" onclick="sendDraft(${item.id})"><i class="fa-solid fa-paper-plane"></i> Enviar</button>`:''}
+        ${isSent?`<span style="font-size:12px;color:var(--green)"><i class="fa-solid fa-check-double"></i> Respuesta enviada</span>`:''}
+      </div>
+    </div>`;
+}
+
+async function genDraft(id) {
+  const btn = document.querySelector(`#cc-${id} .btn-blue`);
+  if (btn){btn.disabled=true;btn.innerHTML='<div class="spinner sp-sm"></div> Generando...';}
+  try {
+    await POST(`/community/${id}/draft`);
+    toast('Borrador generado','success');
+    viewCommunity();
+  } catch(e) {
+    toast(e.message,'error');
+    if(btn){btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-wand-magic-sparkles"></i> Generar respuesta';}
+  }
+}
+
+function openEditDraft(id) {
+  const cur = document.getElementById(`dr-${id}`)?.textContent || '';
+  openModal(`
+    <div class="m-title"><i class="fa-solid fa-pen" style="color:var(--gold)"></i> Editar respuesta</div>
+    <div class="fg"><label class="lbl">Texto</label><textarea class="ta" id="ed-txt" style="min-height:130px">${esc(cur)}</textarea></div>
+    <div class="m-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveEditDraft(${id})"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
+    </div>`);
+}
+
+async function saveEditDraft(id) {
+  const text = document.getElementById('ed-txt').value;
+  try {
+    await PATCH(`/community/${id}/reply?reply=${encodeURIComponent(text)}`);
+    closeModal(); toast('Respuesta actualizada','success'); viewCommunity();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function sendDraft(id) {
+  if(!confirm('¿Enviar esta respuesta a la plataforma?')) return;
+  try {
+    await POST(`/community/${id}/send`);
+    toast('Respuesta enviada ✅','success'); viewCommunity();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// ─────────────────────────────────────────────────────
+// VIEW: ANALYTICS
+// ─────────────────────────────────────────────────────
+async function viewAnalytics() {
+  document.getElementById('tb-actions').innerHTML = `
+    <button class="btn btn-ghost btn-sm" id="ref-btn" onclick="doRefresh()"><i class="fa-solid fa-rotate-right"></i> Actualizar</button>`;
+  loading();
+  try {
+    const budget = await GET('/analytics/budget');
+    const pct    = Math.min(100, ((budget.spent_usd||0)/(budget.hard_stop_usd||28))*100);
+    const color  = budget.status==='ok'?'var(--green)':budget.status==='warning'?'var(--amber)':'var(--red)';
+    const R=54, C=2*Math.PI*R, offset=C*(1-pct/100);
+    const bd = budget.breakdown || {};
+    const bdHTML = Object.keys(bd).length
+      ? `<div class="breakdown">${Object.entries(bd).map(([k,v])=>`<div class="bdr"><span class="bdr-k">${k}</span><span class="bdr-v">$${(v||0).toFixed(2)}</span></div>`).join('')}</div>`
+      : `<div style="font-size:12px;color:var(--txt2)">Sin gastos registrados</div>`;
+
+    setView(`
+      <div class="card" style="margin-bottom:20px">
+        <div class="budget-center">
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--txt2)">Presupuesto del Mes</div>
+          <div class="ring-wrap">
+            <svg class="ring-svg" width="140" height="140" viewBox="0 0 140 140">
+              <circle cx="70" cy="70" r="${R}" fill="none" stroke="var(--bd)" stroke-width="10"/>
+              <circle cx="70" cy="70" r="${R}" fill="none" stroke="${color}" stroke-width="10"
+                stroke-dasharray="${C.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}" stroke-linecap="round"
+                style="transition:stroke-dashoffset .8s ease"/>
+            </svg>
+            <div class="ring-center">
+              <div class="ring-pct" style="color:${color}">${pct.toFixed(0)}%</div>
+              <div class="ring-lbl">usado</div>
+            </div>
+          </div>
+          <div class="bnums">
+            <div><div class="bnum-v">${(budget.spent_usd||0).toFixed(2)}</div><div class="bnum-l">Gastado (USD)</div></div>
+            <div><div class="bnum-v" style="color:var(--green)">${(budget.remaining_usd||0).toFixed(2)}</div><div class="bnum-l">Restante (USD)</div></div>
+            <div><div class="bnum-v">${budget.hard_stop_usd||28}</div><div class="bnum-l">Límite</div></div>
+          </div>
+          ${bdHTML}
+          <div class="info-box" style="width:100%;max-width:420px;text-align:center">
+            Stop automático a $${budget.hard_stop_usd||28} USD &nbsp;·&nbsp; Alerta a $${budget.alert_threshold_usd||20} USD
+          </div>
+        </div>
+      </div>
+      <div class="sh"><div><div style="font-size:14px;font-weight:600">Métricas por plataforma</div><div style="font-size:12px;color:var(--txt2);margin-top:2px">Actualizadas diariamente a las 9:00 AM MX</div></div></div>
+      <div class="met-grid" id="met-grid"><div class="cstate" style="padding:32px"><div class="spinner"></div></div></div>`);
+
+    try {
+      const s = await GET('/analytics/summary');
+      renderMet(s);
+    } catch(_) {
+      document.getElementById('met-grid').innerHTML = `<div style="padding:20px;font-size:13px;color:var(--txt2)">No hay métricas aún. <button class="btn btn-ghost btn-sm" onclick="doRefresh()" style="margin-left:8px">Actualizar ahora</button></div>`;
+    }
+  } catch(e) { setView(emptyState(e.message,'fa-triangle-exclamation')); }
+}
+
+function renderMet(data) {
+  const grid = document.getElementById('met-grid');
+  if(!grid) return;
+  const plats = [
+    {key:'instagram',label:'Instagram',icon:'fa-instagram',color:'var(--ig)'},
+    {key:'facebook', label:'Facebook', icon:'fa-facebook', color:'var(--fb)'},
+    {key:'tiktok',   label:'TikTok',   icon:'fa-tiktok',   color:'var(--tt)'},
+  ];
+  const ps = data.platforms||{};
+  grid.innerHTML = plats.map(p=>{
+    const m = ps[p.key]||{};
+    return `<div class="met">
+      <div class="met-hd"><i class="fa-brands ${p.icon}" style="color:${p.color}"></i>${p.label}</div>
+      ${m.latest_followers!=null?`<div class="met-row"><span class="met-k">Seguidores</span><span>${numFmt(m.latest_followers)}</span></div>`:''}
+      ${m.avg_engagement_rate!=null?`<div class="met-row"><span class="met-k">Engagement promedio</span><span>${m.avg_engagement_rate}%</span></div>`:''}
+      ${m.snapshots?`<div class="met-row"><span class="met-k">Registros</span><span>${m.snapshots}</span></div>`:''}
+      ${!Object.keys(m).length?`<div style="font-size:12px;color:var(--txt3)">Sin datos — pulsa Actualizar</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+async function doRefresh() {
+  const btn = document.getElementById('ref-btn');
+  if(btn){btn.disabled=true;btn.innerHTML='<div class="spinner sp-sm"></div> Actualizando...';}
+  try {
+    await POST('/analytics/refresh', { force_refresh:true });
+    toast('Métricas actualizadas','success'); viewAnalytics();
+  } catch(e) {
+    toast(e.message,'error');
+    if(btn){btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-rotate-right"></i> Actualizar';}
+  }
+}
+
+// ─────────────────────────────────────────────────────
+// VIEW: KNOWLEDGE
+// ─────────────────────────────────────────────────────
+async function viewKnowledge() {
+  document.getElementById('tb-actions').innerHTML = `
+    <button class="btn btn-primary btn-sm" onclick="reindexAll()"><i class="fa-solid fa-rotate-right"></i> Re-indexar todo</button>`;
+  loading();
+  try {
+    const files = await GET('/knowledge/files');
+    const list  = Array.isArray(files) ? files : [];
+    setView(`
+      <p style="font-size:13px;color:var(--txt2);margin-bottom:18px;line-height:1.6">
+        Edita los JSON en el servidor y pulsa <strong style="color:var(--txt)">Re-indexar</strong> para que el agente use la información actualizada.
+      </p>
+      <div class="kb-grid" style="margin-bottom:28px">
+        ${list.map(f=>{
+          const m = KB_META[f]||{icon:'📄',desc:''};
+          return `<div class="kb-item">
+            <div class="kb-emoji">${m.icon}</div>
+            <div style="flex:1">
+              <div class="kb-name">${esc(f)}</div>
+              <div class="kb-desc">${m.desc}</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="reindexAll()" title="Re-indexar"><i class="fa-solid fa-rotate-right"></i></button>
+          </div>`;
+        }).join('')}
+        ${!list.length?`<p style="color:var(--txt2);font-size:13px">No se encontraron archivos</p>`:''}
+      </div>`);
+  } catch(e) { setView(emptyState(e.message,'fa-triangle-exclamation')); }
+}
+
+async function reindexAll() {
+  try {
+    const r = await POST('/knowledge/reindex');
+    toast(`Re-indexado: ${r.brand_docs||0} chunks marca + ${r.seasonal_docs||0} estacionales`,'success');
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// ─────────────────────────────────────────────────────
+// VIEW: PROMPTS
+// ─────────────────────────────────────────────────────
+async function viewPrompts() {
+  document.getElementById('tb-actions').innerHTML = '';
+  loading();
+  try {
+    const list = await GET('/prompts');
+    if(!Array.isArray(list)||!list.length){
+      setView(emptyState('No hay prompts. Ejecuta python scripts/setup.py','fa-sliders'));
+      return;
+    }
+    const grouped = {};
+    list.forEach(p=>{ (grouped[p.agent_name]=grouped[p.agent_name]||[]).push(p); });
+
+    setView(`
+      <p style="font-size:13px;color:var(--txt2);margin-bottom:18px;line-height:1.6">
+        Crea nuevas versiones y actívalas sin reiniciar el servidor. El agente usa el prompt marcado con <span class="badge b-gold">activo</span>.
+      </p>
+      ${Object.entries(grouped).map(([agent,versions])=>{
+        const active = versions.find(v=>v.is_active);
+        const icon   = AGENT_ICON[agent]||'fa-robot';
+        return `<div class="prow" id="pr-${agent}">
+          <div class="prow-icon"><i class="fa-solid ${icon}" style="color:var(--gold)"></i></div>
+          <div style="flex:0 0 auto;min-width:160px">
+            <div class="prow-name">${agent}</div>
+            <div class="prow-vers">
+              ${versions.map(v=>`<span class="badge ${v.is_active?'b-gold':''}" style="${!v.is_active?'background:var(--s2);color:var(--txt2)':''}">v${v.version}${v.is_active?' ✓':''}</span>`).join('')}
+            </div>
+          </div>
+          <div class="prow-note">${esc(active?.notes||'—')}</div>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            ${versions.length>1?`<select class="sel" style="width:auto;font-size:12px" onchange="activateVer('${agent}',this.value)">
+              ${versions.map(v=>`<option value="${v.version}" ${v.is_active?'selected':''}>${v.version}</option>`).join('')}
+            </select>`:''}
+            <button class="btn btn-ghost btn-sm" onclick="openNewVerModal('${agent}')"><i class="fa-solid fa-pen"></i> Nueva versión</button>
+          </div>
+        </div>`;
+      }).join('')}`);
+  } catch(e) { setView(emptyState(e.message,'fa-triangle-exclamation')); }
+}
+
+function openNewVerModal(agent) {
+  openModal(`
+    <div class="m-title"><i class="fa-solid fa-pen" style="color:var(--gold)"></i> Nueva versión — ${esc(agent)}</div>
+    <div class="fg"><label class="lbl">System prompt</label><textarea class="ta" id="pv-c" style="min-height:200px;font-family:monospace;font-size:12px" placeholder="Escribe el nuevo system prompt..."></textarea></div>
+    <div class="fg"><label class="lbl">Notas de cambio</label><input class="inp" id="pv-n" placeholder="Ej: Más urgencia en venta directa"></div>
+    <div class="m-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="createVer('${agent}')"><i class="fa-solid fa-floppy-disk"></i> Crear y activar</button>
+    </div>`);
+}
+
+async function createVer(agent) {
+  const content = document.getElementById('pv-c').value.trim();
+  const notes   = document.getElementById('pv-n').value.trim();
+  if(!content){ toast('El prompt no puede estar vacío','warning'); return; }
+  try {
+    const pv = await POST(`/prompts/${agent}`, { content, notes: notes||undefined });
+    await POST(`/prompts/${agent}/${pv.version}/activate`);
+    closeModal();
+    toast(`${agent} v${pv.version} activado`,'success');
+    viewPrompts();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function activateVer(agent, version) {
+  try {
+    await POST(`/prompts/${agent}/${version}/activate`);
+    toast(`${agent} v${version} activado`,'success'); viewPrompts();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// ─────────────────────────────────────────────────────
+// VIEWS MAP
+// ─────────────────────────────────────────────────────
+function viewComingSoon(view) {
+  setView(`
+    <div class="coming-soon">
+      <i class="fa-solid fa-hammer"></i>
+      <h2>${PAGE_TITLE[view]||view}</h2>
+      <p>Esta sección se construye en el bloque B${view==='calendar'?'10':view==='community'?'10':'11'}</p>
+      <span class="badge b-amber">Próximamente</span>
+    </div>`);
+}
+
+const VIEWS = {
+  dashboard: viewDashboard,
+  campaigns: viewCampaigns,
+  posts:     viewPosts,
+  calendar:  viewCalendar,
+  community: viewCommunity,
+  analytics: viewAnalytics,
+  knowledge: viewKnowledge,
+  prompts:   viewPrompts,
+};
+
+// ─────────────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────────────
+checkConn();
+setInterval(checkConn,  15000);
+refreshBudget();
+setInterval(refreshBudget, 30000);
+go('dashboard');
+</script>
+</body>
+</html>
