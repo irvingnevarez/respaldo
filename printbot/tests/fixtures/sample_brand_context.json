@@ -1,0 +1,11 @@
+{
+  "brand_name": "Lummy Designs",
+  "tagline": "Creaciones de lujo personalizadas",
+  "primary_color": "#0a0a0a",
+  "accent_color": "#C9A84C",
+  "tone": "cálido, cercano, aspiracional",
+  "products": ["termos personalizados", "sets de regalo", "serigrafía textil", "grabado en madera"],
+  "whatsapp": "https://wa.me/521XXXXXXXXXX",
+  "forbidden_words": ["calidad premium", "oferta", "descuento"],
+  "power_phrases": ["Tu nombre, para siempre", "El regalo más instagrameable"]
+}

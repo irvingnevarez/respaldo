@@ -1,0 +1,48 @@
+{
+  "brand_name": "Lummy Designs",
+  "tagline": "Creaciones de lujo personalizadas",
+  "secondary_tagline": "Arte y elegancia en cada pieza",
+  "brand_story": "Lummy Designs nació de la pasión por crear productos únicos que cuenten historias. Combinamos técnicas artesanales de serigrafía y grabado con diseños contemporáneos para transformar objetos ordinarios en recuerdos extraordinarios.",
+  "whatsapp_number": "https://wa.me/521XXXXXXXXXX",
+  "website": "https://lummydesigns.mx",
+  "location": "México",
+  "year_founded": 2022,
+  "visual_identity": {
+    "primary_color": "#0a0a0a",
+    "primary_color_name": "Negro profundo",
+    "accent_color": "#C9A84C",
+    "accent_color_name": "Dorado",
+    "background_color": "#ffffff",
+    "typography_serif": "Cormorant Garamond",
+    "typography_sans": "Montserrat",
+    "style_keywords": ["luxury", "artisanal", "minimal", "elegant", "warm"],
+    "photography_style": "flat lay product photography, lifestyle, close-up textures"
+  },
+  "tone_of_voice": {
+    "pronouns": "tú (nunca usted)",
+    "register": "coloquial elegante",
+    "language": "Español mexicano",
+    "adjectives": ["cálida", "cercana", "aspiracional", "auténtica", "vendedora"],
+    "forbidden_words": [
+      "calidad premium", "el mejor precio", "no te lo pierdas",
+      "¡Oferta!", "¡Descuento!", "¡Aprovecha!", "¡Urgente!"
+    ],
+    "power_phrases": [
+      "Tu nombre, para siempre",
+      "Diseñado para durar más que el recuerdo",
+      "El regalo más instagrameable",
+      "Hecho con tus manos, terminado con las nuestras",
+      "Porque los detalles sí importan",
+      "Personalizado desde el primer hilo",
+      "Para quienes creen que regalar es un arte"
+    ]
+  },
+  "contact_channels": {
+    "primary": "WhatsApp",
+    "secondary": "Instagram DM",
+    "website_form": true
+  },
+  "certifications": [],
+  "minimum_order": "1 pieza para la mayoría de productos; 10 piezas para serigrafía",
+  "delivery": "Envíos a toda la república mexicana, producción 3-7 días hábiles"
+}

@@ -1,0 +1,28 @@
+version: "3.9"
+
+services:
+  printbot:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - printbot_data:/data
+      - ./knowledge_base:/app/knowledge_base:ro
+      - ./video_templates:/app/video_templates:ro
+    env_file:
+      - .env
+    environment:
+      - SQLITE_URL=sqlite+aiosqlite:////data/printbot.db
+      - CHROMA_PERSIST_DIR=/data/chroma_db
+      - APP_ENV=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/analytics/budget"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  printbot_data:
+    driver: local

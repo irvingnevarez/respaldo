@@ -1,0 +1,24 @@
+{
+  "note": "Este archivo contiene notas generales de posicionamiento. NO incluye datos de competidores reales identificados — completar con investigación propia.",
+  "market_positioning": {
+    "price_tier": "medio-alto",
+    "differentiators": [
+      "Pedidos desde 1 pieza (sin mínimos imposibles)",
+      "Muestra digital antes de producir",
+      "Empaque de lujo incluido",
+      "Atención personalizada por WhatsApp",
+      "Proceso artesanal visible en redes sociales"
+    ],
+    "avoid_competing_on": ["precio más bajo", "velocidad extrema"],
+    "compete_on": ["calidad", "experiencia de unboxing", "personalización real", "confianza de marca"]
+  },
+  "market_gaps": [
+    "Pocos competidores muestran el proceso artesanal en redes",
+    "La mayoría no tiene packaging de lujo en pedidos pequeños",
+    "Oportunidad en bodas y XV años con corridas pequeñas personalizadas"
+  ],
+  "content_tone_vs_market": {
+    "market_general": "Promocional, muchos emojis, énfasis en precio",
+    "lummy_designs": "Aspiracional, elegante, enfocado en la experiencia y el recuerdo"
+  }
+}

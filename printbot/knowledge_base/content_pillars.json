@@ -1,0 +1,97 @@
+{
+  "pillars": [
+    {
+      "code": "proceso_artesanal",
+      "label": "Proceso artesanal",
+      "description": "Behind-the-scenes del proceso de serigrafía, DTF, grabado. Auténtico y educativo.",
+      "weight": 0.20,
+      "best_formats": ["reel", "tiktok_video", "story"],
+      "content_ideas": [
+        "Timelapse de pantalla siendo preparada para serigrafía",
+        "Close-up de la racleta deslizándose sobre la malla",
+        "Antes y después: camiseta en blanco → terminada con el diseño",
+        "Proceso de grabado laser en madera: la máquina en acción",
+        "Cómo se prepara un set de regalo desde cero",
+        "Error honesto: cuando algo sale mal y cómo lo corregimos",
+        "Tour del taller: así se ve donde nace cada pieza"
+      ]
+    },
+    {
+      "code": "producto_terminado",
+      "label": "Producto terminado",
+      "description": "Showcase de piezas listas. Alta calidad visual. El producto como protagonista.",
+      "weight": 0.25,
+      "best_formats": ["carousel", "post", "reel"],
+      "content_ideas": [
+        "Flat lay de termos con diferentes diseños sobre fondo negro",
+        "Tumbler con nombre grabado: close-up del texto dorado",
+        "Set de regalo armado: la caja abierta mostrando todo el contenido",
+        "Foto lifestyle: manos sosteniendo el termo en un café",
+        "Colección de hoodies con logos de marca cliente",
+        "Antes/después: producto antes de estampar vs listo",
+        "Detalle de textura del estampado al tacto"
+      ]
+    },
+    {
+      "code": "regalos_ocasiones",
+      "label": "Regalos y ocasiones",
+      "description": "Contenido estacional. Vincula el producto con momentos de vida y celebraciones.",
+      "weight": 0.20,
+      "best_formats": ["post", "carousel", "story"],
+      "content_ideas": [
+        "Ideas de regalo para el Día de la Madre con sets personalizados",
+        "El regalo de boda que SÍ van a usar todos los días",
+        "Recuerdos de XV años que no terminarán en una cajita",
+        "Kit corporativo de fin de año con tu marca",
+        "El mejor regalo de graduación (y no es un ramo)",
+        "San Valentín: qué regalarle al que lo tiene todo",
+        "Regalos para maestros que sí valen la pena"
+      ]
+    },
+    {
+      "code": "storytelling_cliente",
+      "label": "Storytelling de cliente",
+      "description": "UGC, testimonios, reacciones de clientes. El cliente como protagonista.",
+      "weight": 0.15,
+      "best_formats": ["reel", "story", "post"],
+      "content_ideas": [
+        "Repost de cliente abriendo su pedido (con permiso)",
+        "Historia: la empresa que pidió 100 kits para sus empleados",
+        "Reacción de la novia al ver sus recuerdos de boda",
+        "Testimonio en texto: 'Nunca pensé que quedaría tan bien'",
+        "El emprendedor que lanzó su merch con nosotros",
+        "Nuestro pedido más especial del mes"
+      ]
+    },
+    {
+      "code": "educativo",
+      "label": "Educativo",
+      "description": "Explica técnicas, diferencias entre procesos, dudas frecuentes. Genera confianza.",
+      "weight": 0.10,
+      "best_formats": ["carousel", "tiktok_video", "post"],
+      "content_ideas": [
+        "¿Qué es serigrafía y por qué los colores duran más?",
+        "DTF vs serigrafía: ¿cuál necesitas para tu proyecto?",
+        "¿Cuánto dura el estampado serigráfico? La respuesta honesta",
+        "3 preguntas que debes hacer antes de pedir tu merch",
+        "¿Por qué mi diseño se ve diferente en pantalla vs en prenda?",
+        "Cómo preparar tu archivo para serigrafía (guía rápida)"
+      ]
+    },
+    {
+      "code": "venta_directa",
+      "label": "Venta directa",
+      "description": "Promociones, precios, disponibilidad. Claro y directo. Máx 10% del calendario.",
+      "weight": 0.10,
+      "best_formats": ["post", "story", "whatsapp_broadcast"],
+      "content_ideas": [
+        "Termos personalizados desde $299 — cotiza por WhatsApp",
+        "Nuevas tallas disponibles para hoodies: S a 3XL",
+        "Encargos abiertos para Día de la Madre — cierran el [fecha]",
+        "Paquete corporativo: 20 termos + diseño incluido",
+        "Últimos lugares para entrega antes de Navidad",
+        "Bundle regalo completo: termo + caja + tarjeta desde $499"
+      ]
+    }
+  ]
+}
