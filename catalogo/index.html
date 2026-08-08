@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Catálogo olfativo</title>
+<meta name="description" content="Arma tu catálogo de perfumes: pirámide de notas, ranking estacional y rendimiento mes a mes calibrado al clima de tu ciudad.">
+<meta name="color-scheme" content="dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,SOFT,WONK,wght@0,9..144,0..100,0..1,300..700;1,9..144,0..100,0..1,300..600&family=Karla:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/catalogo.css">
+</head>
+<body>
+
+<!-- ============================================================
+     Arranque: se oculta en cuanto se resuelve la sesión
+     ============================================================ -->
+<div id="arranque" class="cargando" style="padding-top:160px">Abriendo el catálogo…</div>
+
+<!-- ============================================================
+     Pantalla 1 · Acceso
+     ============================================================ -->
+<div id="pantalla-acceso" class="acceso" hidden>
+
+  <section class="acceso__relato">
+    <p class="eyebrow">Colección personal</p>
+    <h1 class="titulo">Catálogo <em>olfativo</em></h1>
+    <p class="bajada">
+      Registra cada fragancia de tu colección con su pirámide de notas, su ranking
+      estacional y una lectura mes a mes calibrada al clima real de donde vives.
+    </p>
+
+    <ul class="lista-puntos">
+      <li><strong>Franja anual.</strong> Doce valores del 0 al 5 que dicen qué tan bien rinde cada perfume mes con mes en tu ciudad, no en un clima genérico.</li>
+      <li><strong>Ranking estacional.</strong> La referencia universal de cuatro estaciones, por si no coincide con tu franja local.</li>
+      <li><strong>Filtros y búsqueda.</strong> Por estación, por nota, por casa; y ordenado por lo que mejor funciona en el mes que elijas.</li>
+      <li><strong>Tu catálogo es tuyo.</strong> Cada cuenta solo ve sus propias fragancias, y puedes descargarlas en JSON cuando quieras.</li>
+    </ul>
+
+    <div class="vitrina" aria-hidden="true">
+      <div class="vitrina__pieza" style="--jugo:#17794A">
+        <div class="vitrina__mancha"></div>
+        <p class="vitrina__nombre">Paradise Garden</p>
+        <p class="vitrina__casa">Jean Paul Gaultier</p>
+        <div class="vitrina__franja">
+          <i style="height:60%"></i><i style="height:80%"></i><i style="height:100%"></i><i style="height:100%"></i>
+          <i style="height:100%"></i><i style="height:80%"></i><i style="height:80%"></i><i style="height:80%"></i>
+          <i style="height:80%"></i><i style="height:100%"></i><i style="height:80%"></i><i style="height:60%"></i>
+        </div>
+      </div>
+      <div class="vitrina__pieza" style="--jugo:#9C3B2E">
+        <div class="vitrina__mancha"></div>
+        <p class="vitrina__nombre">Sauvage Parfum</p>
+        <p class="vitrina__casa">Dior</p>
+        <div class="vitrina__franja">
+          <i style="height:100%"></i><i style="height:100%"></i><i style="height:80%"></i><i style="height:60%"></i>
+          <i style="height:40%"></i><i style="height:20%"></i><i style="height:20%"></i><i style="height:20%"></i>
+          <i style="height:20%"></i><i style="height:40%"></i><i style="height:80%"></i><i style="height:100%"></i>
+        </div>
+      </div>
+      <div class="vitrina__pieza" style="--jugo:#1F7AC0">
+        <div class="vitrina__mancha"></div>
+        <p class="vitrina__nombre">Blue Temptation</p>
+        <p class="vitrina__casa">Zara</p>
+        <div class="vitrina__franja">
+          <i style="height:80%"></i><i style="height:100%"></i><i style="height:100%"></i><i style="height:80%"></i>
+          <i style="height:80%"></i><i style="height:60%"></i><i style="height:60%"></i><i style="height:60%"></i>
+          <i style="height:60%"></i><i style="height:80%"></i><i style="height:80%"></i><i style="height:80%"></i>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="acceso__panel">
+    <div class="acceso__caja">
+
+      <div class="pestanas" role="tablist">
+        <button type="button" class="pestana" role="tab" aria-selected="true"  data-panel="entrar">Entrar</button>
+        <button type="button" class="pestana" role="tab" aria-selected="false" data-panel="registrar">Crear cuenta</button>
+      </div>
+
+      <!-- ---------- entrar ---------- -->
+      <form id="form-entrar" novalidate>
+        <h2 class="acceso__titulo">Vuelve a tu colección</h2>
+        <p class="acceso__nota">Entra con el correo que usaste al registrarte.</p>
+
+        <label class="campo" for="entrar-correo">
+          <span>Correo</span>
+          <input id="entrar-correo" class="entrada" type="email" autocomplete="email" required placeholder="tu@correo.com">
+        </label>
+
+        <label class="campo" for="entrar-contrasena">
+          <span>Contraseña</span>
+          <input id="entrar-contrasena" class="entrada" type="password" autocomplete="current-password" required>
+        </label>
+
+        <button type="submit" id="btn-entrar" class="boton boton--primario boton--ancho">Entrar</button>
+
+        <p class="acceso__pie">
+          ¿Olvidaste la contraseña?
+          <button type="button" id="btn-olvide">Mándame el enlace</button>
+        </p>
+      </form>
+
+      <!-- ---------- registrar ---------- -->
+      <form id="form-registrar" novalidate hidden>
+        <h2 class="acceso__titulo">Arma tu catálogo</h2>
+        <p class="acceso__nota">Con una cuenta tus fragancias quedan guardadas y las abres desde cualquier dispositivo.</p>
+
+        <label class="campo" for="registrar-nombre">
+          <span>Nombre</span>
+          <input id="registrar-nombre" class="entrada" type="text" autocomplete="name" placeholder="Cómo quieres que te llamemos">
+        </label>
+
+        <label class="campo" for="registrar-correo">
+          <span>Correo</span>
+          <input id="registrar-correo" class="entrada" type="email" autocomplete="email" required placeholder="tu@correo.com">
+        </label>
+
+        <label class="campo" for="registrar-contrasena">
+          <span>Contraseña</span>
+          <input id="registrar-contrasena" class="entrada" type="password" autocomplete="new-password" required minlength="6">
+          <em>Mínimo 6 caracteres.</em>
+        </label>
+
+        <label class="campo" for="registrar-repetir">
+          <span>Repite la contraseña</span>
+          <input id="registrar-repetir" class="entrada" type="password" autocomplete="new-password" required minlength="6">
+        </label>
+
+        <button type="submit" id="btn-registrar" class="boton boton--primario boton--ancho">Crear cuenta</button>
+      </form>
+
+    </div>
+  </section>
+</div>
+
+<!-- ============================================================
+     Pantalla 2 · Catálogo
+     ============================================================ -->
+<div id="pantalla-app" hidden>
+
+  <div class="barra-sesion">
+    <div class="barra-sesion__interior">
+      <p class="barra-sesion__marca">Catálogo <em>olfativo</em></p>
+      <button type="button" id="btn-nueva"     class="boton boton--primario">Nueva fragancia</button>
+      <button type="button" id="btn-importar"  class="boton">Importar muestra</button>
+      <button type="button" id="btn-exportar"  class="boton">Exportar JSON</button>
+      <button type="button" id="btn-ajustes"   class="boton boton--fantasma">Ajustes</button>
+      <button type="button" id="btn-salir"     class="boton boton--fantasma">Salir</button>
+      <span class="barra-sesion__usuario" id="usuario"></span>
+    </div>
+  </div>
+
+  <div class="envoltura">
+
+    <header class="cabecera">
+      <p class="eyebrow">Colección personal · <span id="ciudad-leyenda">tu ciudad</span></p>
+      <h1 class="titulo">Catálogo <em>olfativo</em></h1>
+      <p class="bajada">
+        Cada fragancia con su temporada, ordenada de la estación donde mejor rinde
+        a la que menos. Con una segunda lectura calibrada al clima real de aquí.
+      </p>
+      <div class="regla"></div>
+
+      <div class="leyenda">
+        <div class="leyenda-bloque">
+          <div class="muestra-franja" aria-hidden="true">
+            <i style="height:55%"></i><i style="height:80%"></i><i style="height:100%"></i><i style="height:100%"></i>
+            <i style="height:70%"></i><i style="height:45%"></i><i style="height:25%"></i><i style="height:25%"></i>
+            <i style="height:25%"></i><i style="height:45%"></i><i style="height:70%"></i><i style="height:55%"></i>
+          </div>
+          <strong>Franja anual</strong>
+          Qué tan bien funciona mes a mes en tu ciudad. El mes elegido en la barra va
+          marcado con un recuadro, y arranca en el mes en curso.
+        </div>
+        <div class="leyenda-bloque">
+          <strong>Ranking estacional</strong>
+          La referencia universal de cuatro estaciones. Puede no coincidir con la franja
+          anual: en un clima cálido febrero se comporta como primavera y octubre sigue
+          siendo verano.
+        </div>
+        <div class="leyenda-bloque">
+          <strong>Confianza del dato</strong>
+          Cuando el rendimiento está estimado y no confirmado, escríbelo en el campo de
+          aviso y la ficha lo dice.
+        </div>
+      </div>
+    </header>
+
+    <div class="controles">
+      <input id="buscador" class="entrada buscador" type="search" placeholder="Buscar por nombre, casa o nota" aria-label="Buscar fragancia">
+      <div class="grupo-chips" id="chips" role="group" aria-label="Filtrar por estación"></div>
+      <select id="mes" class="selector" aria-label="Mes de referencia"></select>
+      <select id="orden" class="selector" aria-label="Ordenar catálogo">
+        <option value="captura">Orden de captura</option>
+        <option value="ahora" id="opcionMes">Mejor para este mes</option>
+        <option value="nombre">Nombre</option>
+        <option value="casa">Casa</option>
+      </select>
+      <span class="conteo" id="conteo"></span>
+    </div>
+
+    <main class="rejilla" id="rejilla"></main>
+
+    <footer class="pie">
+      <p>
+        Tus fragancias se guardan en tu cuenta y nadie más las ve. Con
+        <strong>Exportar JSON</strong> te llevas una copia completa cuando quieras.
+      </p>
+    </footer>
+
+  </div>
+</div>
+
+<!-- ============================================================
+     Editor de fragancia
+     ============================================================ -->
+<dialog id="editor" class="editor" aria-labelledby="editor-titulo">
+  <form id="form-editor" method="dialog" class="editor__caja" novalidate>
+
+    <div class="editor__cabeza">
+      <h2 class="editor__titulo" id="editor-titulo">Nueva fragancia</h2>
+      <button type="button" class="editor__cerrar" id="editor-cerrar" aria-label="Cerrar">&times;</button>
+    </div>
+
+    <div class="editor__cuerpo">
+
+      <fieldset class="bloque">
+        <legend>Identidad</legend>
+        <div class="parrilla">
+          <label class="campo ancho-total" for="f-nombre">
+            <span>Nombre *</span>
+            <input id="f-nombre" class="entrada" type="text" required maxlength="160" placeholder="Le Beau Paradise Garden">
+          </label>
+          <label class="campo" for="f-casa">
+            <span>Casa</span>
+            <input id="f-casa" class="entrada" type="text" maxlength="120" placeholder="Jean Paul Gaultier">
+          </label>
+          <label class="campo" for="f-anio">
+            <span>Año</span>
+            <input id="f-anio" class="entrada" type="number" min="1800" max="2200" step="1" placeholder="2024">
+          </label>
+          <label class="campo" for="f-familia">
+            <span>Familia olfativa</span>
+            <input id="f-familia" class="entrada" type="text" maxlength="160" placeholder="Verde acuática con coco salado">
+          </label>
+          <label class="campo" for="f-genero">
+            <span>Género</span>
+            <select id="f-genero" class="selector"></select>
+          </label>
+          <label class="campo" for="f-jugo">
+            <span>Color del jugo</span>
+            <input id="f-jugo" class="entrada" type="color" value="#C79A3E">
+            <em>Da identidad a la ficha: la mancha del borde y las barras.</em>
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset class="bloque">
+        <legend>Pirámide de notas</legend>
+        <label class="campo" for="f-salida">
+          <span>Salida</span>
+          <input id="f-salida" class="entrada" type="text" placeholder="Notas acuáticas, Menta, Jengibre">
+          <em>Separa cada nota con una coma.</em>
+        </label>
+        <label class="campo" for="f-corazon">
+          <span>Corazón</span>
+          <input id="f-corazon" class="entrada" type="text" placeholder="Coco salado, Higo verde, Sal">
+        </label>
+        <label class="campo" for="f-fondo">
+          <span>Fondo</span>
+          <input id="f-fondo" class="entrada" type="text" placeholder="Haba tonka, Sándalo">
+        </label>
+      </fieldset>
+
+      <fieldset class="bloque">
+        <legend>Ranking estacional</legend>
+        <p class="campo"><em>Del 0 al 5, la referencia universal de cuatro estaciones.</em></p>
+        <div id="f-estaciones"></div>
+      </fieldset>
+
+      <fieldset class="bloque">
+        <legend>Franja anual</legend>
+        <p class="campo"><em>Qué tan bien rinde mes a mes en tu clima, de enero a diciembre.
+          Toca la altura de cada columna o escribe el número.</em></p>
+        <div id="f-meses"></div>
+      </fieldset>
+
+      <fieldset class="bloque">
+        <legend>Rendimiento y uso</legend>
+        <div class="parrilla parrilla--dos">
+          <label class="campo" for="f-duracion">
+            <span>Duración</span>
+            <input id="f-duracion" class="entrada" type="text" maxlength="200" placeholder="8–10 h o más">
+          </label>
+          <label class="campo" for="f-estela">
+            <span>Estela</span>
+            <input id="f-estela" class="entrada" type="text" maxlength="200" placeholder="Muy alta; un disparo por brazo basta">
+          </label>
+          <label class="campo ancho-total" for="f-ocasion">
+            <span>Ocasión</span>
+            <input id="f-ocasion" class="entrada" type="text" placeholder="Día, Verano, Vacaciones, Diario">
+            <em>Separa cada ocasión con una coma.</em>
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset class="bloque">
+        <legend>Apuntes</legend>
+        <label class="campo" for="f-local">
+          <span id="etiqueta-local">Ajuste local</span>
+          <textarea id="f-local" class="area" maxlength="4000" placeholder="Cómo se comporta con el calor y la humedad de tu ciudad, y en qué meses conviene usarlo."></textarea>
+        </label>
+        <label class="campo" for="f-aviso">
+          <span>Aviso</span>
+          <textarea id="f-aviso" class="area" maxlength="8000" placeholder="Confusiones de nombre con otros flankers, datos estimados, reseñas divididas, dudas de compra."></textarea>
+        </label>
+      </fieldset>
+
+    </div>
+
+    <div class="editor__pie">
+      <button type="button" class="boton" id="editor-cancelar">Cancelar</button>
+      <button type="submit" class="boton boton--primario" id="editor-guardar">Agregar al catálogo</button>
+    </div>
+
+  </form>
+</dialog>
+
+<!-- ============================================================
+     Ajustes de cuenta
+     ============================================================ -->
+<dialog id="ajustes" class="editor" style="max-width:460px" aria-labelledby="ajustes-titulo">
+  <form id="form-ajustes" method="dialog" class="editor__caja" novalidate>
+
+    <div class="editor__cabeza">
+      <h2 class="editor__titulo" id="ajustes-titulo">Ajustes de la cuenta</h2>
+      <button type="button" class="editor__cerrar" id="ajustes-cerrar" aria-label="Cerrar">&times;</button>
+    </div>
+
+    <div class="editor__cuerpo">
+      <label class="campo" for="a-nombre">
+        <span>Nombre</span>
+        <input id="a-nombre" class="entrada" type="text" maxlength="120">
+      </label>
+
+      <label class="campo" for="a-ciudad">
+        <span>Ciudad</span>
+        <input id="a-ciudad" class="entrada" type="text" maxlength="120" placeholder="Culiacán, Sinaloa">
+        <em>Es la que aparece en la franja anual de cada ficha. La franja la calibras tú a mano.</em>
+      </label>
+
+      <label class="campo" for="a-contrasena">
+        <span>Contraseña nueva</span>
+        <input id="a-contrasena" class="entrada" type="password" autocomplete="new-password" minlength="6" placeholder="Déjalo vacío para no cambiarla">
+      </label>
+    </div>
+
+    <div class="editor__pie">
+      <button type="button" class="boton" id="ajustes-cancelar">Cancelar</button>
+      <button type="submit" class="boton boton--primario" id="ajustes-guardar">Guardar</button>
+    </div>
+
+  </form>
+</dialog>
+
+<div class="avisos" id="avisos" aria-live="polite"></div>
+
+<!-- La librería va servida desde aquí y no desde un CDN: así el catálogo abre
+     igual en redes que bloquean terceros y no depende de que otro sitio siga en pie. -->
+<script src="js/vendor/supabase.js"></script>
+<script src="js/config.js"></script>
+<script src="js/muestra.js"></script>
+<script src="js/datos.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>
