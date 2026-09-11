@@ -6600,11 +6600,38 @@ var PFX_UP = PFX_HEAD + [
   '}'
 ].join('\n');
 
+// ── volumetric light shafts ─────────────────────────────────────────────
+// Radial scattering march (the classic Mitchell approach): step from the
+// fragment toward the light, accumulating the bright-pass buffer with a
+// decaying weight. Run on a quarter-res buffer since shafts are soft.
+var PFX_RAYS = PFX_HEAD + [
+  '',
+  'uniform sampler2D uTex;',
+  'uniform vec2  uCenter;',
+  'uniform float uDensity;',
+  'uniform float uWeight;',
+  'uniform float uDecay;',
+  'void main(){',
+  '  vec2 delta = (vUV - uCenter) * (uDensity / 28.0);',
+  '  vec2 uv = vUV;',
+  '  float illum = 1.0;',
+  '  vec3 acc = vec3(0.0);',
+  '  for (int i = 0; i < 28; i++) {',
+  '    uv -= delta;',
+  '    acc += texture(uTex, uv).rgb * illum * uWeight;',
+  '    illum *= uDecay;',
+  '  }',
+  '  oColor = vec4(acc, 1.0);',
+  '}'
+].join('\n');
+
 // ── final composite ─────────────────────────────────────────────────────
 var PFX_COMP = PFX_HEAD + [
   '',
   'uniform sampler2D uScene;',
   'uniform sampler2D uBloom;',
+  'uniform sampler2D uRays;',
+  'uniform float uRaysAmt;',
   'uniform vec2  uRes;',
   'uniform float uTime;',
   'uniform float uBloomAmt;',
@@ -6649,6 +6676,7 @@ var PFX_COMP = PFX_HEAD + [
   '',
   '  vec3 bloom = texture(uBloom, uv).rgb;',
   '  vec3 col = scene + bloom * uBloomAmt;',
+  '  col += texture(uRays, uv).rgb * uRaysAmt;',
   '',
   '  col *= uExposure;',
   '  col += uFlash;',                                    // lightning wash
@@ -6754,6 +6782,7 @@ function PostFX(canvas) {
     self.progBright = PFX_program(gl, PFX_BRIGHT);
     self.progDown = PFX_program(gl, PFX_DOWN);
     self.progUp = PFX_program(gl, PFX_UP);
+    self.progRays = PFX_program(gl, PFX_RAYS);
     self.progComp = PFX_program(gl, PFX_COMP);
   } catch (e) {
     self.error = e.message;
@@ -6774,6 +6803,7 @@ function PostFX(canvas) {
   self.normalTex = mkTex();
   self.occTex = mkTex();
   self.lit = null;
+  self.rays = null;
   self.lpBuf = new Float32Array(PFX_MAXL * 4);
   self.lcBuf = new Float32Array(PFX_MAXL * 4);
   self.mips = [];
@@ -6792,6 +6822,8 @@ function PostFX(canvas) {
       self.mips.push(PFX_target(gl, mw, mh, gl.RGBA16F, gl.HALF_FLOAT));
       mw = Math.max(1, mw >> 1); mh = Math.max(1, mh >> 1);
     }
+    if (self.rays) { gl.deleteTexture(self.rays.tex); gl.deleteFramebuffer(self.rays.fbo); }
+    self.rays = PFX_target(gl, Math.max(1, w >> 2), Math.max(1, h >> 2), gl.RGBA16F, gl.HALF_FLOAT);
     if (self.lit) { gl.deleteTexture(self.lit.tex); gl.deleteFramebuffer(self.lit.fbo); }
     // half-float so lights can push past 1.0 and feed the bloom chain
     self.lit = PFX_target(gl, w, h, gl.RGBA16F, gl.HALF_FLOAT);
@@ -6898,15 +6930,33 @@ function PostFX(canvas) {
     }
     gl.disable(gl.BLEND);
 
+    // 3b. light shafts, marched from the bright-pass buffer
+    if (prm.rays > 0.0001) {
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, self.mips[1].tex);
+      var rp = self.progRays;
+      gl.useProgram(rp.p);
+      gl.uniform1i(rp.u.uTex, 0);
+      gl.uniform2f(rp.u.uCenter, prm.rayX, prm.rayY);
+      gl.uniform1f(rp.u.uDensity, prm.rayDensity);
+      gl.uniform1f(rp.u.uWeight, prm.rayWeight);
+      gl.uniform1f(rp.u.uDecay, prm.rayDecay);
+      blit(rp, self.rays);
+    }
+
     // 4. composite to the screen
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, srcTex);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, self.mips[0].tex);
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, self.rays.tex);
     var c = self.progComp;
     gl.useProgram(c.p);
     gl.uniform1i(c.u.uScene, 0);
     gl.uniform1i(c.u.uBloom, 1);
+    gl.uniform1i(c.u.uRays, 2);
+    gl.uniform1f(c.u.uRaysAmt, prm.rays);
     gl.uniform2f(c.u.uRes, self.w, self.h);
     gl.uniform1f(c.u.uTime, prm.time);
     gl.uniform1f(c.u.uBloomAmt, prm.bloom);
@@ -6946,6 +6996,8 @@ PostFX.defaults = function () {
     lighting: true, normalStrength: 1.5,
     shadows: true, shadowLights: 4, shadowStrength: 0.92,
     sunShadow: 0.85, sunLen: 0.13,
+    // moon shafts: centre tracks the moon, updated per frame by the game
+    rays: 0.34, rayX: 0.70, rayY: 0.86, rayDensity: 0.62, rayWeight: 0.055, rayDecay: 0.93,
     ambient: new Float32Array([0.64, 0.66, 0.78]),
     sunDir: new Float32Array([0.38, 0.58, 0.72]),    // moon, upper right (UV space, y up)
     sunCol: new Float32Array([0.30, 0.33, 0.44]),
@@ -7160,7 +7212,10 @@ class World {
           this.cells[i] = { t: ch, solid: true, bump: 0, idx: cx * 31 + cy * 17, alive: true };
         } else if (ch === '?') {
           qIdx++;
-          const item = (qIdx % 9 === 0) ? 'star' : (qIdx % 4 === 0) ? 'suit' : 'rang';
+          // Every 5th block is a star, every 4th a suit. The old %9 rule meant
+          // level 1-1, with only 8 blocks, could never contain a star at all,
+          // so the best power-up in the game was invisible to most players.
+          const item = (qIdx % 5 === 0) ? 'star' : (qIdx % 4 === 0) ? 'suit' : 'rang';
           this.cells[i] = { t: '?', solid: true, bump: 0, used: false, item: item, idx: cx * 31 + cy * 17, alive: true };
         } else if (ch === 'G') {
           this.decor.push({ t: 'G', x: cx * TILE, y: cy * TILE });
@@ -7672,6 +7727,13 @@ class Game {
     // having to remember to.
     const sh = Math.abs(this.shake.x) + Math.abs(this.shake.y);
     p.aberration = 1.0 + Math.min(2.2, sh * 0.5) + this.bolt.flash * 2.0;
+
+    // Light shafts originate at the moon, which parallaxes with the camera.
+    // Matches the 0.04 factor environment.js draws it at.
+    const camX = this.cam ? this.cam.x : 0;
+    p.rayX = (680 - camX * 0.04) / CW;
+    p.rayY = 1 - 75 / CH;
+    p.rays = 0.34 + fl * 0.55;
     if (this.state === ST.DEAD) { p.vignette = 1.5; p.saturation = 0.45; }
     else if (this.state === ST.TITLE) { p.vignette = 1.0; p.bloom += 0.14; }
     else p.vignette = 0.85;
