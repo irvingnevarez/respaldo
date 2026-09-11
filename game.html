@@ -51,7 +51,7 @@ body{
     0 0 44px rgba(245,197,24,.07),
     0 26px 70px rgba(0,0,0,.85);
 }
-#gc{display:block;width:100%;height:100%;touch-action:none}
+#stage canvas{position:absolute;inset:0;display:block;width:100%;height:100%;touch-action:none}
 
 /* ── legend rail ── */
 #rail{
@@ -138,6 +138,7 @@ body{
 
 <div id="stage">
   <canvas id="gc" width="960" height="540" aria-label="Juego de plataformas de Batman"></canvas>
+  <canvas id="fx" width="960" height="540" aria-hidden="true"></canvas>
 </div>
 <div id="pad">
   <div class="pad-g">
@@ -6282,6 +6283,414 @@ function LV_tileAt(level, tx, ty) {
 function LV_isSolid(ch) { return ch === '#' || ch === 'X' || ch === 'B' || ch === '?'; }
 
 
+// ═══ POSTFX ═══════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+//  POST-PROCESSING — WebGL2 pipeline run over the 2D scene each frame.
+//
+//  scene canvas -> bright pass -> 6-level mip blur chain (downsample with a
+//  13-tap filter, upsample with a tent filter, accumulated additively) ->
+//  composite: chromatic aberration, bloom, ACES filmic tonemap, lift/gamma/
+//  gain grading, split toning, vignette, grain, and an ordered dither.
+//
+//  The dither matters more than it sounds: this game is almost entirely dark
+//  gradients, and 8-bit output bands badly without it.
+//
+//  Degrades to null if WebGL2 is unavailable — the caller then shows the
+//  plain 2D canvas instead.
+// ═══════════════════════════════════════════════════════════════════════
+
+var PFX_VERT = [
+  '#version 300 es',
+  'out vec2 vUV;',
+  'void main(){',
+  '  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));',
+  '  vUV = p;',
+  '  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);',
+  '}'
+].join('\n');
+
+var PFX_HEAD = [
+  '#version 300 es',
+  'precision highp float;',
+  'precision highp sampler2D;',
+  'in vec2 vUV;',
+  'out vec4 oColor;'
+].join('\n');
+
+// ── bright pass ─────────────────────────────────────────────────────────
+var PFX_BRIGHT = PFX_HEAD + [
+  '',
+  'uniform sampler2D uTex;',
+  'uniform float uThreshold;',
+  'uniform float uKnee;',
+  'uniform float uWarm;',
+  'void main(){',
+  '  vec3 c = texture(uTex, vUV).rgb;',
+  '  c = pow(max(c, 0.0), vec3(2.2));',            // to rough linear
+  '  float br = max(c.r, max(c.g, c.b));',
+  '  float k = max(uKnee, 1e-4);',
+  '  float soft = clamp(br - uThreshold + k, 0.0, 2.0 * k);',
+  '  soft = soft * soft / (4.0 * k);',
+  '  float contrib = max(soft, br - uThreshold) / max(br, 1e-4);',
+  // Gotham's light sources are amber: let gold bloom harder than blue-white
+  '  float warm = clamp(c.r + c.g * 0.6 - c.b * 1.2, 0.0, 2.0);',
+  '  contrib *= 1.0 + uWarm * warm;',
+  '  oColor = vec4(c * contrib, 1.0);',
+  '}'
+].join('\n');
+
+// ── 13-tap downsample ───────────────────────────────────────────────────
+var PFX_DOWN = PFX_HEAD + [
+  '',
+  'uniform sampler2D uTex;',
+  'uniform vec2 uTexel;',
+  'void main(){',
+  '  vec2 t = uTexel;',
+  '  vec3 a = texture(uTex, vUV + vec2(-2.0,  2.0) * t).rgb;',
+  '  vec3 b = texture(uTex, vUV + vec2( 0.0,  2.0) * t).rgb;',
+  '  vec3 c = texture(uTex, vUV + vec2( 2.0,  2.0) * t).rgb;',
+  '  vec3 d = texture(uTex, vUV + vec2(-2.0,  0.0) * t).rgb;',
+  '  vec3 e = texture(uTex, vUV                     ).rgb;',
+  '  vec3 f = texture(uTex, vUV + vec2( 2.0,  0.0) * t).rgb;',
+  '  vec3 g = texture(uTex, vUV + vec2(-2.0, -2.0) * t).rgb;',
+  '  vec3 h = texture(uTex, vUV + vec2( 0.0, -2.0) * t).rgb;',
+  '  vec3 i = texture(uTex, vUV + vec2( 2.0, -2.0) * t).rgb;',
+  '  vec3 j = texture(uTex, vUV + vec2(-1.0,  1.0) * t).rgb;',
+  '  vec3 k = texture(uTex, vUV + vec2( 1.0,  1.0) * t).rgb;',
+  '  vec3 l = texture(uTex, vUV + vec2(-1.0, -1.0) * t).rgb;',
+  '  vec3 m = texture(uTex, vUV + vec2( 1.0, -1.0) * t).rgb;',
+  '  vec3 r = e * 0.125;',
+  '  r += (a + c + g + i) * 0.03125;',
+  '  r += (b + d + f + h) * 0.0625;',
+  '  r += (j + k + l + m) * 0.125;',
+  '  oColor = vec4(r, 1.0);',
+  '}'
+].join('\n');
+
+// ── 9-tap tent upsample ─────────────────────────────────────────────────
+var PFX_UP = PFX_HEAD + [
+  '',
+  'uniform sampler2D uTex;',
+  'uniform vec2 uTexel;',
+  'uniform float uRadius;',
+  'void main(){',
+  '  vec2 t = uTexel * uRadius;',
+  '  vec3 r = vec3(0.0);',
+  '  r += texture(uTex, vUV + vec2(-1.0,  1.0) * t).rgb * 1.0;',
+  '  r += texture(uTex, vUV + vec2( 0.0,  1.0) * t).rgb * 2.0;',
+  '  r += texture(uTex, vUV + vec2( 1.0,  1.0) * t).rgb * 1.0;',
+  '  r += texture(uTex, vUV + vec2(-1.0,  0.0) * t).rgb * 2.0;',
+  '  r += texture(uTex, vUV                      ).rgb * 4.0;',
+  '  r += texture(uTex, vUV + vec2( 1.0,  0.0) * t).rgb * 2.0;',
+  '  r += texture(uTex, vUV + vec2(-1.0, -1.0) * t).rgb * 1.0;',
+  '  r += texture(uTex, vUV + vec2( 0.0, -1.0) * t).rgb * 2.0;',
+  '  r += texture(uTex, vUV + vec2( 1.0, -1.0) * t).rgb * 1.0;',
+  '  oColor = vec4(r / 16.0, 1.0);',
+  '}'
+].join('\n');
+
+// ── final composite ─────────────────────────────────────────────────────
+var PFX_COMP = PFX_HEAD + [
+  '',
+  'uniform sampler2D uScene;',
+  'uniform sampler2D uBloom;',
+  'uniform vec2  uRes;',
+  'uniform float uTime;',
+  'uniform float uBloomAmt;',
+  'uniform float uAberr;',
+  'uniform float uVignette;',
+  'uniform float uGrain;',
+  'uniform float uExposure;',
+  'uniform float uContrast;',
+  'uniform float uSat;',
+  'uniform float uDistort;',
+  'uniform vec3  uLift;',
+  'uniform vec3  uGain;',
+  'uniform vec3  uShadowTint;',
+  'uniform vec3  uHiTint;',
+  'uniform float uFlash;',
+  'uniform float uTonemap;',
+  '',
+  'vec3 aces(vec3 x){',
+  '  return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);',
+  '}',
+  'float hash12(vec2 p){',
+  '  vec3 p3 = fract(vec3(p.xyx) * 0.1031);',
+  '  p3 += dot(p3, p3.yzx + 33.33);',
+  '  return fract((p3.x + p3.y) * p3.z);',
+  '}',
+  '',
+  'void main(){',
+  '  vec2 uv = vUV;',
+  '  vec2 cen = uv - 0.5;',
+  '  float r2 = dot(cen, cen);',
+  // gentle barrel distortion, like a real lens
+  '  uv = 0.5 + cen * (1.0 + uDistort * r2);',
+  '  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) { oColor = vec4(0.0,0.0,0.0,1.0); return; }',
+  '',
+  // radial chromatic aberration: zero at centre, grows to the edges
+  '  float ab = uAberr * (0.35 + r2 * 2.0) / max(uRes.x, 1.0);',
+  '  vec3 scene;',
+  '  scene.r = texture(uScene, uv + cen * ab * 3.2).r;',
+  '  scene.g = texture(uScene, uv).g;',
+  '  scene.b = texture(uScene, uv - cen * ab * 3.2).b;',
+  '  scene = pow(max(scene, 0.0), vec3(2.2));',
+  '',
+  '  vec3 bloom = texture(uBloom, uv).rgb;',
+  '  vec3 col = scene + bloom * uBloomAmt;',
+  '',
+  '  col *= uExposure;',
+  '  col += uFlash;',                                    // lightning wash
+  // The 2D art is already authored to look right on screen, so a full filmic
+  // curve just crushes it. Blend the tonemap in instead: highlights roll off,
+  // midtones stay where the artist put them.
+  '  col = mix(clamp(col, 0.0, 1.0), aces(col), uTonemap);',
+  '',
+  // lift / gain, then split toning by luminance
+  '  col = clamp(col * uGain + uLift, 0.0, 1.0);',
+  '  float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));',
+  '  col = mix(col * uShadowTint, col * uHiTint, smoothstep(0.15, 0.75, luma));',
+  '  col = mix(vec3(luma), col, uSat);',
+  '  col = clamp((col - 0.5) * uContrast + 0.5, 0.0, 1.0);',
+  '',
+  // Gotham is already near-black; a heavy vignette just eats the playfield.
+  '  float vig = smoothstep(0.95, 0.18, r2 * uVignette);',
+  '  col *= mix(0.82, 1.0, vig);',
+  '',
+  '  col = pow(max(col, 0.0), vec3(1.0 / 2.2));',        // back to display space
+  '',
+  '  float n = hash12(gl_FragCoord.xy + vec2(uTime * 311.7, uTime * 173.3));',
+  '  col += (n - 0.5) * uGrain;',
+  // ordered dither: without it, dark gradients band hard at 8 bits
+  '  float d = hash12(gl_FragCoord.xy * 1.7);',
+  '  col += (d - 0.5) / 255.0;',
+  '',
+  '  oColor = vec4(clamp(col, 0.0, 1.0), 1.0);',
+  '}'
+].join('\n');
+
+var PFX_MIPS = 6;
+
+function PFX_compile(gl, type, src) {
+  var s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    var log = gl.getShaderInfoLog(s);
+    gl.deleteShader(s);
+    throw new Error('shader: ' + log);
+  }
+  return s;
+}
+
+function PFX_program(gl, fragSrc) {
+  var p = gl.createProgram();
+  var v = PFX_compile(gl, gl.VERTEX_SHADER, PFX_VERT);
+  var f = PFX_compile(gl, gl.FRAGMENT_SHADER, fragSrc);
+  gl.attachShader(p, v); gl.attachShader(p, f);
+  gl.linkProgram(p);
+  gl.deleteShader(v); gl.deleteShader(f);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+    var log = gl.getProgramInfoLog(p);
+    gl.deleteProgram(p);
+    throw new Error('link: ' + log);
+  }
+  // cache uniform locations
+  var u = {}, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (var i = 0; i < n; i++) {
+    var info = gl.getActiveUniform(p, i);
+    u[info.name] = gl.getUniformLocation(p, info.name);
+  }
+  return { p: p, u: u };
+}
+
+function PFX_target(gl, w, h, fmt, type) {
+  var t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, fmt, w, h, 0, gl.RGBA, type, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  var f = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+  return { tex: t, fbo: f, w: w, h: h };
+}
+
+function PostFX(canvas) {
+  var gl = canvas.getContext('webgl2', {
+    alpha: false, antialias: false, depth: false, stencil: false,
+    // Keeping the drawing buffer costs a readback stall every frame and is only
+    // needed when something is capturing frames, so it is opt-in.
+    premultipliedAlpha: false, preserveDrawingBuffer: !!window.__capture,
+    powerPreference: 'high-performance',
+  });
+  if (!gl) return null;
+  // half-float render targets keep bloom highlights above 1.0 instead of
+  // clipping them, which is what makes the glow read as light not as haze
+  var hf = gl.getExtension('EXT_color_buffer_half_float') || gl.getExtension('EXT_color_buffer_float');
+  if (!hf) return null;
+
+  var self = {};
+  self.gl = gl;
+  self.canvas = canvas;
+  self.w = 0; self.h = 0;
+  self.ok = true;
+
+  try {
+    self.progBright = PFX_program(gl, PFX_BRIGHT);
+    self.progDown = PFX_program(gl, PFX_DOWN);
+    self.progUp = PFX_program(gl, PFX_UP);
+    self.progComp = PFX_program(gl, PFX_COMP);
+  } catch (e) {
+    self.error = e.message;
+    return null;
+  }
+
+  self.vao = gl.createVertexArray();      // empty VAO: the triangle is generated in the shader
+  self.sceneTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, self.sceneTex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  self.mips = [];
+
+  self.resize = function (w, h) {
+    if (w === self.w && h === self.h) return;
+    self.w = w; self.h = h;
+    canvas.width = w; canvas.height = h;
+    for (var i = 0; i < self.mips.length; i++) {
+      gl.deleteTexture(self.mips[i].tex);
+      gl.deleteFramebuffer(self.mips[i].fbo);
+    }
+    self.mips = [];
+    var mw = Math.max(1, w >> 1), mh = Math.max(1, h >> 1);
+    for (var m = 0; m < PFX_MIPS; m++) {
+      self.mips.push(PFX_target(gl, mw, mh, gl.RGBA16F, gl.HALF_FLOAT));
+      mw = Math.max(1, mw >> 1); mh = Math.max(1, mh >> 1);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  };
+
+  function blit(prog, target) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fbo : null);
+    gl.viewport(0, 0, target ? target.w : self.w, target ? target.h : self.h);
+    gl.useProgram(prog.p);
+    gl.bindVertexArray(self.vao);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  // params: see PostFX.defaults()
+  self.render = function (source, prm) {
+    gl.bindTexture(gl.TEXTURE_2D, self.sceneTex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+
+    gl.disable(gl.BLEND);
+    gl.disable(gl.DEPTH_TEST);
+
+    // 1. bright pass into mip 0
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, self.sceneTex);
+    gl.useProgram(self.progBright.p);
+    gl.uniform1i(self.progBright.u.uTex, 0);
+    gl.uniform1f(self.progBright.u.uThreshold, prm.threshold);
+    gl.uniform1f(self.progBright.u.uKnee, prm.knee);
+    gl.uniform1f(self.progBright.u.uWarm, prm.warm);
+    blit(self.progBright, self.mips[0]);
+
+    // 2. downsample chain
+    gl.useProgram(self.progDown.p);
+    gl.uniform1i(self.progDown.u.uTex, 0);
+    for (var i = 1; i < self.mips.length; i++) {
+      gl.bindTexture(gl.TEXTURE_2D, self.mips[i - 1].tex);
+      gl.uniform2f(self.progDown.u.uTexel, 1 / self.mips[i - 1].w, 1 / self.mips[i - 1].h);
+      blit(self.progDown, self.mips[i]);
+    }
+
+    // 3. upsample chain, accumulating additively
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE);
+    gl.useProgram(self.progUp.p);
+    gl.uniform1i(self.progUp.u.uTex, 0);
+    gl.uniform1f(self.progUp.u.uRadius, prm.radius);
+    for (var j = self.mips.length - 1; j > 0; j--) {
+      gl.bindTexture(gl.TEXTURE_2D, self.mips[j].tex);
+      gl.uniform2f(self.progUp.u.uTexel, 1 / self.mips[j].w, 1 / self.mips[j].h);
+      blit(self.progUp, self.mips[j - 1]);
+    }
+    gl.disable(gl.BLEND);
+
+    // 4. composite to the screen
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, self.sceneTex);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, self.mips[0].tex);
+    var c = self.progComp;
+    gl.useProgram(c.p);
+    gl.uniform1i(c.u.uScene, 0);
+    gl.uniform1i(c.u.uBloom, 1);
+    gl.uniform2f(c.u.uRes, self.w, self.h);
+    gl.uniform1f(c.u.uTime, prm.time);
+    gl.uniform1f(c.u.uBloomAmt, prm.bloom);
+    gl.uniform1f(c.u.uAberr, prm.aberration);
+    gl.uniform1f(c.u.uVignette, prm.vignette);
+    gl.uniform1f(c.u.uGrain, prm.grain);
+    gl.uniform1f(c.u.uExposure, prm.exposure);
+    gl.uniform1f(c.u.uContrast, prm.contrast);
+    gl.uniform1f(c.u.uSat, prm.saturation);
+    gl.uniform1f(c.u.uDistort, prm.distort);
+    gl.uniform1f(c.u.uFlash, prm.flash);
+    gl.uniform1f(c.u.uTonemap, prm.tonemap);
+    gl.uniform3fv(c.u.uLift, prm.lift);
+    gl.uniform3fv(c.u.uGain, prm.gain);
+    gl.uniform3fv(c.u.uShadowTint, prm.shadowTint);
+    gl.uniform3fv(c.u.uHiTint, prm.hiTint);
+    blit(c, null);
+    gl.activeTexture(gl.TEXTURE0);
+  };
+
+  return self;
+}
+
+// Restraint is the whole game here. The 2D art is already carefully lit and
+// coloured; the post chain exists to add glow and lens character, NOT to
+// re-grade the scene. An earlier, much heavier set of values turned Gotham
+// electric blue and washed the foreground out — everything below is deliberately
+// subtle, and readability of the player beats any amount of atmosphere.
+PostFX.defaults = function () {
+  return {
+    threshold: 0.80, knee: 0.20, warm: 0.25, radius: 1.0,
+    bloom: 0.30, aberration: 0.45, vignette: 0.70, grain: 0.014,
+    exposure: 1.18, contrast: 1.02, saturation: 1.0, distort: 0.010,
+    tonemap: 0.35, flash: 0.0, time: 0,
+    lift: new Float32Array([0.000, 0.001, 0.004]),
+    gain: new Float32Array([1.01, 1.00, 1.00]),
+    shadowTint: new Float32Array([0.98, 1.00, 1.05]),
+    hiTint: new Float32Array([1.04, 1.00, 0.97]),
+  };
+};
+
+// Per-level looks — a nudge each, not a repaint.
+PostFX.grade = function (prm, lvl) {
+  if (lvl === 1) {            // rooftops: a touch of electric violet
+    prm.shadowTint.set([1.00, 0.98, 1.06]);
+    prm.hiTint.set([1.05, 1.00, 0.98]);
+    prm.bloom = 0.34;
+  } else if (lvl === 2) {     // Arkham: faintly sickly green
+    prm.shadowTint.set([0.97, 1.02, 1.00]);
+    prm.hiTint.set([1.03, 1.03, 0.96]);
+    prm.bloom = 0.28; prm.contrast = 1.04;
+  } else {                    // docks: cold and wet
+    prm.shadowTint.set([0.98, 1.00, 1.05]);
+    prm.hiTint.set([1.04, 1.00, 0.97]);
+    prm.bloom = 0.30; prm.contrast = 1.02;
+  }
+};
+
+
 // ═══ CORE ═══════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════════════
 //  CORE ENGINE — physics, entities, state machine, audio, main loop
@@ -6792,6 +7201,56 @@ class Game {
     this.enemies = []; this.pickups = [];
     this.world = null; this.player = null; this.cam = null;
     this.acc = 0; this.last = 0;
+    this.fx2 = null; this.prm = null; this.aberrPulse = 0;
+    this.fxCanvas = null; this.perfAcc = 0; this.perfN = 0;
+  }
+
+  // If the device cannot hold a reasonable frame rate with the post chain on,
+  // drop it rather than shipping a slideshow. Playability beats atmosphere.
+  degradePostFX() {
+    if (!this.fx2) return;
+    this.fx2 = null;
+    if (this.fxCanvas) this.fxCanvas.style.display = 'none';
+    this.cv.style.display = 'block';
+    try { window.__postfxOn = false; } catch (e) { }
+  }
+
+  // Hook up the WebGL post-processing chain. Returns false if the device
+  // cannot run it, in which case the caller keeps showing the raw 2D canvas.
+  attachPostFX(fxCanvas) {
+    if (typeof PostFX !== 'function') return false;
+    const fx = PostFX(fxCanvas);
+    if (!fx) return false;
+    this.fx2 = fx;
+    this.fxCanvas = fxCanvas;
+    this.prm = PostFX.defaults();
+    return true;
+  }
+
+  postParams() {
+    const p = this.prm, pl = this.player;
+    PostFX.grade(p, this.lvIdx);
+    p.time = this.time;
+    // lightning washes the whole frame, exactly as it does in the 2D pass
+    p.flash = this.bolt.flash * 0.22;
+    // star power: everything blooms harder and the grade goes molten gold
+    if (pl && pl.star > 0) {
+      const s = Math.min(1, pl.star / 1.5);
+      p.bloom += 0.30 * s;
+      p.exposure = 1.18 + 0.12 * s;
+      p.hiTint.set([1.12, 1.04, 0.88]);
+    } else {
+      p.exposure = 1.18;
+    }
+    // Impacts kick the lens. Derived from the screen shake already in flight,
+    // so every stomp, landing and block break drives it without each call site
+    // having to remember to.
+    const sh = Math.abs(this.shake.x) + Math.abs(this.shake.y);
+    p.aberration = 1.0 + Math.min(2.2, sh * 0.5) + this.bolt.flash * 2.0;
+    if (this.state === ST.DEAD) { p.vignette = 1.5; p.saturation = 0.45; }
+    else if (this.state === ST.TITLE) { p.vignette = 1.0; p.bloom += 0.14; }
+    else p.vignette = 0.85;
+    return p;
   }
   loadBest() { try { return parseInt(localStorage.getItem('bat_best') || '0', 10) || 0; } catch (e) { return 0; } }
   saveBest() { try { if (this.score > this.best) { this.best = this.score; localStorage.setItem('bat_best', String(this.best)); } } catch (e) { } }
@@ -6976,6 +7435,10 @@ class Game {
     drawGothamSkyline(ctx, camX, t, lightning);
     if (lightning > 0.25) this.bolt.drawBolt(ctx, t);
     drawCityFog(ctx, camX, t);
+    // atmospheric separation: push the lit skyline back so the dark playfield
+    // and the darker player read clearly against it
+    ctx.fillStyle = 'rgba(5,7,18,0.42)';
+    ctx.fillRect(0, 0, CW, CH);
 
     ctx.save();
     ctx.translate(Math.round(this.shake.x), Math.round(this.shake.y));
@@ -7007,6 +7470,12 @@ class Game {
       case ST.CLEAR: drawLevelCompleteOverlay(ctx, t, this.score, LEVELS[this.lvIdx].name); break;
       case ST.OVER: drawGameOverOverlay(ctx, t, this.score, this.best, this.blink); break;
       case ST.WIN: drawWinOverlay(ctx, t, this.score, this.best, this.blink); break;
+    }
+
+    // everything above rendered into the offscreen 2D canvas; now grade it
+    if (this.fx2) {
+      this.fx2.resize(this.cv.width, this.cv.height);
+      this.fx2.render(this.cv, this.postParams());
     }
   }
 
@@ -7068,6 +7537,16 @@ class Game {
     let dt = (ts - this.last) / 1000;
     this.last = ts;
     if (dt > 0.25) dt = 0.25;
+
+    // sustained-low-framerate watchdog (skipped while capturing video)
+    if (this.fx2 && !(typeof window !== 'undefined' && window.__capture)) {
+      this.perfAcc += dt; this.perfN++;
+      if (this.perfAcc > 2.5) {
+        if (this.perfAcc / this.perfN > 0.026) this.degradePostFX();   // under ~38fps
+        this.perfAcc = 0; this.perfN = 0;
+      }
+    }
+
     this.acc += dt;
     const STEP = 1 / 120;
     let guard = 0;
@@ -7086,6 +7565,7 @@ class Game {
   cv.width  = Math.round(CW * DPR);
   cv.height = Math.round(CH * DPR);
 })();
+window.__postfxOn = false;
 
 // ── touch controls ─────────────────────────────────────────────────────
 (function(){
@@ -7127,6 +7607,17 @@ class Game {
 // ── boot ───────────────────────────────────────────────────────────────
 function start(saved){
   var game = new Game(document.getElementById('gc'));
+  window.__game = game;
+
+  // WebGL grading pass. If the device cannot run it we simply keep showing
+  // the raw 2D canvas — the game is fully playable either way.
+  var fxc = document.getElementById('fx');
+  if (game.attachPostFX(fxc)) {
+    document.getElementById('gc').style.display = 'none';
+    window.__postfxOn = true;
+  } else {
+    fxc.style.display = 'none';
+  }
   if (saved && typeof saved.lvIdx === 'number' && saved.lvIdx < LEVELS.length && saved.playing) {
     game.score = saved.score || 0;
     game.lives = saved.lives || 3;
