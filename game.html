@@ -6476,6 +6476,11 @@ var PFX_LIGHT = PFX_HEAD + [
   '',
   'uniform sampler2D uAlbedo;',
   'uniform sampler2D uNrm;',
+  'uniform sampler2D uOcc;',
+  'uniform int   uShadowCount;',
+  'uniform float uShadowStrength;',
+  'uniform float uSunShadow;',
+  'uniform float uSunLen;',
   'uniform vec3  uAmbient;',
   'uniform float uAspect;',
   'uniform float uNrmStrength;',
@@ -6484,13 +6489,48 @@ var PFX_LIGHT = PFX_HEAD + [
   'uniform vec4  uLC[' + PFX_MAXL + '];',   // rgb = colour, a = intensity
   'uniform vec3  uSunDir;',
   'uniform vec3  uSunCol;',
+  '',
+  // March from the fragment toward the light through the occluder map. The
+  // first couple of steps are skipped so a surface does not shadow itself,
+  // and the taps widen with distance to fake a penumbra.
+  'float PFX_shadow(vec2 uv, vec2 lp){',
+  '  const int ST = 12;',
+  '  vec2 stepv = (lp - uv) / float(ST);',
+  '  float occ = 0.0;',
+  '  for (int i = 3; i <= ST; i++) {',
+  '    float f = float(i) / float(ST);',
+  '    vec2 s = uv + stepv * float(i);',
+  '    vec2 w = stepv * f * 0.55;',              // widening tap offset
+  '    occ += texture(uOcc, s).r * 0.5;',
+  '    occ += texture(uOcc, s + vec2(w.y, -w.x)).r * 0.25;',
+  '    occ += texture(uOcc, s - vec2(w.y, -w.x)).r * 0.25;',
+  '  }',
+  '  return clamp(1.0 - (occ / float(ST - 2)) * uShadowStrength, 0.0, 1.0);',
+  '}',
+  '',
   'void main(){',
   '  vec3 a = texture(uAlbedo, vUV).rgb;',
   '  vec3 n = texture(uNrm, vUV).rgb * 2.0 - 1.0;',
+  // The normal buffer is authored in canvas space (y grows downward) but every
+  // light vector here is in UV space (y grows upward), so the vertical
+  // component has to be flipped or lighting arrives upside down.
+  '  n.y = -n.y;',
   '  n.xy *= uNrmStrength;',
   '  n = normalize(n + vec3(0.0, 0.0, 1e-5));',
   '  vec3 lit = uAmbient;',
-  '  lit += uSunCol * max(dot(n, normalize(uSunDir)), 0.0);',
+  // Directional (moon) shadow: a fixed-length march along the light direction.
+  // This is what produces the long raking shadows off every block and figure -
+  // the point lights are small and local, so on their own they barely read.
+  '  float sunSh = 1.0;',
+  '  if (uSunShadow > 0.0) {',
+  '    vec2 sd = normalize(vec2(uSunDir.x / uAspect, uSunDir.y)) * uSunLen;',
+  '    float socc = 0.0;',
+  '    for (int i = 2; i <= 14; i++) {',
+  '      socc += texture(uOcc, vUV + sd * (float(i) / 14.0)).r;',
+  '    }',
+  '    sunSh = clamp(1.0 - (socc / 13.0) * uSunShadow, 0.0, 1.0);',
+  '  }',
+  '  lit += uSunCol * max(dot(n, normalize(uSunDir)), 0.0) * sunSh;',
   '  for (int i = 0; i < ' + PFX_MAXL + '; i++) {',
   '    if (i >= uCount) break;',
   '    vec4 lp = uLP[i];',
@@ -6502,7 +6542,9 @@ var PFX_LIGHT = PFX_HEAD + [
   // wrap the falloff slightly: surfaces angled away still catch a little,
   // which reads as bounce light and avoids hard terminator lines
   '    float ndl = max(dot(n, L), 0.0) * 0.82 + 0.18;',
-  '    lit += uLC[i].rgb * (uLC[i].a * att * ndl);',
+  // only the strongest few lights cast: shadow marching is the expensive part
+  '    float sh = (i < uShadowCount && att > 0.001) ? PFX_shadow(vUV, lp.xy) : 1.0;',
+  '    lit += uLC[i].rgb * (uLC[i].a * att * ndl * sh);',
   '  }',
   '  oColor = vec4(a * lit, 1.0);',
   '}'
@@ -6730,6 +6772,7 @@ function PostFX(canvas) {
   self.vao = gl.createVertexArray();      // empty VAO: the triangle is generated in the shader
   self.sceneTex = mkTex();
   self.normalTex = mkTex();
+  self.occTex = mkTex();
   self.lit = null;
   self.lpBuf = new Float32Array(PFX_MAXL * 4);
   self.lcBuf = new Float32Array(PFX_MAXL * 4);
@@ -6767,7 +6810,7 @@ function PostFX(canvas) {
   // source       : the 2D albedo canvas
   // normalSource : the normal buffer canvas (may be null -> lighting skipped)
   // lights       : array of {x,y,z,r, cr,cg,cb, i} in screen-uv space
-  self.render = function (source, normalSource, lights, prm) {
+  self.render = function (source, normalSource, occSource, lights, prm) {
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     gl.bindTexture(gl.TEXTURE_2D, self.sceneTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
@@ -6781,6 +6824,11 @@ function PostFX(canvas) {
     if (normalSource && prm.lighting !== false) {
       gl.bindTexture(gl.TEXTURE_2D, self.normalTex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, normalSource);
+      var castShadows = !!(occSource && prm.shadows !== false);
+      if (castShadows) {
+        gl.bindTexture(gl.TEXTURE_2D, self.occTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, occSource);
+      }
 
       var n = Math.min(lights ? lights.length : 0, PFX_MAXL);
       for (var li = 0; li < n; li++) {
@@ -6796,8 +6844,15 @@ function PostFX(canvas) {
       gl.bindTexture(gl.TEXTURE_2D, self.sceneTex);
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, self.normalTex);
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, self.occTex);
       gl.uniform1i(lp.u.uAlbedo, 0);
       gl.uniform1i(lp.u.uNrm, 1);
+      gl.uniform1i(lp.u.uOcc, 2);
+      gl.uniform1i(lp.u.uShadowCount, castShadows ? Math.min(prm.shadowLights, n) : 0);
+      gl.uniform1f(lp.u.uShadowStrength, prm.shadowStrength);
+      gl.uniform1f(lp.u.uSunShadow, castShadows ? prm.sunShadow : 0.0);
+      gl.uniform1f(lp.u.uSunLen, prm.sunLen);
       gl.uniform3fv(lp.u.uAmbient, prm.ambient);
       gl.uniform1f(lp.u.uAspect, self.w / Math.max(1, self.h));
       gl.uniform1f(lp.u.uNrmStrength, prm.normalStrength);
@@ -6889,9 +6944,11 @@ PostFX.defaults = function () {
     // Ambient sits high on purpose: the art carries its own baked shading, so
     // the dynamic lights are a highlight layer, not the primary illumination.
     lighting: true, normalStrength: 1.5,
+    shadows: true, shadowLights: 4, shadowStrength: 0.92,
+    sunShadow: 0.85, sunLen: 0.13,
     ambient: new Float32Array([0.64, 0.66, 0.78]),
-    sunDir: new Float32Array([0.35, -0.55, 0.76]),   // moon, upper right
-    sunCol: new Float32Array([0.18, 0.20, 0.28]),
+    sunDir: new Float32Array([0.38, 0.58, 0.72]),    // moon, upper right (UV space, y up)
+    sunCol: new Float32Array([0.30, 0.33, 0.44]),
     lift: new Float32Array([0.000, 0.001, 0.004]),
     gain: new Float32Array([1.01, 1.00, 1.00]),
     shadowTint: new Float32Array([0.98, 1.00, 1.05]),
@@ -7457,6 +7514,11 @@ class Game {
     this.ncv.width = Math.round(CW * 0.5);
     this.ncv.height = Math.round(CH * 0.5);
     this.nctx = this.ncv.getContext('2d');
+    // Occluders only need to be coarse — shadows are soft — so quarter res.
+    this.ocv = document.createElement('canvas');
+    this.ocv.width = Math.round(CW * 0.25);
+    this.ocv.height = Math.round(CH * 0.25);
+    this.octx = this.ocv.getContext('2d');
     this.lights = [];
     return true;
   }
@@ -7495,6 +7557,40 @@ class Game {
     }
     const p = this.player;
     if (p && !p.dead) n.drawImage(L.domeTall, p.rect.x - camX, p.rect.y, p.rect.w, p.rect.h);
+  }
+
+  // ── occluder buffer ──────────────────────────────────────────────────
+  // Solid silhouettes only. The shadow pass marches this toward each light,
+  // so shape matters and shading does not.
+  drawOccluders(camX) {
+    const o = this.octx;
+    o.setTransform(0.25, 0, 0, 0.25, 0, 0);
+    o.globalAlpha = 1;
+    o.fillStyle = '#000';
+    o.fillRect(0, 0, CW, CH);
+    if (!this.world) return;
+    const w = this.world;
+    o.fillStyle = '#f00';
+    const c0 = Math.max(0, Math.floor(camX / TILE) - 1);
+    const c1 = Math.min(w.w - 1, Math.floor((camX + CW) / TILE) + 1);
+    for (let cy = 0; cy < w.h; cy++) {
+      for (let cx = c0; cx <= c1; cx++) {
+        const c = w.cells[cy * w.w + cx];
+        if (!c || !c.alive || !c.solid) continue;
+        o.fillRect(cx * TILE - camX, cy * TILE, TILE, TILE);
+      }
+    }
+    const ell = (r) => {
+      o.beginPath();
+      o.ellipse(r.cx - camX, r.cy, r.w * 0.42, r.h * 0.46, 0, 0, Math.PI * 2);
+      o.fill();
+    };
+    for (const e of this.enemies) {
+      if (e.rect.r < camX - 60 || e.rect.x > camX + CW + 60 || e.dying > 0) continue;
+      ell(e.rect);
+    }
+    const p = this.player;
+    if (p && !p.dead) ell(p.rect);
   }
 
   // ── scene lights ─────────────────────────────────────────────────────
@@ -7543,6 +7639,10 @@ class Game {
     if (p && p.star > 0 && !p.dead)
       push(p.rect.cx, p.rect.cy, 300, 1.0, 0.85, 0.40,
         2.0 * Math.min(1, p.star / 1.2), 0.12);
+
+    // Only the first few lights cast shadows, so order matters: put the ones
+    // that carry the scene (big and bright) at the front.
+    out.sort((a, b) => (b.i * b.r) - (a.i * a.r));
     return out;
   }
 
@@ -7800,9 +7900,10 @@ class Game {
     // everything above rendered into the offscreen 2D canvas; now light + grade it
     if (this.fx2) {
       this.drawNormals(camX);
+      this.drawOccluders(camX);
       const lights = this.collectLights(camX);
       this.fx2.resize(this.cv.width, this.cv.height);
-      this.fx2.render(this.cv, this.ncv, lights, this.postParams());
+      this.fx2.render(this.cv, this.ncv, this.ocv, lights, this.postParams());
     }
   }
 
