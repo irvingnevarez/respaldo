@@ -79,25 +79,56 @@ body{
 }
 #rail span{white-space:nowrap}
 
-/* ── touch pad ── */
-#pad{display:none;position:absolute;inset:auto 0 0 0;padding:0 14px 14px;
-     justify-content:space-between;align-items:flex-end;pointer-events:none}
-.pad-l,.pad-r{display:flex;gap:10px;align-items:flex-end;pointer-events:auto}
+/* ── touch pad: its own row BELOW the stage, never over the canvas ── */
+#pad{
+  display:none;
+  width:min(100%,1120px);
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+}
+.pad-g{display:flex;gap:10px;align-items:center}
 .pbtn{
   -webkit-tap-highlight-color:transparent;
-  touch-action:none;user-select:none;-webkit-user-select:none;
-  font-family:Oswald,sans-serif;font-weight:600;letter-spacing:.08em;
-  width:58px;height:58px;border-radius:50%;
+  touch-action:manipulation;user-select:none;-webkit-user-select:none;
+  font-family:Oswald,sans-serif;font-weight:600;letter-spacing:.06em;
+  width:62px;height:62px;border-radius:50%;
   border:1.5px solid rgba(245,197,24,.55);
-  background:rgba(8,8,20,.62);
-  backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
-  color:var(--gold);font-size:19px;line-height:1;
+  background:rgba(14,14,30,.9);
+  color:var(--gold);font-size:20px;line-height:1;
   display:grid;place-items:center;
+  flex:none;
 }
-.pbtn.big{width:74px;height:74px;font-size:12px;background:rgba(38,22,8,.72);border-color:var(--gold)}
-.pbtn.small{font-size:11px}
-.pbtn:active{background:rgba(245,197,24,.28);transform:scale(.94)}
-@media (pointer:coarse){#pad{display:flex}#rail{display:none}}
+.pbtn.big{width:78px;height:78px;font-size:12px;background:rgba(44,26,8,.95);border-color:var(--gold)}
+.pbtn.small{font-size:10px}
+.pbtn.tiny{width:42px;height:42px;font-size:14px;border-color:rgba(245,197,24,.35);color:var(--muted)}
+.pbtn:active{background:rgba(245,197,24,.3);transform:scale(.94)}
+
+@media (pointer:coarse),(max-width:720px){
+  #pad{display:flex;flex-wrap:wrap}
+  #rail{display:none}
+  body{padding-block:10px;gap:10px;
+       justify-content:flex-start;      /* fallback: never clips the top */
+       justify-content:safe center}     /* centers, but yields to flex-start on overflow */
+}
+
+/* narrow phones: shrink the controls so the row can never overflow */
+@media (max-width:470px){
+  body{padding-left:10px;padding-right:10px}
+  #pad{gap:6px}
+  .pad-g{gap:7px}
+  .pbtn{width:54px;height:54px;font-size:17px}
+  .pbtn.big{width:66px;height:66px;font-size:11px}
+  .pbtn.small{width:54px;font-size:9px}
+  .pbtn.tiny{width:36px;height:36px;font-size:12px}
+}
+
+/* short landscape: size the stage from the HEIGHT so the pad stays on screen */
+@media (max-height:560px) and (orientation:landscape){
+  body{padding-block:8px;gap:8px}
+  #stage{height:calc(100dvh - 104px);width:auto;max-width:100%}
+  #pad{width:auto}
+}
 
 :focus-visible{outline:2px solid var(--gold);outline-offset:3px}
 @media (prefers-reduced-motion:reduce){.pbtn:active{transform:none}}
@@ -107,15 +138,19 @@ body{
 
 <div id="stage">
   <canvas id="gc" width="960" height="540" aria-label="Juego de plataformas de Batman"></canvas>
-  <div id="pad">
-    <div class="pad-l">
-      <button id="bL" class="pbtn" type="button" aria-label="Izquierda">&#9664;</button>
-      <button id="bR" class="pbtn" type="button" aria-label="Derecha">&#9654;</button>
-    </div>
-    <div class="pad-r">
-      <button id="bB" class="pbtn small" type="button" aria-label="Correr">CORRER</button>
-      <button id="bA" class="pbtn big" type="button" aria-label="Saltar">SALTO</button>
-    </div>
+</div>
+<div id="pad">
+  <div class="pad-g">
+    <button id="bL" class="pbtn" type="button" aria-label="Izquierda">&#9664;</button>
+    <button id="bR" class="pbtn" type="button" aria-label="Derecha">&#9654;</button>
+  </div>
+  <div class="pad-g">
+    <button id="bP" class="pbtn tiny" type="button" aria-label="Pausa">II</button>
+    <button id="bM" class="pbtn tiny" type="button" aria-label="Sonido">&#9834;</button>
+  </div>
+  <div class="pad-g">
+    <button id="bB" class="pbtn small" type="button" aria-label="Correr">CORRER</button>
+    <button id="bA" class="pbtn big" type="button" aria-label="Saltar">SALTO</button>
   </div>
 </div>
 <div id="rail">
@@ -7072,12 +7107,19 @@ class Game {
     function(){ IN.jumpBuf = BUFFER; IN.jumpHeld = true; IN.anyPress = true; },
     function(){ IN.jumpHeld = false; });
 
+  function tap(id, fn){
+    var el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('pointerdown', function(e){ e.preventDefault(); AUDIO.unlock(); fn(); });
+    el.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+  }
+  tap('bP', function(){ IN.pausePress = true; });
+  tap('bM', function(){ IN.mutePress = true; });
+
   // tap the stage to start / dismiss, and to give the frame keyboard focus
-  var stage = document.getElementById('stage');
-  stage.addEventListener('pointerdown', function(e){
+  document.getElementById('stage').addEventListener('pointerdown', function(){
     AUDIO.unlock();
     try { window.focus(); } catch(err){}
-    if (e.target && e.target.classList && e.target.classList.contains('pbtn')) return;
     IN.anyPress = true;
   });
 })();
