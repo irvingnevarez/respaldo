@@ -6283,6 +6283,133 @@ function LV_tileAt(level, tx, ty) {
 function LV_isSolid(ch) { return ch === '#' || ch === 'X' || ch === 'B' || ch === '?'; }
 
 
+// ═══ LIGHTING ═══════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+//  NORMAL BUFFER — the geometry half of the dynamic lighting.
+//
+//  The scene art is 6000 lines of procedural Canvas 2D. Re-drawing all of it
+//  a second time as normals is not realistic, so instead we bake a small set
+//  of normal SPRITES once at startup (a bevelled tile face, a dome, a capsule)
+//  and stamp them at the positions we already track: tiles, blocks, pickups,
+//  the player, enemies.
+//
+//  That gives real per-object surface direction — bevelled blocks catch light
+//  on the edge facing the source, characters read as rounded volumes — without
+//  touching the art modules at all.
+//
+//  Encoding is the usual tangent-space one: rgb = normal * 0.5 + 0.5, so flat
+//  (facing the viewer) is (128, 128, 255).
+// ═══════════════════════════════════════════════════════════════════════
+
+var LT_cache = null;
+
+function LT_canvas(w, h) {
+  var c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(w));
+  c.height = Math.max(1, Math.round(h));
+  return c;
+}
+
+// Bevelled square: flat in the middle, edges sloping outward like a chamfer.
+// Matches the upper-left light convention the tile art is already drawn with.
+function LT_makeBevel(size, bevel) {
+  var c = LT_canvas(size, size), ctx = c.getContext('2d');
+  var img = ctx.createImageData(size, size), d = img.data;
+  for (var y = 0; y < size; y++) {
+    for (var x = 0; x < size; x++) {
+      // signed distance to each edge, in bevel units
+      var dl = x / bevel, dr = (size - 1 - x) / bevel;
+      var dt = y / bevel, db = (size - 1 - y) / bevel;
+      var nx = 0, ny = 0;
+      if (dl < 1) nx -= (1 - dl);
+      if (dr < 1) nx += (1 - dr);
+      if (dt < 1) ny -= (1 - dt);
+      if (db < 1) ny += (1 - db);
+      // soften the ramp so edges are rounded rather than faceted
+      nx = Math.sign(nx) * Math.pow(Math.abs(nx), 0.75) * 0.85;
+      ny = Math.sign(ny) * Math.pow(Math.abs(ny), 0.75) * 0.85;
+      var nz = Math.sqrt(Math.max(0.02, 1 - nx * nx - ny * ny));
+      var len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+      var i = (y * size + x) * 4;
+      d[i] = Math.round((nx / len * 0.5 + 0.5) * 255);
+      d[i + 1] = Math.round((ny / len * 0.5 + 0.5) * 255);
+      d[i + 2] = Math.round((nz / len * 0.5 + 0.5) * 255);
+      d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+// Elliptical dome — characters and pickups read as rounded volumes.
+// `flat` keeps the centre from being too spherical on tall thin sprites.
+function LT_makeDome(w, h, flat) {
+  var c = LT_canvas(w, h), ctx = c.getContext('2d');
+  var img = ctx.createImageData(w, h), d = img.data;
+  var cx = (w - 1) / 2, cy = (h - 1) / 2;
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      var u = (x - cx) / cx, v = (y - cy) / cy;
+      var r = Math.sqrt(u * u + v * v);
+      var i = (y * w + x) * 4;
+      if (r > 1) { d[i] = 128; d[i + 1] = 128; d[i + 2] = 255; d[i + 3] = 0; continue; }
+      var s = Math.pow(r, flat);
+      var nx = u * s, ny = v * s;
+      var nz = Math.sqrt(Math.max(0.05, 1 - nx * nx - ny * ny));
+      var len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+      d[i] = Math.round((nx / len * 0.5 + 0.5) * 255);
+      d[i + 1] = Math.round((ny / len * 0.5 + 0.5) * 255);
+      d[i + 2] = Math.round((nz / len * 0.5 + 0.5) * 255);
+      // feather the rim so sprites do not show a hard normal edge
+      d[i + 3] = Math.round(255 * Math.min(1, (1 - r) * 6));
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+// Horizontal cylinder — good for ground rows: light rakes across them.
+function LT_makeCylinder(w, h) {
+  var c = LT_canvas(w, h), ctx = c.getContext('2d');
+  var img = ctx.createImageData(w, h), d = img.data;
+  var cy = (h - 1) / 2;
+  for (var y = 0; y < h; y++) {
+    var v = (y - cy) / cy;
+    var ny = v * 0.7;
+    var nz = Math.sqrt(Math.max(0.05, 1 - ny * ny));
+    var len = Math.sqrt(ny * ny + nz * nz) || 1;
+    var g = Math.round((ny / len * 0.5 + 0.5) * 255);
+    var bl = Math.round((nz / len * 0.5 + 0.5) * 255);
+    for (var x = 0; x < w; x++) {
+      var i = (y * w + x) * 4;
+      d[i] = 128; d[i + 1] = g; d[i + 2] = bl; d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+function LT_init() {
+  if (LT_cache) return LT_cache;
+  LT_cache = {
+    bevel: LT_makeBevel(32, 7),      // floating blocks: strong chamfer
+    bevelSoft: LT_makeBevel(32, 11), // ground masonry: broader, softer
+    ground: LT_makeCylinder(32, 32),
+    dome: LT_makeDome(64, 64, 1.35),
+    domeTall: LT_makeDome(48, 72, 1.5),
+  };
+  return LT_cache;
+}
+
+// flat normal, pointing straight at the viewer
+function LT_clear(ctx, w, h) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = 'rgb(128,128,255)';
+  ctx.fillRect(0, 0, w, h);
+}
+
+
 // ═══ POSTFX ═══════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════════════
 //  POST-PROCESSING — WebGL2 pipeline run over the 2D scene each frame.
@@ -6336,6 +6463,48 @@ var PFX_BRIGHT = PFX_HEAD + [
   '  float warm = clamp(c.r + c.g * 0.6 - c.b * 1.2, 0.0, 2.0);',
   '  contrib *= 1.0 + uWarm * warm;',
   '  oColor = vec4(c * contrib, 1.0);',
+  '}'
+].join('\n');
+
+// ── deferred lighting ───────────────────────────────────────────────────
+// Albedo x (ambient + sum of lights), evaluated against the normal buffer.
+// Ambient is deliberately high: the 2D art already carries its own baked
+// shading, so lights ADD highlights rather than being the only illumination.
+// Anything the lights push above 1.0 spills into the bloom chain downstream.
+var PFX_MAXL = 24;
+var PFX_LIGHT = PFX_HEAD + [
+  '',
+  'uniform sampler2D uAlbedo;',
+  'uniform sampler2D uNrm;',
+  'uniform vec3  uAmbient;',
+  'uniform float uAspect;',
+  'uniform float uNrmStrength;',
+  'uniform int   uCount;',
+  'uniform vec4  uLP[' + PFX_MAXL + '];',   // xy = uv position, z = height, w = radius
+  'uniform vec4  uLC[' + PFX_MAXL + '];',   // rgb = colour, a = intensity
+  'uniform vec3  uSunDir;',
+  'uniform vec3  uSunCol;',
+  'void main(){',
+  '  vec3 a = texture(uAlbedo, vUV).rgb;',
+  '  vec3 n = texture(uNrm, vUV).rgb * 2.0 - 1.0;',
+  '  n.xy *= uNrmStrength;',
+  '  n = normalize(n + vec3(0.0, 0.0, 1e-5));',
+  '  vec3 lit = uAmbient;',
+  '  lit += uSunCol * max(dot(n, normalize(uSunDir)), 0.0);',
+  '  for (int i = 0; i < ' + PFX_MAXL + '; i++) {',
+  '    if (i >= uCount) break;',
+  '    vec4 lp = uLP[i];',
+  '    vec3 L = vec3((lp.x - vUV.x) * uAspect, lp.y - vUV.y, lp.z);',
+  '    float dist = length(L);',
+  '    L /= max(dist, 1e-5);',
+  '    float att = max(0.0, 1.0 - dist / max(lp.w, 1e-5));',
+  '    att *= att;',
+  // wrap the falloff slightly: surfaces angled away still catch a little,
+  // which reads as bounce light and avoids hard terminator lines
+  '    float ndl = max(dot(n, L), 0.0) * 0.82 + 0.18;',
+  '    lit += uLC[i].rgb * (uLC[i].a * att * ndl);',
+  '  }',
+  '  oColor = vec4(a * lit, 1.0);',
   '}'
 ].join('\n');
 
@@ -6539,6 +6708,7 @@ function PostFX(canvas) {
   self.ok = true;
 
   try {
+    self.progLight = PFX_program(gl, PFX_LIGHT);
     self.progBright = PFX_program(gl, PFX_BRIGHT);
     self.progDown = PFX_program(gl, PFX_DOWN);
     self.progUp = PFX_program(gl, PFX_UP);
@@ -6548,13 +6718,21 @@ function PostFX(canvas) {
     return null;
   }
 
+  function mkTex() {
+    var t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return t;
+  }
   self.vao = gl.createVertexArray();      // empty VAO: the triangle is generated in the shader
-  self.sceneTex = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, self.sceneTex);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  self.sceneTex = mkTex();
+  self.normalTex = mkTex();
+  self.lit = null;
+  self.lpBuf = new Float32Array(PFX_MAXL * 4);
+  self.lcBuf = new Float32Array(PFX_MAXL * 4);
   self.mips = [];
 
   self.resize = function (w, h) {
@@ -6571,6 +6749,9 @@ function PostFX(canvas) {
       self.mips.push(PFX_target(gl, mw, mh, gl.RGBA16F, gl.HALF_FLOAT));
       mw = Math.max(1, mw >> 1); mh = Math.max(1, mh >> 1);
     }
+    if (self.lit) { gl.deleteTexture(self.lit.tex); gl.deleteFramebuffer(self.lit.fbo); }
+    // half-float so lights can push past 1.0 and feed the bloom chain
+    self.lit = PFX_target(gl, w, h, gl.RGBA16F, gl.HALF_FLOAT);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   };
 
@@ -6583,17 +6764,56 @@ function PostFX(canvas) {
   }
 
   // params: see PostFX.defaults()
-  self.render = function (source, prm) {
-    gl.bindTexture(gl.TEXTURE_2D, self.sceneTex);
+  // source       : the 2D albedo canvas
+  // normalSource : the normal buffer canvas (may be null -> lighting skipped)
+  // lights       : array of {x,y,z,r, cr,cg,cb, i} in screen-uv space
+  self.render = function (source, normalSource, lights, prm) {
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.bindTexture(gl.TEXTURE_2D, self.sceneTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
 
     gl.disable(gl.BLEND);
     gl.disable(gl.DEPTH_TEST);
 
+    var srcTex = self.sceneTex;
+
+    // 0. deferred lighting pass
+    if (normalSource && prm.lighting !== false) {
+      gl.bindTexture(gl.TEXTURE_2D, self.normalTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, normalSource);
+
+      var n = Math.min(lights ? lights.length : 0, PFX_MAXL);
+      for (var li = 0; li < n; li++) {
+        var L = lights[li], o4 = li * 4;
+        self.lpBuf[o4] = L.x; self.lpBuf[o4 + 1] = L.y;
+        self.lpBuf[o4 + 2] = L.z; self.lpBuf[o4 + 3] = L.r;
+        self.lcBuf[o4] = L.cr; self.lcBuf[o4 + 1] = L.cg;
+        self.lcBuf[o4 + 2] = L.cb; self.lcBuf[o4 + 3] = L.i;
+      }
+      var lp = self.progLight;
+      gl.useProgram(lp.p);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, self.sceneTex);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, self.normalTex);
+      gl.uniform1i(lp.u.uAlbedo, 0);
+      gl.uniform1i(lp.u.uNrm, 1);
+      gl.uniform3fv(lp.u.uAmbient, prm.ambient);
+      gl.uniform1f(lp.u.uAspect, self.w / Math.max(1, self.h));
+      gl.uniform1f(lp.u.uNrmStrength, prm.normalStrength);
+      gl.uniform1i(lp.u.uCount, n);
+      if (lp.u['uLP[0]']) gl.uniform4fv(lp.u['uLP[0]'], self.lpBuf);
+      if (lp.u['uLC[0]']) gl.uniform4fv(lp.u['uLC[0]'], self.lcBuf);
+      gl.uniform3fv(lp.u.uSunDir, prm.sunDir);
+      gl.uniform3fv(lp.u.uSunCol, prm.sunCol);
+      blit(lp, self.lit);
+      srcTex = self.lit.tex;
+      gl.activeTexture(gl.TEXTURE0);
+    }
+
     // 1. bright pass into mip 0
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, self.sceneTex);
+    gl.bindTexture(gl.TEXTURE_2D, srcTex);
     gl.useProgram(self.progBright.p);
     gl.uniform1i(self.progBright.u.uTex, 0);
     gl.uniform1f(self.progBright.u.uThreshold, prm.threshold);
@@ -6625,7 +6845,7 @@ function PostFX(canvas) {
 
     // 4. composite to the screen
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, self.sceneTex);
+    gl.bindTexture(gl.TEXTURE_2D, srcTex);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, self.mips[0].tex);
     var c = self.progComp;
@@ -6664,8 +6884,14 @@ PostFX.defaults = function () {
   return {
     threshold: 0.80, knee: 0.20, warm: 0.25, radius: 1.0,
     bloom: 0.30, aberration: 0.45, vignette: 0.70, grain: 0.014,
-    exposure: 1.18, contrast: 1.02, saturation: 1.0, distort: 0.010,
+    exposure: 1.34, contrast: 1.02, saturation: 1.0, distort: 0.010,
     tonemap: 0.35, flash: 0.0, time: 0,
+    // Ambient sits high on purpose: the art carries its own baked shading, so
+    // the dynamic lights are a highlight layer, not the primary illumination.
+    lighting: true, normalStrength: 1.5,
+    ambient: new Float32Array([0.64, 0.66, 0.78]),
+    sunDir: new Float32Array([0.35, -0.55, 0.76]),   // moon, upper right
+    sunCol: new Float32Array([0.18, 0.20, 0.28]),
     lift: new Float32Array([0.000, 0.001, 0.004]),
     gain: new Float32Array([1.01, 1.00, 1.00]),
     shadowTint: new Float32Array([0.98, 1.00, 1.05]),
@@ -7224,7 +7450,100 @@ class Game {
     this.fx2 = fx;
     this.fxCanvas = fxCanvas;
     this.prm = PostFX.defaults();
+    // Normals are low-frequency, so a half-res buffer is indistinguishable
+    // and halves the per-frame texture upload.
+    LT_init();
+    this.ncv = document.createElement('canvas');
+    this.ncv.width = Math.round(CW * 0.5);
+    this.ncv.height = Math.round(CH * 0.5);
+    this.nctx = this.ncv.getContext('2d');
+    this.lights = [];
     return true;
+  }
+
+  // ── normal buffer ────────────────────────────────────────────────────
+  // Mirrors drawWorld, but stamps baked normal sprites instead of art.
+  drawNormals(camX) {
+    const n = this.nctx, L = LT_cache;
+    n.setTransform(0.5, 0, 0, 0.5, 0, 0);
+    n.globalAlpha = 1;
+    n.fillStyle = 'rgb(128,128,255)';
+    n.fillRect(0, 0, CW, CH);
+    if (!this.world) return;
+
+    const w = this.world;
+    const c0 = Math.max(0, Math.floor(camX / TILE) - 1);
+    const c1 = Math.min(w.w - 1, Math.floor((camX + CW) / TILE) + 1);
+    for (let cy = 0; cy < w.h; cy++) {
+      for (let cx = c0; cx <= c1; cx++) {
+        const c = w.cells[cy * w.w + cx];
+        if (!c || !c.alive) continue;
+        const x = cx * TILE - camX;
+        const y = cy * TILE - (c.bump > 0 ? Math.sin(c.bump * Math.PI) * 9 : 0);
+        // ground rows rake light across them; floating blocks get a hard chamfer
+        const spr = c.t === '#' ? (c.top ? L.bevelSoft : L.ground) : L.bevel;
+        n.drawImage(spr, x, y, TILE, TILE);
+      }
+    }
+    for (const k of this.pickups) {
+      if (k.rect.r < camX - 40 || k.rect.x > camX + CW + 40) continue;
+      n.drawImage(L.dome, k.rect.x - camX, k.rect.y, k.rect.w, k.rect.h);
+    }
+    for (const e of this.enemies) {
+      if (e.rect.r < camX - 60 || e.rect.x > camX + CW + 60) continue;
+      n.drawImage(L.dome, e.rect.x - camX, e.rect.y, e.rect.w, e.rect.h);
+    }
+    const p = this.player;
+    if (p && !p.dead) n.drawImage(L.domeTall, p.rect.x - camX, p.rect.y, p.rect.w, p.rect.h);
+  }
+
+  // ── scene lights ─────────────────────────────────────────────────────
+  // Screen-uv space, y flipped into GL convention (0 = bottom).
+  collectLights(camX) {
+    const out = this.lights;
+    out.length = 0;
+    const push = (wx, wy, r, cr, cg, cb, i, z) => {
+      const sx = wx - camX;
+      if (sx < -120 || sx > CW + 120 || out.length >= 24) return;
+      out.push({
+        x: sx / CW, y: 1 - wy / CH, z: z === undefined ? 0.10 : z,
+        r: r / CH, cr: cr, cg: cg, cb: cb, i: i,
+      });
+    };
+    if (!this.world) return out;
+    const t = this.time;
+
+    // the goal beacon is the strongest light in any level
+    const bc = this.world.beacon;
+    if (bc) push(bc.x + TILE / 2, bc.y - TILE * 1.5, 560, 1.0, 0.82, 0.32,
+      bc.reached ? 3.0 : 1.70, 0.16);
+
+    // live bat-signal blocks glow, spent ones go dark
+    const w = this.world;
+    const c0 = Math.max(0, Math.floor(camX / TILE) - 1);
+    const c1 = Math.min(w.w - 1, Math.floor((camX + CW) / TILE) + 1);
+    for (let cy = 0; cy < w.h; cy++) {
+      for (let cx = c0; cx <= c1; cx++) {
+        const c = w.cells[cy * w.w + cx];
+        if (!c || !c.alive || c.t !== '?' || c.used) continue;
+        push(cx * TILE + TILE / 2, cy * TILE + TILE / 2, 210,
+          1.0, 0.78, 0.26, 1.15 + 0.20 * Math.sin(t * 4 + cx), 0.085);
+      }
+    }
+    for (const k of this.pickups) {
+      if (k.kind === 'suit') push(k.rect.cx, k.rect.cy, 230, 1.0, 0.22, 0.18, 1.45);
+      else if (k.kind === 'star') push(k.rect.cx, k.rect.cy, 300, 1.0, 0.88, 0.35, 1.90);
+      else push(k.rect.cx, k.rect.cy, 120, 1.0, 0.80, 0.30, 0.58, 0.07);
+    }
+    for (const e of this.enemies) {
+      if (e.kind === 'drone' && e.alive && e.dying <= 0)
+        push(e.rect.cx, e.rect.b, 165, 0.30, 1.0, 0.35, 0.88, 0.07);
+    }
+    const p = this.player;
+    if (p && p.star > 0 && !p.dead)
+      push(p.rect.cx, p.rect.cy, 300, 1.0, 0.85, 0.40,
+        2.0 * Math.min(1, p.star / 1.2), 0.12);
+    return out;
   }
 
   postParams() {
@@ -7232,7 +7551,13 @@ class Game {
     PostFX.grade(p, this.lvIdx);
     p.time = this.time;
     // lightning washes the whole frame, exactly as it does in the 2D pass
-    p.flash = this.bolt.flash * 0.22;
+    const fl = this.bolt.flash;
+    p.flash = fl * 0.22;
+    // and drives the directional light, so a strike genuinely rakes across the
+    // geometry instead of just brightening the image
+    p.sunCol[0] = 0.13 + fl * 0.85;
+    p.sunCol[1] = 0.15 + fl * 0.92;
+    p.sunCol[2] = 0.22 + fl * 1.05;
     // star power: everything blooms harder and the grade goes molten gold
     if (pl && pl.star > 0) {
       const s = Math.min(1, pl.star / 1.5);
@@ -7472,10 +7797,12 @@ class Game {
       case ST.WIN: drawWinOverlay(ctx, t, this.score, this.best, this.blink); break;
     }
 
-    // everything above rendered into the offscreen 2D canvas; now grade it
+    // everything above rendered into the offscreen 2D canvas; now light + grade it
     if (this.fx2) {
+      this.drawNormals(camX);
+      const lights = this.collectLights(camX);
       this.fx2.resize(this.cv.width, this.cv.height);
-      this.fx2.render(this.cv, this.postParams());
+      this.fx2.render(this.cv, this.ncv, lights, this.postParams());
     }
   }
 
