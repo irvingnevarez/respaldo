@@ -6164,6 +6164,658 @@ function drawWinOverlay(ctx, t, score, best, blink){
 }
 
 
+// ═══ BOSSES ═══════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+//  BOSS ART — the two arena bosses, their projectiles and their UI.
+//  Module prefix BS_.  All animation is driven by the passed time so frames
+//  are reproducible; variation comes from hashing an index, never Math.random.
+// ═══════════════════════════════════════════════════════════════════════
+
+function BS_rnd(n) { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }
+function BS_clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+
+function BS_roundRect(ctx, x, y, w, h, r) {
+  const rr = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+  if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, w, h, rr); return; }
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.lineTo(x + w - rr, y); ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+  ctx.lineTo(x + w, y + h - rr); ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+  ctx.lineTo(x + rr, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+  ctx.lineTo(x, y + rr); ctx.quadraticCurveTo(x, y, x + rr, y);
+  ctx.closePath();
+}
+
+function BS_shadow(ctx, cx, groundY, rx) {
+  ctx.save();
+  ctx.globalAlpha = 0.42;
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.ellipse(cx, groundY, Math.max(2, rx), Math.max(2, rx * 0.22), 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// white-out pass used when a boss takes a hit
+function BS_flash(ctx, x, y, w, h, amt) {
+  if (amt <= 0.01) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = BS_clamp(amt, 0, 1) * 0.8;
+  ctx.fillStyle = '#fff';
+  BS_roundRect(ctx, x, y, w, h, Math.min(w, h) * 0.3);
+  ctx.fill();
+  ctx.restore();
+}
+
+// ── EL PINGÜINO ────────────────────────────────────────────────────────
+function BS_umbrellaCopter(ctx, cx, cy, w, state, t, phase) {
+  const folded = state === 'telegraph' || state === 'slam' || state === 'dazed';
+  const spread = folded ? 0.22 : 1;
+  const spin = state === 'hover' ? t * 16 : t * 2;
+  ctx.save();
+  ctx.translate(cx, cy);
+  // shaft
+  ctx.fillStyle = '#2a2a34';
+  ctx.fillRect(-3, -4, 6, 26);
+  // ribs, squashed horizontally to fake rotation
+  for (let i = 0; i < 6; i++) {
+    const a = spin + i * Math.PI / 3;
+    const sx = Math.cos(a);
+    const len = w * 0.52 * spread;
+    ctx.save();
+    ctx.globalAlpha = state === 'hover' ? 0.55 + 0.45 * Math.abs(sx) : 1;
+    const g = ctx.createLinearGradient(0, 0, sx * len, -8);
+    g.addColorStop(0, '#4a4358');
+    g.addColorStop(1, '#20202c');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(0, -2);
+    ctx.quadraticCurveTo(sx * len * 0.55, -12, sx * len, -3);
+    ctx.lineTo(sx * len * 0.9, 2);
+    ctx.quadraticCurveTo(sx * len * 0.5, -4, 0, 4);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  // armoured hub
+  const hub = ctx.createRadialGradient(-3, -4, 1, 0, 0, 13);
+  hub.addColorStop(0, '#6b6480');
+  hub.addColorStop(1, '#23222e');
+  ctx.fillStyle = hub;
+  ctx.beginPath(); ctx.arc(0, -2, 11, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#12121a'; ctx.lineWidth = 1.5; ctx.stroke();
+  if (phase >= 2) {           // damage sparks
+    const f = (t * 7 + 0.3) % 1;
+    if (f < 0.22) {
+      ctx.globalAlpha = 1 - f / 0.22;
+      ctx.fillStyle = '#ffd27a';
+      ctx.beginPath(); ctx.arc(6, -6, 2.4, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+  ctx.restore();
+}
+
+function drawPenguinBoss(ctx, x, y, w, h, o) {
+  o = o || {};
+  const st = o.state || 'hover';
+  const t = o.animTime || 0;
+  const right = !!o.facingRight;
+  const phase = o.phase || 1;
+  const dazed = st === 'dazed';
+  const dead = st === 'dead';
+
+  ctx.save();
+  BS_shadow(ctx, x + w / 2, Math.min(y + h + 6, 15 * 32 + 2), w * 0.42);
+
+  ctx.translate(x + w / 2, y);
+  if (!right) ctx.scale(-1, 1);
+  const bw = w * 0.78, bh = h * 0.72;
+  const bodyTop = h * 0.26;
+  const bob = st === 'hover' ? Math.sin(t * 2.2) * 3 : 0;
+
+  // dazed: buried head-first, so flip the whole body over
+  ctx.save();
+  if (dazed) { ctx.translate(0, h * 0.62); ctx.rotate(Math.PI); ctx.translate(0, -h * 0.38); }
+  if (dead) { ctx.rotate(0.34); ctx.translate(6, 10); }
+
+  if (!dazed && !dead) BS_umbrellaCopter(ctx, 0, bodyTop - 26 + bob, w, st, t, phase);
+
+  // body
+  const bg = ctx.createLinearGradient(-bw / 2, bodyTop, bw / 2, bodyTop + bh);
+  bg.addColorStop(0, '#2e2e3c');
+  bg.addColorStop(0.45, PAL.peng);
+  bg.addColorStop(1, '#07070c');
+  ctx.fillStyle = bg;
+  ctx.beginPath();
+  ctx.ellipse(0, bodyTop + bh / 2 + bob, bw / 2, bh / 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // shirt front
+  const sg = ctx.createLinearGradient(0, bodyTop + bh * 0.15, 0, bodyTop + bh);
+  sg.addColorStop(0, '#ffffff');
+  sg.addColorStop(1, '#b9bccc');
+  ctx.fillStyle = sg;
+  ctx.beginPath();
+  ctx.ellipse(0, bodyTop + bh * 0.58 + bob, bw * 0.26, bh * 0.34, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // flippers
+  ctx.fillStyle = '#16161e';
+  for (const s of [-1, 1]) {
+    const flap = st === 'slam' ? -0.5 : Math.sin(t * 3 + (s > 0 ? 0 : 1)) * 0.18;
+    ctx.save();
+    ctx.translate(s * bw * 0.46, bodyTop + bh * 0.42 + bob);
+    ctx.rotate(s * (0.35 + flap));
+    ctx.beginPath(); ctx.ellipse(0, 0, bw * 0.11, bh * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  // feet
+  ctx.fillStyle = PAL.orange;
+  for (const s of [-1, 1]) {
+    const kick = dazed ? Math.sin(t * 14 + s) * 6 : 0;
+    ctx.beginPath();
+    ctx.ellipse(s * bw * 0.2 + kick, bodyTop + bh + 3 + bob, bw * 0.16, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // head
+  const hy = bodyTop + bh * 0.12 + bob;
+  ctx.fillStyle = '#1a1a24';
+  ctx.beginPath(); ctx.ellipse(0, hy, bw * 0.3, bh * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#f3f1ea';
+  ctx.beginPath(); ctx.ellipse(bw * 0.05, hy + 3, bw * 0.2, bh * 0.13, 0, 0, Math.PI * 2); ctx.fill();
+
+  // beak + cigarette holder
+  ctx.fillStyle = PAL.orange;
+  ctx.beginPath();
+  ctx.moveTo(bw * 0.18, hy); ctx.lineTo(bw * 0.44, hy + 3); ctx.lineTo(bw * 0.18, hy + 8);
+  ctx.closePath(); ctx.fill();
+  if (!dead) {
+    ctx.strokeStyle = '#ded8c8'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(bw * 0.4, hy + 4); ctx.lineTo(bw * 0.62, hy - 4); ctx.stroke();
+    ctx.fillStyle = '#ff7a3a';
+    ctx.beginPath(); ctx.arc(bw * 0.63, hy - 5, 1.8, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // eye + cracked monocle
+  const eyeR = phase >= 3 ? '#ff5a4a' : '#fff';
+  ctx.fillStyle = eyeR;
+  ctx.beginPath(); ctx.arc(bw * 0.08, hy - 1, 3.4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#101018';
+  ctx.beginPath(); ctx.arc(bw * 0.09, hy - 1, 1.7, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = PAL.yellow; ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.arc(bw * 0.08, hy - 1, 7, 0, Math.PI * 2); ctx.stroke();
+  if (phase >= 2) {
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(bw * 0.03, hy - 7); ctx.lineTo(bw * 0.12, hy + 4); ctx.stroke();
+  }
+  ctx.strokeStyle = PAL.yellowD; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(bw * 0.14, hy + 4); ctx.quadraticCurveTo(bw * 0.22, hy + 16, bw * 0.05, hy + 22); ctx.stroke();
+
+  // top hat
+  if (!dead) {
+    ctx.fillStyle = '#0d0d14';
+    ctx.fillRect(-bw * 0.26, hy - bh * 0.2 - 2, bw * 0.52, 4);
+    BS_roundRect(ctx, -bw * 0.18, hy - bh * 0.2 - 20, bw * 0.36, 20, 2);
+    ctx.fill();
+    ctx.fillStyle = '#3a2a55';
+    ctx.fillRect(-bw * 0.18, hy - bh * 0.2 - 8, bw * 0.36, 4);
+  }
+
+  // bow tie
+  ctx.fillStyle = PAL.danger;
+  ctx.beginPath();
+  ctx.moveTo(-7, hy + bh * 0.22); ctx.lineTo(0, hy + bh * 0.26); ctx.lineTo(-7, hy + bh * 0.3);
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(7, hy + bh * 0.22); ctx.lineTo(0, hy + bh * 0.26); ctx.lineTo(7, hy + bh * 0.3);
+  ctx.closePath(); ctx.fill();
+
+  // rim light down the facing edge
+  ctx.strokeStyle = 'rgba(190,205,255,0.5)'; ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.ellipse(0, bodyTop + bh / 2 + bob, bw / 2, bh / 2, 0, -1.25, 0.5);
+  ctx.stroke();
+
+  ctx.restore();
+
+  // dazed stars
+  if (dazed) {
+    ctx.save();
+    ctx.translate(0, h * 0.1);
+    for (let i = 0; i < 3; i++) {
+      const a = t * 4 + i * Math.PI * 2 / 3;
+      ctx.fillStyle = PAL.yellow;
+      ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t * 8 + i);
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * 26, Math.sin(a) * 9 - 6, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  ctx.restore();
+
+  BS_flash(ctx, x, y, w, h, o.hurtFlash || 0);
+}
+
+// ── EL JOKER ───────────────────────────────────────────────────────────
+function BS_jokerFace(ctx, cx, cy, r, t, phase, laughing) {
+  ctx.fillStyle = PAL.face;
+  ctx.beginPath(); ctx.ellipse(cx, cy, r, r * 1.12, 0, 0, Math.PI * 2); ctx.fill();
+  // green hair
+  ctx.fillStyle = PAL.jokerGreen;
+  for (let i = 0; i < 6; i++) {
+    const a = -Math.PI * 0.95 + i * (Math.PI * 0.9 / 5);
+    const wob = Math.sin(t * 5 + i) * 0.1;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * r * 0.9, cy + Math.sin(a) * r * 0.9);
+    ctx.quadraticCurveTo(
+      cx + Math.cos(a + wob) * r * 1.9, cy + Math.sin(a + wob) * r * 1.9,
+      cx + Math.cos(a + 0.3) * r * 0.85, cy + Math.sin(a + 0.3) * r * 0.85);
+    ctx.closePath(); ctx.fill();
+  }
+  // eyes
+  ctx.fillStyle = '#1b1024';
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.ellipse(cx + s * r * 0.34, cy - r * 0.15, r * 0.15, r * 0.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (phase >= 3) {   // unhinged: blown pupils and a twitch
+    ctx.fillStyle = '#e8e0ff';
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(cx + s * r * 0.34 + Math.sin(t * 21) * 1.2, cy - r * 0.15, r * 0.06, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  // rictus grin
+  ctx.strokeStyle = PAL.smile;
+  ctx.lineWidth = Math.max(1.6, r * 0.13);
+  ctx.beginPath();
+  ctx.arc(cx, cy + r * 0.12, r * 0.62, 0.22, Math.PI - 0.22);
+  ctx.stroke();
+  if (laughing) {
+    ctx.fillStyle = '#3a0a12';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + r * 0.42, r * 0.4, r * 0.26 * (1 + Math.sin(t * 14) * 0.3), 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawJokerBoss(ctx, x, y, w, h, o) {
+  o = o || {};
+  const st = o.state || 'ride';
+  const t = o.animTime || 0;
+  const right = !!o.facingRight;
+  const phase = o.phase || 1;
+  const riding = phase === 1 && st !== 'dead';
+
+  ctx.save();
+
+  if (st === 'teleport') {
+    // dissolving into green smoke, cards scattering out of it
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 14; i++) {
+      const a = BS_rnd(i) * Math.PI * 2, d = 8 + BS_rnd(i + 40) * 34;
+      ctx.globalAlpha = 0.35 * (1 - BS_rnd(i + 9));
+      ctx.fillStyle = PAL.jokerGreen;
+      ctx.beginPath();
+      ctx.arc(x + w / 2 + Math.cos(a) * d, y + h * 0.5 + Math.sin(a) * d * 0.7,
+        6 + BS_rnd(i + 3) * 9, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    ctx.restore();
+    return;
+  }
+
+  BS_shadow(ctx, x + w / 2, 15 * 32 + 2, w * 0.36);
+  ctx.translate(x + w / 2, y);
+  if (!right) ctx.scale(-1, 1);
+
+  const manW = riding ? w * 0.42 : w * 0.72;
+  const manTop = riding ? h * 0.62 : h * 0.06;
+  const manH = riding ? h * 0.34 : h * 0.9;
+
+  if (riding) {
+    // gas bag with his own grinning face painted on it
+    const bw = w * 0.9, bh = h * 0.62;
+    const sway = Math.sin(t * 1.5) * 0.05;
+    ctx.save();
+    ctx.rotate(sway);
+    const g = ctx.createRadialGradient(-bw * 0.2, bh * 0.1, 6, 0, bh * 0.3, bw * 0.6);
+    g.addColorStop(0, PAL.jokerHi);
+    g.addColorStop(0.6, PAL.joker);
+    g.addColorStop(1, '#2c1348');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(0, bh * 0.34, bw / 2, bh / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 0.85;
+    BS_jokerFace(ctx, 0, bh * 0.3, bw * 0.24, t, phase, false);
+    ctx.globalAlpha = 1;
+    // ropes to the basket
+    ctx.strokeStyle = '#c9b88a'; ctx.lineWidth = 1.4;
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(s * bw * 0.3, bh * 0.62);
+      ctx.lineTo(s * w * 0.17, h * 0.66);
+      ctx.stroke();
+    }
+    ctx.restore();
+    // wicker basket
+    const bg2 = ctx.createLinearGradient(0, h * 0.66, 0, h * 0.82);
+    bg2.addColorStop(0, '#a97f3f');
+    bg2.addColorStop(1, '#5d431d');
+    ctx.fillStyle = bg2;
+    BS_roundRect(ctx, -w * 0.2, h * 0.66, w * 0.4, h * 0.16, 3);
+    ctx.fill();
+    ctx.strokeStyle = '#3a2a10'; ctx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) {
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.2, h * 0.66 + i * h * 0.04);
+      ctx.lineTo(w * 0.2, h * 0.66 + i * h * 0.04);
+      ctx.stroke();
+    }
+  }
+
+  // the man himself
+  const armUp = st === 'taunt' || st === 'throw';
+  ctx.save();
+  ctx.translate(0, manTop);
+  // tailcoat
+  const cg = ctx.createLinearGradient(0, 0, 0, manH);
+  cg.addColorStop(0, PAL.jokerHi);
+  cg.addColorStop(1, '#3a1b5e');
+  ctx.fillStyle = cg;
+  BS_roundRect(ctx, -manW / 2, manH * 0.3, manW, manH * 0.6, 4);
+  ctx.fill();
+  if (!riding) {  // coat tails flying
+    ctx.beginPath();
+    ctx.moveTo(-manW / 2, manH * 0.72);
+    ctx.quadraticCurveTo(-manW * 0.95, manH * (0.86 + Math.sin(t * 6) * 0.06), -manW * 0.62, manH * 1.02);
+    ctx.lineTo(-manW * 0.2, manH * 0.86);
+    ctx.closePath(); ctx.fill();
+  }
+  // waistcoat + tie
+  ctx.fillStyle = PAL.jokerGreen;
+  ctx.beginPath();
+  ctx.moveTo(-manW * 0.18, manH * 0.32);
+  ctx.lineTo(manW * 0.18, manH * 0.32);
+  ctx.lineTo(0, manH * 0.66);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = PAL.orange;
+  ctx.beginPath(); ctx.arc(0, manH * 0.33, manW * 0.08, 0, Math.PI * 2); ctx.fill();
+
+  // arms
+  ctx.strokeStyle = PAL.joker;
+  ctx.lineWidth = Math.max(3, manW * 0.13);
+  ctx.lineCap = 'round';
+  for (const s of [-1, 1]) {
+    const a = armUp ? -1.15 * s : (0.5 + Math.sin(t * 3 + s) * 0.16) * s;
+    ctx.beginPath();
+    ctx.moveTo(s * manW * 0.4, manH * 0.4);
+    ctx.lineTo(s * manW * 0.4 + Math.sin(a) * manW * 0.5, manH * 0.4 + Math.cos(a) * manH * 0.3);
+    ctx.stroke();
+  }
+  ctx.lineCap = 'butt';
+  // fanned cards in the leading hand
+  if (st === 'throw' || st === 'ground') {
+    for (let i = 0; i < 3; i++) {
+      ctx.save();
+      ctx.translate(manW * 0.62, manH * 0.16);
+      ctx.rotate(-0.5 + i * 0.24);
+      ctx.fillStyle = '#f5f2e6';
+      ctx.fillRect(0, -7, 9, 13);
+      ctx.strokeStyle = PAL.smile; ctx.lineWidth = 1; ctx.strokeRect(0, -7, 9, 13);
+      ctx.restore();
+    }
+  }
+  // head
+  BS_jokerFace(ctx, 0, manH * 0.14, manW * 0.36, t, phase, armUp || st === 'taunt');
+  ctx.restore();
+
+  ctx.restore();
+  BS_flash(ctx, x, y, w, h, o.hurtFlash || 0);
+}
+
+// ── projectiles ────────────────────────────────────────────────────────
+function drawUmbrellaBomb(ctx, cx, cy, r, angle, fuse) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  // canopy
+  ctx.fillStyle = '#2a1c3e';
+  ctx.beginPath();
+  ctx.arc(0, -r * 0.7, r * 1.05, Math.PI, 0);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#1a1026'; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const a = Math.PI + i * Math.PI / 4;
+    ctx.beginPath();
+    ctx.moveTo(0, -r * 0.7);
+    ctx.lineTo(Math.cos(a) * r * 1.05, -r * 0.7 + Math.sin(a) * r * 1.05);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = '#3a2a12'; ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.moveTo(0, -r * 0.7); ctx.lineTo(0, -r * 0.1); ctx.stroke();
+  // bomb
+  const g = ctx.createRadialGradient(-r * 0.3, r * 0.1, 1, 0, r * 0.35, r);
+  g.addColorStop(0, '#4a4a58');
+  g.addColorStop(1, '#0a0a10');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, r * 0.35, r * 0.72, 0, Math.PI * 2); ctx.fill();
+  // fuse spark, ramping red as it is about to blow
+  const f = BS_clamp(fuse || 0, 0, 1);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = f > 0.6 ? '#ff5030' : '#ffcf6a';
+  ctx.globalAlpha = 0.6 + 0.4 * Math.sin(angle * 6);
+  ctx.beginPath();
+  ctx.arc(r * 0.35, -r * 0.25, 2 + f * 3.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  if (f > 0.55) {
+    ctx.globalAlpha = (f - 0.55) * 1.2;
+    ctx.strokeStyle = PAL.danger; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(0, r * 0.35, r * 0.9, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+
+function drawCardProjectile(ctx, cx, cy, r, angle) {
+  ctx.save();
+  // motion trail
+  ctx.globalAlpha = 0.22;
+  ctx.fillStyle = PAL.jokerHi;
+  ctx.beginPath(); ctx.ellipse(cx, cy, r * 1.7, r * 0.5, angle * 0.1, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+
+  ctx.translate(cx, cy);
+  ctx.rotate(angle);
+  const sq = Math.abs(Math.cos(angle * 0.8));      // fake the card turning edge-on
+  ctx.scale(0.35 + sq * 0.65, 1);
+  ctx.fillStyle = '#f7f4e8';
+  BS_roundRect(ctx, -r * 0.7, -r, r * 1.4, r * 2, 2);
+  ctx.fill();
+  ctx.strokeStyle = '#b9b2a0'; ctx.lineWidth = 0.8; ctx.stroke();
+  ctx.fillStyle = PAL.smile;
+  ctx.beginPath(); ctx.arc(0, 0, r * 0.34, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = PAL.jokerGreen;
+  ctx.beginPath(); ctx.arc(0, 0, r * 0.16, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawShockwave(ctx, cx, groundY, w, h, t, strength) {
+  ctx.save();
+  const s = BS_clamp(strength === undefined ? 1 : strength, 0, 1);
+  // crest
+  const g = ctx.createLinearGradient(0, groundY - h, 0, groundY);
+  g.addColorStop(0, 'rgba(190,225,255,0.0)');
+  g.addColorStop(0.45, 'rgba(170,215,255,' + (0.55 * s) + ')');
+  g.addColorStop(1, 'rgba(90,130,190,' + (0.85 * s) + ')');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(cx - w * 0.75, groundY);
+  ctx.quadraticCurveTo(cx - w * 0.2, groundY - h * 1.15, cx, groundY - h * 0.85);
+  ctx.quadraticCurveTo(cx + w * 0.25, groundY - h * 0.5, cx + w * 0.7, groundY);
+  ctx.closePath(); ctx.fill();
+  // cracked shards along the leading edge
+  ctx.fillStyle = 'rgba(225,240,255,' + (0.8 * s) + ')';
+  for (let i = 0; i < 5; i++) {
+    const px = cx - w * 0.4 + i * w * 0.2 + Math.sin(t * 10 + i) * 2;
+    const ph = h * (0.3 + BS_rnd(i) * 0.5);
+    ctx.beginPath();
+    ctx.moveTo(px, groundY);
+    ctx.lineTo(px + 3, groundY - ph);
+    ctx.lineTo(px + 7, groundY);
+    ctx.closePath(); ctx.fill();
+  }
+  // dust
+  ctx.globalAlpha = 0.3 * s;
+  ctx.fillStyle = '#9fb0c8';
+  for (let i = 0; i < 6; i++) {
+    const a = t * 3 + i;
+    ctx.beginPath();
+    ctx.arc(cx - w * 0.5 + i * w * 0.18, groundY - 6 - (a % 1) * 14, 3 + BS_rnd(i + 7) * 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawGasCloud(ctx, x, y, w, h, t) {
+  ctx.save();
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, 'rgba(120,230,90,0.42)');
+  g.addColorStop(0.3, 'rgba(60,170,50,0.62)');
+  g.addColorStop(1, 'rgba(14,70,20,0.88)');
+  ctx.fillStyle = g;
+  ctx.fillRect(x, y, w, h);
+  // churning top edge, built from overlapping lobes so it tiles with itself
+  ctx.fillStyle = 'rgba(150,245,120,0.5)';
+  ctx.beginPath();
+  ctx.moveTo(x, y + 10);
+  for (let i = 0; i <= 24; i++) {
+    const px = x + (i / 24) * w;
+    const py = y + 8 + Math.sin(t * 1.7 + i * 0.9) * 5 + Math.sin(t * 3.1 + i * 2.3) * 3;
+    ctx.lineTo(px, py);
+  }
+  ctx.lineTo(x + w, y + 22); ctx.lineTo(x, y + 22);
+  ctx.closePath(); ctx.fill();
+  // rising bubbles
+  ctx.globalAlpha = 0.32;
+  ctx.fillStyle = '#b6ff9a';
+  for (let i = 0; i < 16; i++) {
+    const px = x + ((BS_rnd(i) * w) + t * 18 * (0.4 + BS_rnd(i + 5))) % w;
+    const py = y + h - ((t * 30 * (0.5 + BS_rnd(i + 2)) + BS_rnd(i + 8) * h) % h);
+    ctx.beginPath(); ctx.arc(px, py, 2 + BS_rnd(i + 11) * 4, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+// ── boss UI ────────────────────────────────────────────────────────────
+function BS_disp(size) {
+  return '800 ' + size + 'px Oswald, "Arial Black", Impact, system-ui, sans-serif';
+}
+
+function drawBossHealthBar(ctx, x, y, w, h, o) {
+  o = o || {};
+  const hp = o.hp || 0, maxHp = Math.max(1, o.maxHp || 1);
+  const flash = BS_clamp(o.flash || 0, 0, 1);
+  ctx.save();
+  ctx.translate(Math.sin((o.t || 0) * 60) * flash * 3, 0);
+
+  // name
+  ctx.font = BS_disp(15);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(10,8,16,0.85)';
+  ctx.fillText(o.name || '', x + w / 2 + 1, y - 7 + 1);
+  ctx.fillStyle = flash > 0.2 ? '#fff' : PAL.yellow;
+  ctx.fillText(o.name || '', x + w / 2, y - 7);
+
+  // frame
+  ctx.fillStyle = 'rgba(6,6,14,0.82)';
+  BS_roundRect(ctx, x - 3, y - 3, w + 6, h + 6, 4); ctx.fill();
+  ctx.strokeStyle = flash > 0.2 ? '#ffffff' : 'rgba(245,197,24,0.75)';
+  ctx.lineWidth = 1.6;
+  BS_roundRect(ctx, x - 3, y - 3, w + 6, h + 6, 4); ctx.stroke();
+
+  // segmented pips, one per hit point
+  const gap = 3, seg = (w - gap * (maxHp - 1)) / maxHp;
+  for (let i = 0; i < maxHp; i++) {
+    const sx = x + i * (seg + gap);
+    if (i < hp) {
+      const g = ctx.createLinearGradient(sx, y, sx, y + h);
+      g.addColorStop(0, '#ff6a4a');
+      g.addColorStop(0.5, PAL.danger);
+      g.addColorStop(1, '#6d1414');
+      ctx.fillStyle = g;
+      ctx.fillRect(sx, y, seg, h);
+      ctx.fillStyle = 'rgba(255,220,200,0.55)';
+      ctx.fillRect(sx, y, seg, 2);
+    } else {
+      ctx.fillStyle = 'rgba(50,40,55,0.7)';
+      ctx.fillRect(sx, y, seg, h);
+    }
+  }
+  // phase marker
+  ctx.font = BS_disp(10);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(180,190,220,0.75)';
+  ctx.fillText('FASE ' + (o.phase || 1), x + w, y + h + 13);
+
+  ctx.restore();
+  ctx.textAlign = 'left';
+}
+
+function drawBossIntro(ctx, t, name, subtitle, progress) {
+  const p = BS_clamp(progress || 0, 0, 1);
+  // ease in, hold, ease out
+  const a = p < 0.18 ? p / 0.18 : (p > 0.8 ? (1 - p) / 0.2 : 1);
+  if (a <= 0.01) return;
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.fillStyle = 'rgba(4,3,10,0.72)';
+  ctx.fillRect(0, 0, CW, CH);
+
+  const slide = (1 - Math.min(1, p / 0.25));
+  ctx.translate(-slide * 420, 0);
+
+  // slash band behind the name
+  ctx.fillStyle = 'rgba(150,20,20,0.55)';
+  ctx.beginPath();
+  ctx.moveTo(0, CH / 2 - 46); ctx.lineTo(CW, CH / 2 - 58);
+  ctx.lineTo(CW, CH / 2 + 34); ctx.lineTo(0, CH / 2 + 46);
+  ctx.closePath(); ctx.fill();
+
+  ctx.textAlign = 'center';
+  ctx.font = BS_disp(58);
+  ctx.fillStyle = 'rgba(0,0,0,0.8)';
+  ctx.fillText(name || '', CW / 2 + 3, CH / 2 + 12);
+  const g = ctx.createLinearGradient(0, CH / 2 - 40, 0, CH / 2 + 18);
+  g.addColorStop(0, '#fff2bd');
+  g.addColorStop(0.5, PAL.yellow);
+  g.addColorStop(1, '#9a7410');
+  ctx.fillStyle = g;
+  ctx.fillText(name || '', CW / 2, CH / 2 + 9);
+
+  ctx.font = BS_disp(16);
+  ctx.fillStyle = 'rgba(220,225,245,0.9)';
+  let sub = subtitle || '';
+  let spaced = '';
+  for (let i = 0; i < sub.length; i++) spaced += sub[i] + (i < sub.length - 1 ? ' ' : '');
+  ctx.fillText(spaced, CW / 2, CH / 2 + 44);
+
+  ctx.restore();
+  ctx.textAlign = 'left';
+  ctx.globalAlpha = 1;
+}
+
+
 // ═══ LEVELS ═══════════════════════════════════════
 // ===========================================================================
 //  levels.js -- level data for the Gotham platformer.
@@ -6192,7 +6844,6 @@ const LEVELS = [
     start: { tx: 2, ty: 12 },
     rain: 0.7,
     storm: true,
-    cols: 200,
     rows: [
     /* 0*/ "                                                                                                                                                                                                        ",
     /* 1*/ "                                                                                                                                                                                                        ",
@@ -6219,7 +6870,6 @@ const LEVELS = [
     start: { tx: 2, ty: 12 },
     rain: 0.85,
     storm: true,
-    cols: 215,
     rows: [
     /* 0*/ "                                                                                                                                                                                                                       ",
     /* 1*/ "                                                                                                                                                                                                                       ",
@@ -6246,7 +6896,6 @@ const LEVELS = [
     start: { tx: 2, ty: 12 },
     rain: 1,
     storm: true,
-    cols: 232,
     rows: [
     /* 0*/ "                                                                                                                                                                                                                                        ",
     /* 1*/ "                                                                                                                                                                                                                                        ",
@@ -6265,6 +6914,138 @@ const LEVELS = [
     /*14*/ "               G   J      P###     ### J             P   J           J           P   PG         J         ############         J   J         P    G          J    P###      ### J   P          J   J           P #######################",
     /*15*/ "##############################     #########      ##########     #######      ##########     #######      ############      ##########     #########      ############      ##########      ##########      ############################",
     /*16*/ "##############################     #########      ##########     #######      ##########     #######      ############      ##########     #########      ############      ##########      ##########      ############################"
+    ]
+  },
+  {
+    id: "1-4",
+    name: "MUELLE HELADO",
+    start: { tx: 2, ty: 12 },
+    rain: 0.9,
+    storm: true,
+    boss: "penguin",
+    rows: [
+    /* 0*/ "                              ",
+    /* 1*/ "                              ",
+    /* 2*/ "                              ",
+    /* 3*/ "                              ",
+    /* 4*/ "                              ",
+    /* 5*/ "                              ",
+    /* 6*/ "                              ",
+    /* 7*/ "                              ",
+    /* 8*/ "                              ",
+    /* 9*/ "#                            #",
+    /*10*/ "#      ?              ?      #",
+    /*11*/ "#                            #",
+    /*12*/ "#  ###                  ###  #",
+    /*13*/ "# #####                ##### #",
+    /*14*/ "#                            #",
+    /*15*/ "##############################",
+    /*16*/ "##############################"
+    ]
+  },
+  {
+    id: "1-5",
+    name: "ALCANTARILLAS",
+    start: { tx: 2, ty: 12 },
+    rain: 0.35,
+    storm: true,
+    rows: [
+    /* 0*/ "                                                                                                                                                                                                            ",
+    /* 1*/ "                                                                                                                                                                                                            ",
+    /* 2*/ "                                                                                                                                                                                                            ",
+    /* 3*/ "                                                                                                                                                                                                            ",
+    /* 4*/ "                                                                                                                                                                                                            ",
+    /* 5*/ "                                                                                                                                                                                                            ",
+    /* 6*/ "                                                                                                                                                                                                            ",
+    /* 7*/ "                                                                                                                                                                                                            ",
+    /* 8*/ "                                                                                                                                                                                                            ",
+    /* 9*/ "                                                                                                                                                                                                            ",
+    /*10*/ "                                                                                                                                                                                                            ",
+    /*11*/ "                              ?B?                    oo   ?B?ooo                                  ######      ?B? oooooo        ?                        ooooo#####       ?B?         ?                     ",
+    /*12*/ "                             oo                     ####   ######                    ########      ooooo         ########                         oooooo########                oooo                        ",
+    /*13*/ "                            ####                                                             ############                                        ########                      ######                       ",
+    /*14*/ "                            P        J G                 P         J            G        J   J                 J     P                  J                   J                  P                        F   ",
+    /*15*/ "#####################   #########################   ######################    ########################   #################   ###################    ##################    ##################################",
+    /*16*/ "#####################   #########################   ######################    ########################   #################   ###################    ##################    ##################################"
+    ]
+  },
+  {
+    id: "1-6",
+    name: "FUNDICIÓN DE ACERO",
+    start: { tx: 2, ty: 12 },
+    rain: 0.5,
+    storm: true,
+    rows: [
+    /* 0*/ "                                                                                                                                                                                                                        ",
+    /* 1*/ "                                                                                                                                                                                                                        ",
+    /* 2*/ "                                                                                                                                                                                                                        ",
+    /* 3*/ "                                                                                                                                                                                                                        ",
+    /* 4*/ "                                                                                                                                                                                                                        ",
+    /* 5*/ "                                                                                                                                                                                                                        ",
+    /* 6*/ "                                                                                                                                                                                                                        ",
+    /* 7*/ "                                                                                                                                                                                                                        ",
+    /* 8*/ "                                                                                                  D                                                                                           D                         ",
+    /* 9*/ "                                                   oo                                                                                                        oooooo          oooooo             D                       ",
+    /*10*/ "                                                  ####              D               ####                                        oo                    ooooo ########        #oooooo#          D                         ",
+    /*11*/ "                   ?      ?B?            ?B?                       ?B?? oooooo                         ########                ####?                 #######   ?      ##### ########                                    ",
+    /*12*/ "                                                                 ##############     oooo        oooooo                 ooo                    oooooo                                                                    ",
+    /*13*/ "                                                                                   ######      ########               #####                  ########                           #####                                   ",
+    /*14*/ "                            J                  P     P    G           G    P                    J                J                   P       P                P      J             J               J                F   ",
+    /*15*/ "###############    ###############   ######################   ##################   ###################    ##################     #################    ####################   ###########################################",
+    /*16*/ "###############    ###############   ######################   ##################   ###################    ##################     #################    ####################   ###########################################"
+    ]
+  },
+  {
+    id: "1-7",
+    name: "EL PUENTE DE GOTHAM",
+    start: { tx: 2, ty: 12 },
+    rain: 0.95,
+    storm: true,
+    rows: [
+    /* 0*/ "                                                                                                                                                                                                                                    ",
+    /* 1*/ "                                                                                                                                                                                                                                    ",
+    /* 2*/ "                                                                                                                                                                                                                                    ",
+    /* 3*/ "                                                                                                                                                                                                                                    ",
+    /* 4*/ "                                                                                                                                                                                                                                    ",
+    /* 5*/ "                                                                                                                                                                                                                                    ",
+    /* 6*/ "                                                                                                                                                                                                                                    ",
+    /* 7*/ "                                                                                                                                                                                                                                    ",
+    /* 8*/ "                                                                                                  D   oooooo      ooo                                                        D                                                      ",
+    /* 9*/ "                                                D                        ooo   D                     #################                                                     oooo         oooooo          ooooo                       ",
+    /*10*/ "                           D                                         ooooo###                                                                             oooooD          ######       ########        #######                      ",
+    /*11*/ "                                ooooo   #####  ?B? ?               ?B?#####                  ####                          ?   ooooo        ?B?          #######                                ?B?? ?                              ",
+    /*12*/ "                               #######                                               ####                     ooo          ##########                                           ooo                          ######                 ",
+    /*13*/ "                                                                                                             #####                                                             #####                                                ",
+    /*14*/ "                      GP  G                 J                                  J                  J             J                  P    J                J                      P                    P   J   J                  F   ",
+    /*15*/ "##############    ###############    ###############    ############    ##############    #############     ##############     #################    ################     ################     ######################################",
+    /*16*/ "##############    ###############    ###############    ############    ##############    #############     ##############     #################    ################     ################     ######################################"
+    ]
+  },
+  {
+    id: "1-8",
+    name: "CARNAVAL DE ARKHAM",
+    start: { tx: 2, ty: 11 },
+    rain: 1,
+    storm: true,
+    boss: "joker",
+    rows: [
+    /* 0*/ "                              ",
+    /* 1*/ "                              ",
+    /* 2*/ "                              ",
+    /* 3*/ "                              ",
+    /* 4*/ "                              ",
+    /* 5*/ "                              ",
+    /* 6*/ "                              ",
+    /* 7*/ "                              ",
+    /* 8*/ "#    ?                  ?    #",
+    /* 9*/ "#                            #",
+    /*10*/ "#           #######          #",
+    /*11*/ "#                            #",
+    /*12*/ "# #######            ####### #",
+    /*13*/ "#                            #",
+    /*14*/ "#                            #",
+    /*15*/ "##############################",
+    /*16*/ "##############################"
     ]
   }
 ];
@@ -7026,6 +7807,444 @@ PostFX.grade = function (prm, lvl) {
 };
 
 
+// ═══ BOSSENGINE ═══════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+//  BOSS ENGINE — fight logic for the two arena levels.
+//
+//  Both fights are built on the same contract: the boss is invulnerable while
+//  it is doing something, telegraphs clearly before the dangerous move, and
+//  opens a punish window the player has to earn. Hazards are separate
+//  entities so they keep hurting after the boss has moved on.
+//
+//  Arenas are exactly 30 columns, so the camera never scrolls and the whole
+//  fight is always on screen. Ground surface sits at row 15.
+// ═══════════════════════════════════════════════════════════════════════
+
+const BE_GROUND = 15 * 32;          // y of the walkable floor surface
+const BE_LEFT = 32, BE_RIGHT = 928; // inside the arena walls
+
+function BE_clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+
+// ── hazards ────────────────────────────────────────────────────────────
+class BossProjectile {
+  constructor(x, y, vx, vy, kind) {
+    const s = kind === 'bomb' ? 26 : 20;
+    this.rect = new Rect(x - s / 2, y - s / 2, s, s);
+    this.vx = vx; this.vy = vy;
+    this.kind = kind;                 // 'bomb' | 'card'
+    this.alive = true;
+    this.anim = 0;
+    this.fuse = 0;
+    this.blast = 0;                   // >0 while the explosion is dangerous
+  }
+  update(dt) {
+    this.anim += dt;
+    if (this.blast > 0) {
+      this.blast -= dt;
+      if (this.blast <= 0) this.alive = false;
+      return;
+    }
+    this.vy += (this.kind === 'bomb' ? 900 : 520) * dt;
+    this.rect.x += this.vx * dt;
+    this.rect.y += this.vy * dt;
+    if (this.kind === 'bomb') {
+      this.fuse = BE_clamp(this.anim / 1.4, 0, 1);
+      if (this.rect.b >= BE_GROUND) { this.detonate(); return; }
+    }
+    if (this.rect.y > CH + 60 || this.rect.r < -60 || this.rect.x > CW + 60) this.alive = false;
+  }
+  detonate() {
+    this.blast = 0.34;
+    this.rect.x = this.rect.cx - 34;
+    this.rect.y = BE_GROUND - 44;
+    this.rect.w = 68; this.rect.h = 44;
+    this.vx = 0; this.vy = 0;
+    AUDIO.brk();
+  }
+}
+
+// A ridge that races along the floor. The whole point is that it is jumpable,
+// so it is kept low and its speed is well under a running jump's reach.
+class Shockwave {
+  constructor(x, dir, speed) {
+    this.rect = new Rect(x - 20, BE_GROUND - 42, 40, 42);
+    this.dir = dir;
+    this.speed = speed || 280;
+    this.alive = true;
+    this.anim = 0;
+  }
+  update(dt) {
+    this.anim += dt;
+    this.rect.x += this.dir * this.speed * dt;
+    if (this.rect.r < -40 || this.rect.x > CW + 40) this.alive = false;
+  }
+}
+
+// ── boss ───────────────────────────────────────────────────────────────
+class Boss {
+  constructor(kind) {
+    this.kind = kind;
+    this.maxHp = kind === 'penguin' ? 3 : 5;
+    this.hp = this.maxHp;
+    this.phase = 1;
+    this.anim = 0;
+    this.t = 0;
+    this.state = 'intro';
+    this.introT = 0;
+    this.face = -1;
+    this.hurtFlash = 0;
+    this.defeated = false;
+    this.deadT = 0;
+    this.proj = [];
+    this.waves = [];
+    this.minions = [];
+    this.gasY = CH + 40;        // joker phase 2: gas surface, high value = low gas
+    this.gasTarget = CH + 40;
+    this.bombT = 0;
+    this.cardT = 0;
+    this.tpIndex = 0;
+    this.name = kind === 'penguin' ? 'EL PINGÜINO' : 'EL JOKER';
+    this.subtitle = kind === 'penguin' ? 'MUELLE HELADO' : 'CARNAVAL DE ARKHAM';
+
+    if (kind === 'penguin') {
+      this.rect = new Rect(CW / 2 - 48, 120, 96, 110);
+    } else {
+      this.rect = new Rect(CW / 2 - 60, 150, 120, 140);
+    }
+    // platforms the Joker teleports between, in arena coords
+    this.spots = [[150, 384], [CW / 2, 320], [CW - 150, 384]];
+  }
+
+  get vulnerable() {
+    if (this.defeated) return false;
+    if (this.kind === 'penguin') return this.state === 'dazed';
+    return this.state === 'taunt' || this.state === 'arrive' || this.state === 'throw';
+  }
+  // contact only hurts while the boss is actually threatening
+  get contactHurts() {
+    return !this.defeated && !this.vulnerable && this.state !== 'intro' && this.state !== 'hurt';
+  }
+
+  setState(s) { this.state = s; this.t = 0; }
+
+  hit(game) {
+    if (this.defeated) return;
+    this.hp--;
+    this.hurtFlash = 1;
+    AUDIO.stomp();
+    game.shake.trigger(8, 0.3);
+    game.fx.spawnStomp(this.rect.cx, this.rect.cy);
+    game.award(500, this.rect.cx, this.rect.y);
+    if (this.hp <= 0) {
+      this.defeated = true;
+      this.setState('dead');
+      this.proj.length = 0;
+      this.waves.length = 0;
+      this.gasTarget = CH + 40;
+      AUDIO.clear();
+      game.shake.trigger(12, 0.6);
+      return;
+    }
+    // phase thresholds
+    if (this.kind === 'penguin') {
+      this.phase = this.hp === 2 ? 2 : 3;
+    } else {
+      this.phase = this.hp > 3 ? 1 : (this.hp > 1 ? 2 : 3);
+    }
+    this.setState('hurt');
+  }
+
+  update(dt, game) {
+    this.anim += dt;
+    this.t += dt;
+    if (this.hurtFlash > 0) this.hurtFlash = Math.max(0, this.hurtFlash - dt * 3);
+
+    // hazards keep living independently of the boss
+    for (const p of this.proj) p.update(dt);
+    for (const wv of this.waves) wv.update(dt);
+    this.proj = this.proj.filter(p => p.alive);
+    this.waves = this.waves.filter(w => w.alive);
+
+    // gas eases toward its target so phase changes are not instant
+    this.gasY = CO_lerp(this.gasY, this.gasTarget, 1 - Math.pow(0.25, dt));
+
+    if (this.state === 'intro') {
+      this.introT += dt;
+      if (this.introT > 2.4) this.setState(this.kind === 'penguin' ? 'hover' : 'ride');
+      return;
+    }
+    if (this.defeated) {
+      this.deadT += dt;
+      this.rect.y = Math.min(BE_GROUND - this.rect.h + 10, this.rect.y + 260 * dt);
+      return;
+    }
+
+    const p = game.player;
+    if (p) this.face = p.rect.cx < this.rect.cx ? -1 : 1;
+
+    if (this.kind === 'penguin') this.updatePenguin(dt, game, p);
+    else this.updateJoker(dt, game, p);
+
+    this.collide(game, p);
+  }
+
+  // ── EL PINGÜINO ──────────────────────────────────────────────────────
+  updatePenguin(dt, game, p) {
+    const hoverY = 110;
+    switch (this.state) {
+      case 'hover': {
+        // drift toward the player, but slowly enough to be outrun
+        const target = p ? BE_clamp(p.rect.cx - this.rect.w / 2, BE_LEFT, BE_RIGHT - this.rect.w) : this.rect.x;
+        this.rect.x = CO_approach(this.rect.x, target, 72 * dt);
+        this.rect.y = hoverY + Math.sin(this.anim * 2.2) * 10;
+        this.bombT -= dt;
+        const maxBombs = this.phase === 1 ? 2 : 3;
+        if (this.bombT <= 0 && this.proj.length < maxBombs) {
+          this.proj.push(new BossProjectile(this.rect.cx, this.rect.b - 10, this.face * 40, 40, 'bomb'));
+          this.bombT = 0.75;
+        }
+        const hoverLen = 2.6 - (this.phase - 1) * 0.35;
+        if (this.t > hoverLen) this.setState('telegraph');
+        break;
+      }
+      case 'telegraph': {
+        // rise and flash: the player gets 0.8s to clear the centre
+        this.rect.y = hoverY - 22 * Math.min(1, this.t / 0.45) + Math.sin(this.anim * 26) * 2;
+        if (this.t > 0.8) { this.setState('slam'); AUDIO.jump(); }
+        break;
+      }
+      case 'slam': {
+        this.rect.y += 1500 * dt;
+        if (this.rect.b >= BE_GROUND + 12) {
+          this.rect.y = BE_GROUND + 12 - this.rect.h;
+          this.setState('dazed');
+          game.shake.trigger(11, 0.4);
+          AUDIO.brk();
+          this.waves.push(new Shockwave(this.rect.cx - 24, -1, 280));
+          this.waves.push(new Shockwave(this.rect.cx + 24, 1, 280));
+          if (this.phase === 3) {
+            this.waves.push(new Shockwave(this.rect.cx - 24, -1, 190));
+            this.waves.push(new Shockwave(this.rect.cx + 24, 1, 190));
+          }
+          game.fx.spawnBlockBreak(this.rect.cx, BE_GROUND);
+        }
+        break;
+      }
+      case 'dazed': {
+        if (this.t > 2.2) this.setState('recover');
+        break;
+      }
+      case 'hurt': {
+        this.rect.y -= 180 * dt;
+        if (this.t > 0.55) this.setState('recover');
+        break;
+      }
+      case 'recover': {
+        this.rect.y = CO_approach(this.rect.y, hoverY, 420 * dt);
+        if (Math.abs(this.rect.y - hoverY) < 4) {
+          // phase 3 mixes in a ground-level charge the player must jump
+          if (this.phase === 3 && (Math.floor(this.anim) % 2 === 0)) this.setState('charge');
+          else this.setState('hover');
+        }
+        break;
+      }
+      case 'charge': {
+        if (this.t < 0.6) {
+          this.rect.y = CO_approach(this.rect.y, BE_GROUND - this.rect.h, 700 * dt);
+        } else {
+          this.rect.x += this.face * 430 * dt;
+          if (this.rect.x < BE_LEFT || this.rect.r > BE_RIGHT) {
+            this.rect.x = BE_clamp(this.rect.x, BE_LEFT, BE_RIGHT - this.rect.w);
+            this.setState('recover');
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  // ── EL JOKER ─────────────────────────────────────────────────────────
+  updateJoker(dt, game, p) {
+    if (this.phase === 1) {
+      this.rect.w = 120; this.rect.h = 140;
+      this.gasTarget = CH + 40;
+      switch (this.state) {
+        case 'ride': {
+          const target = p ? BE_clamp(p.rect.cx - this.rect.w / 2, BE_LEFT, BE_RIGHT - this.rect.w) : this.rect.x;
+          this.rect.x = CO_approach(this.rect.x, target, 56 * dt);
+          this.rect.y = 150 + Math.sin(this.anim * 1.6) * 16;
+          this.cardT -= dt;
+          if (this.cardT <= 0) {
+            this.throwCards(3, 1);
+            this.cardT = 1.7;
+          }
+          if (this.t > 3.4) { this.setState('taunt'); AUDIO.hurt(); }
+          break;
+        }
+        case 'taunt': {
+          // dips low enough to stomp from a platform, then climbs away
+          const dip = 330;
+          if (this.t < 1.6) this.rect.y = CO_approach(this.rect.y, dip, 300 * dt);
+          else this.rect.y = CO_approach(this.rect.y, 150, 300 * dt);
+          if (this.t > 2.6) this.setState('ride');
+          break;
+        }
+        case 'hurt': {
+          if (this.t > 0.6) this.setState('ride');
+          break;
+        }
+      }
+      return;
+    }
+
+    // phases 2 and 3: on foot
+    this.rect.w = 72; this.rect.h = 96;
+    if (this.phase === 2) {
+      this.gasTarget = 460;             // floods the floor: platforms only
+      switch (this.state) {
+        case 'ride': case 'hurt': {
+          if (this.t > 0.6) this.setState('teleport');
+          break;
+        }
+        case 'teleport': {
+          if (this.t > 0.5) {
+            this.tpIndex = (this.tpIndex + 1 + (p && p.rect.cx > CW / 2 ? 1 : 0)) % this.spots.length;
+            const s = this.spots[this.tpIndex];
+            this.rect.x = s[0] - this.rect.w / 2;
+            this.rect.y = s[1] - this.rect.h;
+            this.setState('arrive');
+            AUDIO.coin();
+          }
+          break;
+        }
+        case 'arrive': {
+          if (this.t > 0.9) { this.throwCards(4, 1.15); this.setState('throw'); }
+          break;
+        }
+        case 'throw': {
+          if (this.t > 1.1) this.setState('teleport');
+          break;
+        }
+        default: this.setState('teleport');
+      }
+      return;
+    }
+
+    // phase 3: gas drains, he holds the centre and floods the screen with cards
+    this.gasTarget = CH + 40;
+    switch (this.state) {
+      case 'hurt': {
+        if (this.t > 0.6) this.setState('ground');
+        break;
+      }
+      case 'ground': {
+        this.rect.x = CO_approach(this.rect.x, CW / 2 - this.rect.w / 2, 160 * dt);
+        this.rect.y = CO_approach(this.rect.y, BE_GROUND - this.rect.h, 500 * dt);
+        if (this.t > 1.0) this.setState('throw');
+        break;
+      }
+      case 'throw': {
+        if (this.t < 0.05) {
+          this.throwCards(5, 1.3);
+          if (game.enemies.length < 4) {
+            const side = this.rect.cx > CW / 2 ? 2 : CW / TILE - 3;
+            game.enemies.push(new Enemy(Math.round(side), 14, 'joker'));
+          }
+        }
+        if (this.t > 1.3) this.setState('ground');
+        break;
+      }
+      default: this.setState('ground');
+    }
+  }
+
+  throwCards(n, spread) {
+    for (let i = 0; i < n; i++) {
+      const a = -0.9 + (i / Math.max(1, n - 1)) * 0.9 * spread;
+      const sp = 300;
+      this.proj.push(new BossProjectile(
+        this.rect.cx, this.rect.cy,
+        Math.cos(a) * sp * this.face, Math.sin(a) * sp - 40, 'card'));
+    }
+    AUDIO.kick();
+  }
+
+  // ── interactions ─────────────────────────────────────────────────────
+  collide(game, p) {
+    if (!p || p.dead) return;
+
+    // stomping the boss
+    if (this.vulnerable && p.rect.hits(this.rect)) {
+      const prevB = p.rect.b - p.vy * game.lastDt;
+      if (p.vy > 0 && prevB <= this.rect.y + 18) {
+        p.vy = JUMP * 0.8;
+        this.hit(game);
+        return;
+      }
+    }
+    if (this.contactHurts && p.rect.hits(this.rect)) p.hurt(game);
+
+    // hazards
+    for (const pr of this.proj) {
+      if (!pr.alive) continue;
+      if (pr.kind === 'bomb' && pr.blast <= 0) continue;   // only the blast hurts
+      if (p.rect.hits(pr.rect)) { p.hurt(game); if (pr.kind === 'card') pr.alive = false; }
+    }
+    for (const wv of this.waves) {
+      if (wv.alive && p.rect.hits(wv.rect)) p.hurt(game);
+    }
+    // laughing gas
+    if (this.gasY < CH && p.rect.b > this.gasY + 6) p.hurt(game);
+  }
+
+  draw(ctx, t) {
+    const o = {
+      state: this.state === 'recover' || this.state === 'charge' ? 'hover' : this.state,
+      animTime: this.anim, facingRight: this.face > 0,
+      phase: this.phase, hurtFlash: this.hurtFlash,
+    };
+    if (this.kind === 'joker' && this.state === 'ride' && this.phase > 1) o.state = 'ground';
+    if (this.defeated) o.state = 'dead';
+
+    for (const wv of this.waves) drawShockwave(ctx, wv.rect.cx, BE_GROUND, wv.rect.w, wv.rect.h, wv.anim, 1);
+    for (const pr of this.proj) {
+      if (pr.kind === 'bomb') {
+        if (pr.blast > 0) {
+          game_blast(ctx, pr.rect, pr.blast);
+        } else {
+          drawUmbrellaBomb(ctx, pr.rect.cx, pr.rect.cy, pr.rect.w / 2, pr.anim * 2, pr.fuse);
+        }
+      } else {
+        drawCardProjectile(ctx, pr.rect.cx, pr.rect.cy, pr.rect.w / 2, pr.anim * 9);
+      }
+    }
+    if (this.kind === 'penguin') drawPenguinBoss(ctx, this.rect.x, this.rect.y, this.rect.w, this.rect.h, o);
+    else drawJokerBoss(ctx, this.rect.x, this.rect.y, this.rect.w, this.rect.h, o);
+
+    if (this.gasY < CH) drawGasCloud(ctx, 0, this.gasY, CW, CH - this.gasY + 10, t);
+  }
+}
+
+// small shared explosion flash, kept here so bosses.js stays pure art
+function game_blast(ctx, r, life) {
+  ctx.save();
+  const a = BE_clamp(life / 0.34, 0, 1);
+  ctx.globalAlpha = a;
+  ctx.globalCompositeOperation = 'lighter';
+  const g = ctx.createRadialGradient(r.cx, r.cy, 2, r.cx, r.cy, r.w * 0.75);
+  g.addColorStop(0, 'rgba(255,240,190,0.95)');
+  g.addColorStop(0.45, 'rgba(255,150,40,0.55)');
+  g.addColorStop(1, 'rgba(120,30,0,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(r.cx, r.cy, r.w * 0.75, r.h * 0.8, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+
 // ═══ CORE ═══════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════════════
 //  CORE ENGINE — physics, entities, state machine, audio, main loop
@@ -7541,6 +8760,7 @@ class Game {
     this.acc = 0; this.last = 0;
     this.fx2 = null; this.prm = null; this.aberrPulse = 0;
     this.fxCanvas = null; this.perfAcc = 0; this.perfN = 0;
+    this.boss = null; this.lastDt = 1 / 60;
   }
 
   // If the device cannot hold a reasonable frame rate with the post chain on,
@@ -7726,7 +8946,9 @@ class Game {
     // so every stomp, landing and block break drives it without each call site
     // having to remember to.
     const sh = Math.abs(this.shake.x) + Math.abs(this.shake.y);
-    p.aberration = 1.0 + Math.min(2.2, sh * 0.5) + this.bolt.flash * 2.0;
+    // Kept deliberately small. Boss slams shake hard, and at the old gain the
+    // fringing tore the HUD text apart every time one landed.
+    p.aberration = 1.0 + Math.min(0.8, sh * 0.16) + this.bolt.flash * 1.1;
 
     // Light shafts originate at the moon, which parallaxes with the camera.
     // Matches the 0.04 factor environment.js draws it at.
@@ -7757,6 +8979,7 @@ class Game {
         else if (ch === 'o') this.pickups.push(new Pickup(cx * TILE + 3, cy * TILE + 3, 'rang', false));
       }
     }
+    this.boss = lv.boss ? new Boss(lv.boss) : null;
     const wasBig = this.player ? this.player.big : false;
     this.player = new Player(lv.start.tx * TILE, (lv.start.ty + 1) * TILE - 42);
     if (wasBig) this.player.resize(true);
@@ -7793,6 +9016,7 @@ class Game {
   }
 
   update(dt) {
+    this.lastDt = dt;
     this.time += dt; this.stateT += dt;
     this.blinkT += dt; if (this.blinkT > 0.5) { this.blink = !this.blink; this.blinkT = 0; }
     this.bolt.update(dt);
@@ -7835,6 +9059,15 @@ class Game {
     // ══ PLAY ══
     const p = this.player;
     p.update(dt, this.world, this);
+
+    if (this.boss) {
+      this.boss.update(dt, this);
+      if (this.boss.defeated && this.boss.deadT > 2.6) {
+        this.award(5000 + this.lives * 1000, this.boss.rect.cx, this.boss.rect.y);
+        this.state = ST.CLEAR; this.stateT = 0; this.saveBest();
+        return;
+      }
+    }
 
     // block bump decay
     for (let i = 0; i < this.world.cells.length; i++) {
@@ -7896,8 +9129,8 @@ class Game {
     this.pickups = this.pickups.filter(k => k.alive);
     this.enemies = this.enemies.filter(e => e.alive);
 
-    // beacon
-    const bc = this.world.beacon;
+    // beacon (boss arenas have none: the fight is the exit)
+    const bc = this.boss ? null : this.world.beacon;
     if (bc && !bc.reached && p.rect.r > bc.x + 6) {
       bc.reached = true;
       this.award(2000 + this.lives * 500, bc.x, bc.y);
@@ -7950,6 +9183,14 @@ class Game {
         best: this.best, time: t
       });
     }
+    if (this.boss && this.state === ST.PLAY) {
+      const b = this.boss;
+      drawBossHealthBar(ctx, CW / 2 - 250, 76, 500, 24, {
+        name: b.name, hp: b.hp, maxHp: b.maxHp, phase: b.phase, t: t, flash: b.hurtFlash,
+      });
+      if (b.introT < 2.4) drawBossIntro(ctx, t, b.name, b.subtitle, b.introT / 2.4);
+    }
+
     switch (this.state) {
       case ST.TITLE: drawTitleScreen(ctx, t, this.blink); break;
       case ST.PAUSE: drawPauseOverlay(ctx, t); break;
@@ -8010,6 +9251,8 @@ class Game {
       else if (e.kind === 'penguin') drawPenguinHenchman(ctx, x, y, e.rect.w, e.rect.h, o);
       else drawJokerDrone(ctx, x, y, e.rect.w, e.rect.h, o);
     }
+    if (this.boss) this.boss.draw(ctx, t);
+
     const p = this.player;
     if (p) {
       const blinking = p.iframes > 0 && Math.floor(p.iframes * 12) % 2 === 0;
