@@ -7293,6 +7293,127 @@ function LT_clear(ctx, w, h) {
 }
 
 
+// ═══ ATMOS ═══════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+//  ATMOSPHERE — breath and street steam.
+//
+//  Kept out of fx.js deliberately: those particles are impact feedback and
+//  need to be punchy and short-lived, while these are slow, large and almost
+//  transparent. Mixing the two tuning regimes in one system makes both worse.
+//
+//  Drawn into the 2D scene, so the deferred lighting pass tints them with
+//  whatever light they are drifting through.
+// ═══════════════════════════════════════════════════════════════════════
+
+function AT_hash(n) { const s = Math.sin(n * 91.37 + 7.13) * 43758.5453; return s - Math.floor(s); }
+
+class Atmosphere {
+  constructor() {
+    this.p = [];
+    this.breathT = 0;
+    this.ventT = 0;
+    this.max = 180;
+  }
+  clear() { this.p.length = 0; this.breathT = 0; this.ventT = 0; }
+
+  emit(x, y, kind, seed) {
+    if (this.p.length >= this.max) return;
+    const warm = kind === 'steam';
+    this.p.push({
+      x: x, y: y, kind: kind, seed: seed,
+      vx: (AT_hash(seed) - 0.5) * (warm ? 14 : 26),
+      vy: warm ? -14 - AT_hash(seed + 3) * 12 : -20 - AT_hash(seed + 3) * 16,
+      r: warm ? 9 + AT_hash(seed + 7) * 12 : 2.5 + AT_hash(seed + 7) * 2.5,
+      grow: warm ? 16 : 9,
+      life: warm ? 2.6 + AT_hash(seed + 11) * 1.6 : 0.85 + AT_hash(seed + 11) * 0.4,
+      age: 0,
+    });
+  }
+
+  update(dt, game) {
+    for (const q of this.p) {
+      q.age += dt;
+      q.vy += (q.kind === 'steam' ? -5 : -8) * dt;   // buoyancy
+      q.vx *= 1 - 0.9 * dt;                          // drag
+      q.x += q.vx * dt;
+      q.y += q.vy * dt;
+      q.r += q.grow * dt;
+    }
+    this.p = this.p.filter(q => q.age < q.life);
+    if (!game.world || !game.player) return;
+
+    // ── breath: only when he is standing still in the cold ──
+    const pl = game.player;
+    if (!pl.dead && pl.onGround && Math.abs(pl.vx) < 45) {
+      this.breathT -= dt;
+      if (this.breathT <= 0) {
+        this.breathT = 1.5 + AT_hash(Math.floor(game.time * 3)) * 0.9;
+        const n = 3;
+        for (let i = 0; i < n; i++) {
+          this.emit(pl.rect.cx + pl.face * (pl.rect.w * 0.45 + i * 4),
+            pl.rect.y + 12 + i, 'breath', Math.floor(game.time * 60) + i * 13);
+        }
+      }
+    } else this.breathT = Math.min(this.breathT, 0.5);
+
+    // ── street vents: a sparse hashed set of ground columns ──
+    this.ventT -= dt;
+    if (this.ventT <= 0) {
+      this.ventT = 0.55;
+      const w = game.world, camX = game.cam ? game.cam.x : 0;
+      const c0 = Math.max(0, Math.floor(camX / TILE) - 1);
+      const c1 = Math.min(w.w - 1, Math.floor((camX + CW) / TILE) + 1);
+      for (let cx = c0; cx <= c1; cx++) {
+        if (AT_hash(cx * 3.1 + 0.5) > 0.075) continue;      // ~7% of columns
+        // Street level only. Scanning from the top found the first solid cell
+        // in the column, which meant vents happily sprouted from the roof of a
+        // floating '?' block instead of from the pavement.
+        let row = -1;
+        for (let cy = 14; cy < w.h; cy++) {
+          const c = w.cells[cy * w.w + cx];
+          if (c && c.alive && c.solid) { row = cy; break; }
+        }
+        if (row < 0) continue;
+        const above = w.cells[(row - 1) * w.w + cx];
+        if (above && above.alive && above.solid) continue;
+        this.emit(cx * TILE + TILE / 2 + (AT_hash(cx) - 0.5) * 10,
+          row * TILE - 2, 'steam', cx * 7 + Math.floor(game.time * 2));
+      }
+    }
+  }
+
+  draw(ctx, camX) {
+    if (!this.p.length) return;
+    ctx.save();
+    for (const q of this.p) {
+      const x = q.x - camX;
+      if (x < -60 || x > CW + 60) continue;
+      const k = q.age / q.life;
+      // fade in fast, out slow, so nothing pops into existence
+      const a = Math.min(1, k * 6) * (1 - k) * (q.kind === 'steam' ? 0.16 : 0.30);
+      if (a <= 0.004) continue;
+      const g = ctx.createRadialGradient(x, q.y, 0, x, q.y, Math.max(1, q.r));
+      if (q.kind === 'steam') {
+        g.addColorStop(0, 'rgba(206,214,232,' + a + ')');
+        g.addColorStop(0.55, 'rgba(150,162,190,' + (a * 0.5) + ')');
+        g.addColorStop(1, 'rgba(120,130,160,0)');
+      } else {
+        g.addColorStop(0, 'rgba(226,238,255,' + a + ')');
+        g.addColorStop(0.6, 'rgba(180,200,235,' + (a * 0.45) + ')');
+        g.addColorStop(1, 'rgba(160,180,220,0)');
+      }
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      // squashed slightly: rising vapour spreads wider than it is tall
+      ctx.ellipse(x, q.y, q.r, q.r * 0.82, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+}
+
+
 // ═══ POSTFX ═══════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════════════
 //  POST-PROCESSING — WebGL2 pipeline run over the 2D scene each frame.
@@ -7497,7 +7618,10 @@ var PFX_WET = PFX_HEAD + [
   'uniform float uStrength;',
   'uniform float uFade;',
   'uniform float uSquash;',
+  'uniform float uRipple;',
   'uniform vec3  uTint;',
+  'float PFX_h1(float n){ return fract(sin(n * 17.17) * 43758.5453); }',
+  '',
   'void main(){',
   '  vec3 base = texture(uLit, vUV).rgb;',
   '  vec4 w = texture(uWet, vUV);',
@@ -7512,11 +7636,37 @@ var PFX_WET = PFX_HEAD + [
   // deep - about 34px - so it reflected almost nothing. Compressing it
   // pulls the windows, the moon and the player down into the puddle, which
   // is what actually reads as a wet street in a side-on view.
-  '  vec2 ruv = vec2(vUV.x + rip, surfV + d * uSquash);',
+  // Rain rings. Each slot along x owns a drop on its own period; the ring
+  // radius grows and fades, warping the mirror and leaving a bright crest.
+  // The vertical term is squashed hard because the floor is seen edge-on, so
+  // the rings read as ellipses rather than circles.
+  '  float ripAmp = 0.0;',
+  '  float ripPush = 0.0;',
+  '  if (uRipple > 0.001) {',
+  '    for (int i = 0; i < 4; i++) {',
+  '      float slot = floor(vUV.x * 9.0) + float(i - 1);',
+  '      float h1 = PFX_h1(slot + 3.7);',
+  '      float h2 = PFX_h1(slot + 11.3);',
+  '      float cu = (slot + h1) / 9.0;',
+  '      float ph = fract(uTime / (1.1 + h2 * 1.4) + h2);',
+  '      float rad = ph * 0.058;',
+  '      float du = vUV.x - cu;',
+  '      float dv = d * 3.2;',
+  '      float dist = sqrt(du * du + dv * dv);',
+  '      float ring = exp(-abs(dist - rad) * 250.0) * (1.0 - ph);',
+  '      ripAmp += ring;',
+  '      ripPush += (du > 0.0 ? 1.0 : -1.0) * ring;',
+  '    }',
+  '    ripAmp *= uRipple;',
+  '    ripPush *= uRipple;',
+  '  }',
+  '  vec2 ruv = vec2(vUV.x + rip + ripPush * 0.006, surfV + d * uSquash);',
   '  vec3 refl = texture(uLit, ruv).rgb;',
   '  float fade = exp(-d * uFade);',
   '  float amt = clamp(w.r * uStrength * fade, 0.0, 0.9);',
-  '  oColor = vec4(mix(base, refl * uTint, amt), 1.0);',
+  '  vec3 outc = mix(base, refl * uTint, amt);',
+  '  outc += vec3(0.55, 0.68, 0.9) * clamp(ripAmp, 0.0, 1.6) * 0.30 * fade;',
+  '  oColor = vec4(outc, 1.0);',
   '}'
 ].join('\n');
 
@@ -7839,6 +7989,7 @@ function PostFX(canvas) {
       gl.uniform1f(wp.u.uStrength, prm.wet);
       gl.uniform1f(wp.u.uFade, prm.wetFade);
       gl.uniform1f(wp.u.uSquash, prm.wetSquash);
+      gl.uniform1f(wp.u.uRipple, prm.ripple);
       gl.uniform3fv(wp.u.uTint, prm.wetTint);
       blit(wp, self.wet);
       srcTex = self.wet.tex;
@@ -7945,7 +8096,7 @@ PostFX.defaults = function () {
     sunShadow: 0.85, sunLen: 0.13,
     // rain-slicked stone: mirror strength, how fast it fades with depth,
     // and a cool tint because the reflection is of a night sky
-    wet: 0.5, wetFade: 17.0, wetSquash: 3.6,
+    wet: 0.5, wetFade: 17.0, wetSquash: 3.6, ripple: 1.0,
     wetTint: new Float32Array([0.78, 0.86, 1.05]),
     // moon shafts: centre tracks the moon, updated per frame by the game
     rays: 0.34, rayX: 0.70, rayY: 0.86, rayDensity: 0.62, rayWeight: 0.055, rayDecay: 0.93,
@@ -8930,6 +9081,7 @@ class Game {
     this.score = 0; this.lives = 3; this.rangs = 0; this.lvIdx = 0;
     this.best = this.loadBest();
     this.fx = new ParticleSystem();
+    this.atmos = new Atmosphere();
     this.rain = new RainSystem();
     this.bolt = new Lightning();
     this.shake = new ScreenShake();
@@ -9169,6 +9321,7 @@ class Game {
     p.rays = 0.34 + fl * 0.55;
     const rainAmt = this.world && this.world.level ? (this.world.level.rain || 0.6) : 0.6;
     p.wet = 0.36 + 0.40 * rainAmt;
+    p.ripple = rainAmt;              // no rain, no rings
     if (this.state === ST.DEAD) { p.vignette = 1.5; p.saturation = 0.45; }
     else if (this.state === ST.TITLE) { p.vignette = 1.0; p.bloom += 0.14; }
     else p.vignette = 0.85;
@@ -9182,6 +9335,7 @@ class Game {
     this.world = new World(lv);
     this.enemies = []; this.pickups = [];
     this.fx.clear();
+    if (this.atmos) this.atmos.clear();
     for (let cy = 0; cy < this.world.h; cy++) {
       const row = this.world.rows[cy];
       for (let cx = 0; cx < this.world.w; cx++) {
@@ -9236,6 +9390,7 @@ class Game {
     this.rain.update(dt, 0.35);
     this.shake.update(dt);
     this.fx.update(dt);
+    if (this.state === ST.PLAY) this.atmos.update(dt, this);
 
     if (IN.mutePress) { IN.mutePress = false; AUDIO.toggleMute(); }
 
@@ -9365,6 +9520,10 @@ class Game {
 
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     drawGothamSky(ctx, camX, t, lightning);
+    // NOTE: a ctx.filter blur here for depth-of-field was tried and reverted.
+    // Blurring a full-screen vector skyline every frame forces a separate
+    // compositing layer and measured 26fps -> 1fps. The atmospheric scrim
+    // below already separates the backdrop from the playfield at no cost.
     drawGothamSkyline(ctx, camX, t, lightning);
     if (lightning > 0.25) this.bolt.drawBolt(ctx, t);
     drawCityFog(ctx, camX, t);
@@ -9465,6 +9624,8 @@ class Game {
       else if (e.kind === 'penguin') drawPenguinHenchman(ctx, x, y, e.rect.w, e.rect.h, o);
       else drawJokerDrone(ctx, x, y, e.rect.w, e.rect.h, o);
     }
+    this.atmos.draw(ctx, camX);
+
     if (this.boss) this.boss.draw(ctx, t);
 
     const p = this.player;
