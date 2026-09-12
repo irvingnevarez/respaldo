@@ -92,14 +92,14 @@ body{
   -webkit-tap-highlight-color:transparent;
   touch-action:manipulation;user-select:none;-webkit-user-select:none;
   font-family:Oswald,sans-serif;font-weight:600;letter-spacing:.06em;
-  width:62px;height:62px;border-radius:50%;
+  width:74px;height:74px;border-radius:50%;
   border:1.5px solid rgba(245,197,24,.55);
   background:rgba(14,14,30,.9);
   color:var(--gold);font-size:20px;line-height:1;
   display:grid;place-items:center;
   flex:none;
 }
-.pbtn.big{width:78px;height:78px;font-size:12px;background:rgba(44,26,8,.95);border-color:var(--gold)}
+.pbtn.big{width:104px;height:104px;font-size:15px;background:rgba(44,26,8,.95);border-color:var(--gold)}
 .pbtn.small{font-size:10px}
 .pbtn.tiny{width:42px;height:42px;font-size:14px;border-color:rgba(245,197,24,.35);color:var(--muted)}
 .pbtn:active{background:rgba(245,197,24,.3);transform:scale(.94)}
@@ -117,8 +117,8 @@ body{
   body{padding-left:10px;padding-right:10px}
   #pad{gap:6px}
   .pad-g{gap:7px}
-  .pbtn{width:54px;height:54px;font-size:17px}
-  .pbtn.big{width:66px;height:66px;font-size:11px}
+  .pbtn{width:64px;height:64px;font-size:19px}
+  .pbtn.big{width:88px;height:88px;font-size:13px}
   .pbtn.small{width:54px;font-size:9px}
   .pbtn.tiny{width:36px;height:36px;font-size:12px}
 }
@@ -126,8 +126,12 @@ body{
 /* short landscape: size the stage from the HEIGHT so the pad stays on screen */
 @media (max-height:560px) and (orientation:landscape){
   body{padding-block:8px;gap:8px}
-  #stage{height:calc(100dvh - 104px);width:auto;max-width:100%}
+  #stage{height:calc(100dvh - 116px);width:auto;max-width:100%}
   #pad{width:auto}
+  /* the enlarged jump button does not fit a short landscape window at full size */
+  .pbtn{width:58px;height:58px;font-size:17px}
+  .pbtn.big{width:78px;height:78px;font-size:12px}
+  .pbtn.tiny{width:36px;height:36px;font-size:12px}
 }
 
 :focus-visible{outline:2px solid var(--gold);outline-offset:3px}
@@ -150,7 +154,6 @@ body{
     <button id="bM" class="pbtn tiny" type="button" aria-label="Sonido">&#9834;</button>
   </div>
   <div class="pad-g">
-    <button id="bB" class="pbtn small" type="button" aria-label="Correr">CORRER</button>
     <button id="bA" class="pbtn big" type="button" aria-label="Saltar">SALTO</button>
   </div>
 </div>
@@ -7060,9 +7063,9 @@ const LEVELS = [
     /* 8*/ "                                                                                                                                                                                                            ",
     /* 9*/ "                                                                                                                                                                                                            ",
     /*10*/ "                                                                                                                                                                                                            ",
-    /*11*/ "                              ?B?                    oo   ?B?ooo                                  ######      ?B? oooooo        ?                        ooooo#####       ?B?         ?                     ",
-    /*12*/ "                             oo                     ####   ######                    ########      ooooo         ########                         oooooo########                oooo                        ",
-    /*13*/ "                            ####                                                             ############                                        ########                      ######                       ",
+    /*11*/ "                              ?B?                         ?B?ooo                                              ?B? oooooo        ?                        oooooo           ?B?         ?                     ",
+    /*12*/ "                             oo                      oo    ######                    ########     #ooooo         ########                         oooooo###########             oooo                        ",
+    /*13*/ "                            ####                    ####                                     ############                                        ########                      ######                       ",
     /*14*/ "                            P        J G                 P         J            G        J   J                 J     P                  J                   J                  P                        F   ",
     /*15*/ "#####################   #########################   ######################    ########################   #################   ###################    ##################    ##################################",
     /*16*/ "#####################   #########################   ######################    ########################   #################   ###################    ##################    ##################################"
@@ -7084,12 +7087,12 @@ const LEVELS = [
     /* 6*/ "                                                                                                                                                                                                                        ",
     /* 7*/ "                                                                                                                                                                                                                        ",
     /* 8*/ "                                                                                                  D                                                                                           D                         ",
-    /* 9*/ "                                                   oo                                                                                                        oooooo          oooooo             D                       ",
-    /*10*/ "                                                  ####              D               ####                                        oo                    ooooo ########        #oooooo#          D                         ",
-    /*11*/ "                   ?      ?B?            ?B?                       ?B?? oooooo                         ########                ####?                 #######   ?      ##### ########                                    ",
-    /*12*/ "                                                                 ##############     oooo        oooooo                 ooo                    oooooo                                                                    ",
+    /* 9*/ "                                                                                                                                                                                                                        ",
+    /*10*/ "                                                   oo               D                  D                                                                     oooooo          oooooo           D                         ",
+    /*11*/ "                   ?      ?B?                     ####             ?B?? oooooo      ####                                        oo ?          ?B?     ooooo ########  ##### ########                                    ",
+    /*12*/ "                                                                 ##############     oooo        oooooo ########        ooo     ####           oooooo #######                                                            ",
     /*13*/ "                                                                                   ######      ########               #####                  ########                           #####                                   ",
-    /*14*/ "                            J                  P     P    G           G    P                    J                J                   P       P                P      J             J               J                F   ",
+    /*14*/ "                            J                  P     P    G                P G                  J                J                   P       P                P      J             J               J                F   ",
     /*15*/ "###############    ###############   ######################   ##################   ###################    ##################     #################    ####################   ###########################################",
     /*16*/ "###############    ###############   ######################   ##################   ###################    ##################     #################    ####################   ###########################################"
     ]
@@ -7109,12 +7112,12 @@ const LEVELS = [
     /* 5*/ "                                                                                                                                                                                                                                    ",
     /* 6*/ "                                                                                                                                                                                                                                    ",
     /* 7*/ "                                                                                                                                                                                                                                    ",
-    /* 8*/ "                                                                                                  D   oooooo      ooo                                                        D                                                      ",
-    /* 9*/ "                                                D                        ooo   D                     #################                                                     oooo         oooooo          ooooo                       ",
-    /*10*/ "                           D                                         ooooo###                                                                             oooooD          ######       ########        #######                      ",
-    /*11*/ "                                ooooo   #####  ?B? ?               ?B?#####                  ####                          ?   ooooo        ?B?          #######                                ?B?? ?                              ",
-    /*12*/ "                               #######                                               ####                     ooo          ##########                                           ooo                          ######                 ",
-    /*13*/ "                                                                                                             #####                                                             #####                                                ",
+    /* 8*/ "                                                                                                  D                                                                                                                                 ",
+    /* 9*/ "                                                D                              D                                                                                                                          D                         ",
+    /*10*/ "                           D                                             ooo                          oooooo      ooo                                          D           oooo                         ooooo                       ",
+    /*11*/ "                                               ?B? ?               ?B?oooo###                        #################     ?                ?B?           ooooo           ######        oooooo  ?B?? ? #######                      ",
+    /*12*/ "                                ooooo   #####                       #######          ####    ####             ooo              ooooo                     #######                ooo    ########                                     ",
+    /*13*/ "                               #######                                                                       #####         ##########                                          #####                         ######                 ",
     /*14*/ "                      GP  G                 J                                  J                  J             J                  P    J                J                      P                    P   J   J                  F   ",
     /*15*/ "##############    ###############    ###############    ############    ##############    #############     ##############     #################    ################     ################     ######################################",
     /*16*/ "##############    ###############    ###############    ############    ##############    #############     ##############     #################    ################     ################     ######################################"
@@ -8357,9 +8360,12 @@ function game_blast(ctx, r, life) {
 
 const GRAV = 2000, MAXFALL = 780;
 const WALK = 190, RUN = 310;
-const JUMP = -680, JUMP_CUT = 0.42;
+// -680 peaked at 115.6px, just 3.61 tiles, while levels were being authored
+// with platforms four and five tiles up. -760 reaches 144px (4.5 tiles), which
+// is the genre-normal Mario jump and what the level geometry assumes.
+const JUMP = -760, JUMP_CUT = 0.42;
 const ACCEL_G = 2000, ACCEL_A = 1200, FRICTION = 2600;
-const COYOTE = 0.10, BUFFER = 0.13;
+const COYOTE = 0.13, BUFFER = 0.17;   // forgiveness, especially on touch
 const ENEMY_SPD = 52, SHELL_SPD = 300, DRONE_SPD = 70;
 
 // ── small utils ────────────────────────────────────────────────────────
@@ -9409,17 +9415,29 @@ window.__postfxOn = false;
   function hold(id, on, off){
     var el = document.getElementById(id);
     if(!el) return;
-    var down = function(e){ e.preventDefault(); AUDIO.unlock(); on(); };
-    var up   = function(e){ e.preventDefault(); off(); };
-    el.addEventListener('pointerdown', down);
-    el.addEventListener('pointerup', up);
-    el.addEventListener('pointercancel', up);
-    el.addEventListener('pointerleave', up);
+    el.addEventListener('pointerdown', function(e){
+      e.preventDefault(); AUDIO.unlock();
+      // Capture the pointer: without this a finger that drifts a few pixels off
+      // the button fires pointerleave and silently drops the input, which is
+      // what makes a touch d-pad feel like it keeps letting go mid-run.
+      try { el.setPointerCapture(e.pointerId); } catch(err){}
+      on();
+    });
+    var release = function(e){
+      e.preventDefault();
+      try { el.releasePointerCapture(e.pointerId); } catch(err){}
+      off();
+    };
+    el.addEventListener('pointerup', release);
+    el.addEventListener('pointercancel', release);
     el.addEventListener('contextmenu', function(e){ e.preventDefault(); });
   }
-  hold('bL', function(){ IN.L = true; }, function(){ IN.L = false; });
-  hold('bR', function(){ IN.R = true; }, function(){ IN.R = false; });
-  hold('bB', function(){ IN.run = true; }, function(){ IN.run = false; });
+  // Touch movement always runs: holding a separate CORRER button while also
+  // steering and jumping is one finger too many on a phone.
+  hold('bL', function(){ IN.L = true; IN.run = true; },
+             function(){ IN.L = false; IN.run = IN.R; });
+  hold('bR', function(){ IN.R = true; IN.run = true; },
+             function(){ IN.R = false; IN.run = IN.L; });
   hold('bA',
     function(){ IN.jumpBuf = BUFFER; IN.jumpHeld = true; IN.anyPress = true; },
     function(){ IN.jumpHeld = false; });
