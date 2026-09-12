@@ -7604,6 +7604,24 @@ var PFX_UP = PFX_HEAD + [
   '}'
 ].join('\n');
 
+// ── depth of field merge ────────────────────────────────────────────────
+// The backdrop arrives on its own canvas and is downsampled twice; sampling
+// that small texture with hardware bilinear filtering IS the blur, for the
+// cost of two quarter-res passes. The foreground canvas is transparent
+// everywhere the world does not cover, so its alpha is the composite mask and
+// the playfield, entities and HUD all stay perfectly sharp.
+var PFX_MERGE = PFX_HEAD + [
+  '',
+  'uniform sampler2D uBg;',
+  'uniform sampler2D uFg;',
+  'uniform float uBgDim;',
+  'void main(){',
+  '  vec4 fg = texture(uFg, vUV);',
+  '  vec3 bg = texture(uBg, vUV).rgb * uBgDim;',
+  '  oColor = vec4(mix(bg, fg.rgb, clamp(fg.a, 0.0, 1.0)), 1.0);',
+  '}'
+].join('\n');
+
 // ── wet ground reflections ──────────────────────────────────────────────
 // Screen-space mirror: the wet buffer marks every exposed floor tile and
 // stores, per pixel, the v coordinate of the surface it belongs to. Each
@@ -7701,7 +7719,9 @@ var PFX_COMP = PFX_HEAD + [
   'uniform sampler2D uScene;',
   'uniform sampler2D uBloom;',
   'uniform sampler2D uRays;',
+  'uniform sampler2D uHazeTex;',
   'uniform float uRaysAmt;',
+  'uniform float uHaze;',
   'uniform vec2  uRes;',
   'uniform float uTime;',
   'uniform float uBloomAmt;',
@@ -7734,6 +7754,13 @@ var PFX_COMP = PFX_HEAD + [
   '  float r2 = dot(cen, cen);',
   // gentle barrel distortion, like a real lens
   '  uv = 0.5 + cen * (1.0 + uDistort * r2);',
+  // refraction: rising steam and blast heat bend whatever is behind them
+  '  float haze = texture(uHazeTex, uv).b;',
+  '  if (haze > 0.01) {',
+  '    float n1 = sin(uv.y * 96.0 + uTime * 3.1) * cos(uv.x * 71.0 - uTime * 2.3);',
+  '    float n2 = sin(uv.x * 58.0 + uTime * 1.7);',
+  '    uv += vec2(n1, n2 * 0.55) * haze * uHaze;',
+  '  }',
   '  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) { oColor = vec4(0.0,0.0,0.0,1.0); return; }',
   '',
   // radial chromatic aberration: zero at centre, grows to the edges
@@ -7854,6 +7881,7 @@ function PostFX(canvas) {
     self.progUp = PFX_program(gl, PFX_UP);
     self.progRays = PFX_program(gl, PFX_RAYS);
     self.progWet = PFX_program(gl, PFX_WET);
+    self.progMerge = PFX_program(gl, PFX_MERGE);
     self.progComp = PFX_program(gl, PFX_COMP);
   } catch (e) {
     self.error = e.message;
@@ -7874,9 +7902,11 @@ function PostFX(canvas) {
   self.normalTex = mkTex();
   self.occTex = mkTex();
   self.wetTex = mkTex();
+  self.bgTex = mkTex();
   self.lit = null;
   self.rays = null;
   self.wet = null;
+  self.bgHalf = null; self.bgQuarter = null; self.merged = null;
   self.lpBuf = new Float32Array(PFX_MAXL * 4);
   self.lcBuf = new Float32Array(PFX_MAXL * 4);
   self.mips = [];
@@ -7895,6 +7925,12 @@ function PostFX(canvas) {
       self.mips.push(PFX_target(gl, mw, mh, gl.RGBA16F, gl.HALF_FLOAT));
       mw = Math.max(1, mw >> 1); mh = Math.max(1, mh >> 1);
     }
+    for (const k of ['bgHalf', 'bgQuarter', 'merged']) {
+      if (self[k]) { gl.deleteTexture(self[k].tex); gl.deleteFramebuffer(self[k].fbo); }
+    }
+    self.bgHalf = PFX_target(gl, Math.max(1, w >> 1), Math.max(1, h >> 1), gl.RGBA16F, gl.HALF_FLOAT);
+    self.bgQuarter = PFX_target(gl, Math.max(1, w >> 2), Math.max(1, h >> 2), gl.RGBA16F, gl.HALF_FLOAT);
+    self.merged = PFX_target(gl, w, h, gl.RGBA16F, gl.HALF_FLOAT);
     if (self.wet) { gl.deleteTexture(self.wet.tex); gl.deleteFramebuffer(self.wet.fbo); }
     self.wet = PFX_target(gl, w, h, gl.RGBA16F, gl.HALF_FLOAT);
     if (self.rays) { gl.deleteTexture(self.rays.tex); gl.deleteFramebuffer(self.rays.fbo); }
@@ -7917,7 +7953,7 @@ function PostFX(canvas) {
   // source       : the 2D albedo canvas
   // normalSource : the normal buffer canvas (may be null -> lighting skipped)
   // lights       : array of {x,y,z,r, cr,cg,cb, i} in screen-uv space
-  self.render = function (source, normalSource, occSource, wetSource, lights, prm) {
+  self.render = function (source, normalSource, occSource, wetSource, bgSource, lights, prm) {
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     gl.bindTexture(gl.TEXTURE_2D, self.sceneTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
@@ -7926,6 +7962,34 @@ function PostFX(canvas) {
     gl.disable(gl.DEPTH_TEST);
 
     var srcTex = self.sceneTex;
+
+    // 0a. depth of field: blur the backdrop, then put the sharp foreground on it
+    if (bgSource && prm.dof > 0.001) {
+      gl.bindTexture(gl.TEXTURE_2D, self.bgTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bgSource);
+      gl.useProgram(self.progDown.p);
+      gl.uniform1i(self.progDown.u.uTex, 0);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, self.bgTex);
+      gl.uniform2f(self.progDown.u.uTexel, 1 / self.w, 1 / self.h);
+      blit(self.progDown, self.bgHalf);
+      gl.bindTexture(gl.TEXTURE_2D, self.bgHalf.tex);
+      gl.uniform2f(self.progDown.u.uTexel, 1 / self.bgHalf.w, 1 / self.bgHalf.h);
+      blit(self.progDown, self.bgQuarter);
+
+      var mp = self.progMerge;
+      gl.useProgram(mp.p);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, self.bgQuarter.tex);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, self.sceneTex);
+      gl.uniform1i(mp.u.uBg, 0);
+      gl.uniform1i(mp.u.uFg, 1);
+      gl.uniform1f(mp.u.uBgDim, prm.bgDim);
+      blit(mp, self.merged);
+      srcTex = self.merged.tex;
+      gl.activeTexture(gl.TEXTURE0);
+    }
 
     // 0. deferred lighting pass
     if (normalSource && prm.lighting !== false) {
@@ -7948,7 +8012,7 @@ function PostFX(canvas) {
       var lp = self.progLight;
       gl.useProgram(lp.p);
       gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, self.sceneTex);
+      gl.bindTexture(gl.TEXTURE_2D, srcTex);
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, self.normalTex);
       gl.activeTexture(gl.TEXTURE2);
@@ -7974,7 +8038,7 @@ function PostFX(canvas) {
     }
 
     // 0b. wet-ground reflections, before bloom so reflected lights glow too
-    if (wetSource && prm.wet > 0.001 && srcTex !== self.sceneTex) {
+    if (wetSource && prm.wet > 0.001 && srcTex === self.lit.tex) {
       gl.bindTexture(gl.TEXTURE_2D, self.wetTex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, wetSource);
       var wp = self.progWet;
@@ -8049,12 +8113,16 @@ function PostFX(canvas) {
     gl.bindTexture(gl.TEXTURE_2D, self.mips[0].tex);
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, self.rays.tex);
+    gl.activeTexture(gl.TEXTURE3);
+    gl.bindTexture(gl.TEXTURE_2D, self.wetTex);
     var c = self.progComp;
     gl.useProgram(c.p);
     gl.uniform1i(c.u.uScene, 0);
     gl.uniform1i(c.u.uBloom, 1);
     gl.uniform1i(c.u.uRays, 2);
     gl.uniform1f(c.u.uRaysAmt, prm.rays);
+    gl.uniform1i(c.u.uHazeTex, 3);
+    gl.uniform1f(c.u.uHaze, prm.haze);
     gl.uniform2f(c.u.uRes, self.w, self.h);
     gl.uniform1f(c.u.uTime, prm.time);
     gl.uniform1f(c.u.uBloomAmt, prm.bloom);
@@ -8096,7 +8164,8 @@ PostFX.defaults = function () {
     sunShadow: 0.85, sunLen: 0.13,
     // rain-slicked stone: mirror strength, how fast it fades with depth,
     // and a cool tint because the reflection is of a night sky
-    wet: 0.5, wetFade: 17.0, wetSquash: 3.6, ripple: 1.0,
+    wet: 0.5, wetFade: 17.0, wetSquash: 3.6, ripple: 1.0, haze: 0.010,
+    dof: 1.0, bgDim: 1.0,
     wetTint: new Float32Array([0.78, 0.86, 1.05]),
     // moon shafts: centre tracks the moon, updated per frame by the game
     rays: 0.34, rayX: 0.70, rayY: 0.86, rayDensity: 0.62, rayWeight: 0.055, rayDecay: 0.93,
@@ -9075,7 +9144,10 @@ const ST = { TITLE: 'title', PLAY: 'play', PAUSE: 'pause', DEAD: 'dead', CLEAR: 
 class Game {
   constructor(canvas) {
     this.cv = canvas;
-    this.ctx = canvas.getContext('2d', { alpha: false });
+    // Must have an alpha channel: with alpha:false, clearRect yields opaque
+    // black and the depth-of-field merge can never see through to the
+    // blurred backdrop, so the whole sky renders black.
+    this.ctx = canvas.getContext('2d');
     this.state = ST.TITLE;
     this.time = 0; this.stateT = 0; this.blinkT = 0; this.blink = true;
     this.score = 0; this.lives = 3; this.rangs = 0; this.lvIdx = 0;
@@ -9091,6 +9163,7 @@ class Game {
     this.fx2 = null; this.prm = null; this.aberrPulse = 0;
     this.fxCanvas = null; this.perfAcc = 0; this.perfN = 0;
     this.boss = null; this.lastDt = 1 / 60;
+    this.strikeSeed = 0; this.prevFlash = 0;
   }
 
   // If the device cannot hold a reasonable frame rate with the post chain on,
@@ -9128,6 +9201,11 @@ class Game {
     this.wcv.width = Math.round(CW * 0.5);
     this.wcv.height = Math.round(CH * 0.5);
     this.wctx = this.wcv.getContext('2d');
+    // Backdrop gets its own canvas so it can be blurred in WebGL. Doing it
+    // with ctx.filter measured 26fps -> 1fps; this costs one extra upload.
+    this.bgcv = document.createElement('canvas');
+    this.bgcv.width = this.cv.width; this.bgcv.height = this.cv.height;
+    this.bgctx = this.bgcv.getContext('2d', { alpha: false });
     this.lights = [];
     return true;
   }
@@ -9229,6 +9307,36 @@ class Game {
         o.fillRect(cx * TILE - camX, y, TILE, band);
       }
     }
+
+    // Blue channel carries heat haze. Drawn additively in blue only, so it
+    // layers on top of the wet mask without disturbing the red/green the
+    // reflection pass reads.
+    o.globalCompositeOperation = 'lighter';
+    const blob = (x, y, r, amt) => {
+      if (x < -r || x > CW + r) return;
+      const gg = o.createRadialGradient(x, y, 0, x, y, Math.max(2, r));
+      gg.addColorStop(0, 'rgba(0,0,255,' + amt + ')');
+      gg.addColorStop(1, 'rgba(0,0,255,0)');
+      o.fillStyle = gg;
+      o.beginPath(); o.arc(x, y, Math.max(2, r), 0, Math.PI * 2); o.fill();
+    };
+    if (this.atmos) {
+      for (const q of this.atmos.p) {
+        if (q.kind !== 'steam') continue;
+        const k = q.age / q.life;
+        blob(q.x - camX, q.y, q.r * 1.25, 0.55 * (1 - k));
+      }
+    }
+    if (this.boss) {
+      for (const pr of this.boss.proj) {
+        if (pr.blast > 0) blob(pr.rect.cx - camX, pr.rect.cy, 54, 0.9);
+      }
+      if (this.boss.gasY < CH) {
+        o.fillStyle = 'rgba(0,0,255,0.4)';
+        o.fillRect(0, this.boss.gasY - 14, CW, CH - this.boss.gasY + 24);
+      }
+    }
+    o.globalCompositeOperation = 'source-over';
   }
 
   // ── scene lights ─────────────────────────────────────────────────────
@@ -9296,6 +9404,25 @@ class Game {
     p.sunCol[0] = 0.13 + fl * 0.85;
     p.sunCol[1] = 0.15 + fl * 0.92;
     p.sunCol[2] = 0.22 + fl * 1.05;
+
+    // A strike is a light source, not a colour wash. Each one picks its own
+    // steep angle and, while it lasts, takes over the directional shadow with
+    // a long hard throw so every block and figure stamps a shadow across the
+    // street. Between strikes the moon's soft angle returns.
+    if (this.prevFlash < 0.08 && fl >= 0.08) this.strikeSeed += 1.7;
+    this.prevFlash = fl;
+    if (fl > 0.06) {
+      const k = Math.sin(this.strikeSeed * 3.1) * 0.85;
+      p.sunDir[0] = k;
+      p.sunDir[1] = 0.62;
+      p.sunDir[2] = 0.30;
+      p.sunShadow = 0.85 + fl * 0.13;
+      p.sunLen = 0.13 + fl * 0.22;
+    } else {
+      p.sunDir[0] = 0.38; p.sunDir[1] = 0.58; p.sunDir[2] = 0.72;
+      p.sunShadow = 0.85;
+      p.sunLen = 0.13;
+    }
     // star power: everything blooms harder and the grade goes molten gold
     if (pl && pl.star > 0) {
       const s = Math.min(1, pl.star / 1.5);
@@ -9519,18 +9646,27 @@ class Game {
     const t = this.time;
 
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    drawGothamSky(ctx, camX, t, lightning);
-    // NOTE: a ctx.filter blur here for depth-of-field was tried and reverted.
-    // Blurring a full-screen vector skyline every frame forces a separate
-    // compositing layer and measured 26fps -> 1fps. The atmospheric scrim
-    // below already separates the backdrop from the playfield at no cost.
-    drawGothamSkyline(ctx, camX, t, lightning);
-    if (lightning > 0.25) this.bolt.drawBolt(ctx, t);
-    drawCityFog(ctx, camX, t);
+
+    // With post-processing on, the backdrop goes to its own canvas so the GPU
+    // can blur it for depth of field and the playfield stays razor sharp. With
+    // it off there is nothing to composite against, so it goes straight in.
+    let bg = ctx;
+    if (this.fx2 && this.bgctx) {
+      if (this.bgcv.width !== this.cv.width || this.bgcv.height !== this.cv.height) {
+        this.bgcv.width = this.cv.width; this.bgcv.height = this.cv.height;
+      }
+      bg = this.bgctx;
+      bg.setTransform(DPR, 0, 0, DPR, 0, 0);
+      ctx.clearRect(0, 0, CW, CH);
+    }
+    drawGothamSky(bg, camX, t, lightning);
+    drawGothamSkyline(bg, camX, t, lightning);
+    if (lightning > 0.25) this.bolt.drawBolt(bg, t);
+    drawCityFog(bg, camX, t);
     // atmospheric separation: push the lit skyline back so the dark playfield
     // and the darker player read clearly against it
-    ctx.fillStyle = 'rgba(5,7,18,0.42)';
-    ctx.fillRect(0, 0, CW, CH);
+    bg.fillStyle = 'rgba(5,7,18,0.42)';
+    bg.fillRect(0, 0, CW, CH);
 
     ctx.save();
     ctx.translate(Math.round(this.shake.x), Math.round(this.shake.y));
@@ -9579,7 +9715,7 @@ class Game {
       this.drawWet(camX);
       const lights = this.collectLights(camX);
       this.fx2.resize(this.cv.width, this.cv.height);
-      this.fx2.render(this.cv, this.ncv, this.ocv, this.wcv, lights, this.postParams());
+      this.fx2.render(this.cv, this.ncv, this.ocv, this.wcv, this.bgcv, lights, this.postParams());
     }
   }
 
