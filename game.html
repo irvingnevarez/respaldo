@@ -7483,6 +7483,43 @@ var PFX_UP = PFX_HEAD + [
   '}'
 ].join('\n');
 
+// ── wet ground reflections ──────────────────────────────────────────────
+// Screen-space mirror: the wet buffer marks every exposed floor tile and
+// stores, per pixel, the v coordinate of the surface it belongs to. Each
+// pixel below that line samples the lit scene mirrored about it, rippled and
+// fading with depth. Runs after lighting so reflected light sources still
+// feed the bloom chain.
+var PFX_WET = PFX_HEAD + [
+  '',
+  'uniform sampler2D uLit;',
+  'uniform sampler2D uWet;',
+  'uniform float uTime;',
+  'uniform float uStrength;',
+  'uniform float uFade;',
+  'uniform float uSquash;',
+  'uniform vec3  uTint;',
+  'void main(){',
+  '  vec3 base = texture(uLit, vUV).rgb;',
+  '  vec4 w = texture(uWet, vUV);',
+  '  if (w.r < 0.08) { oColor = vec4(base, 1.0); return; }',
+  '  float surfV = w.g;',                       // v of the reflecting surface
+  '  float d = surfV - vUV.y;',                 // how far below the surface we are
+  '  if (d <= 0.0) { oColor = vec4(base, 1.0); return; }',
+  // two ripple frequencies so the surface never looks like a single sine
+  '  float rip = sin(vUV.x * 150.0 + uTime * 1.7 + d * 95.0) * 0.0016',
+  '           + sin(vUV.x * 63.0 - uTime * 1.1) * 0.0011;',
+  // A true 1:1 mirror only reaches as far above the floor as the band is
+  // deep - about 34px - so it reflected almost nothing. Compressing it
+  // pulls the windows, the moon and the player down into the puddle, which
+  // is what actually reads as a wet street in a side-on view.
+  '  vec2 ruv = vec2(vUV.x + rip, surfV + d * uSquash);',
+  '  vec3 refl = texture(uLit, ruv).rgb;',
+  '  float fade = exp(-d * uFade);',
+  '  float amt = clamp(w.r * uStrength * fade, 0.0, 0.9);',
+  '  oColor = vec4(mix(base, refl * uTint, amt), 1.0);',
+  '}'
+].join('\n');
+
 // ── volumetric light shafts ─────────────────────────────────────────────
 // Radial scattering march (the classic Mitchell approach): step from the
 // fragment toward the light, accumulating the bright-pass buffer with a
@@ -7666,6 +7703,7 @@ function PostFX(canvas) {
     self.progDown = PFX_program(gl, PFX_DOWN);
     self.progUp = PFX_program(gl, PFX_UP);
     self.progRays = PFX_program(gl, PFX_RAYS);
+    self.progWet = PFX_program(gl, PFX_WET);
     self.progComp = PFX_program(gl, PFX_COMP);
   } catch (e) {
     self.error = e.message;
@@ -7685,8 +7723,10 @@ function PostFX(canvas) {
   self.sceneTex = mkTex();
   self.normalTex = mkTex();
   self.occTex = mkTex();
+  self.wetTex = mkTex();
   self.lit = null;
   self.rays = null;
+  self.wet = null;
   self.lpBuf = new Float32Array(PFX_MAXL * 4);
   self.lcBuf = new Float32Array(PFX_MAXL * 4);
   self.mips = [];
@@ -7705,6 +7745,8 @@ function PostFX(canvas) {
       self.mips.push(PFX_target(gl, mw, mh, gl.RGBA16F, gl.HALF_FLOAT));
       mw = Math.max(1, mw >> 1); mh = Math.max(1, mh >> 1);
     }
+    if (self.wet) { gl.deleteTexture(self.wet.tex); gl.deleteFramebuffer(self.wet.fbo); }
+    self.wet = PFX_target(gl, w, h, gl.RGBA16F, gl.HALF_FLOAT);
     if (self.rays) { gl.deleteTexture(self.rays.tex); gl.deleteFramebuffer(self.rays.fbo); }
     self.rays = PFX_target(gl, Math.max(1, w >> 2), Math.max(1, h >> 2), gl.RGBA16F, gl.HALF_FLOAT);
     if (self.lit) { gl.deleteTexture(self.lit.tex); gl.deleteFramebuffer(self.lit.fbo); }
@@ -7725,7 +7767,7 @@ function PostFX(canvas) {
   // source       : the 2D albedo canvas
   // normalSource : the normal buffer canvas (may be null -> lighting skipped)
   // lights       : array of {x,y,z,r, cr,cg,cb, i} in screen-uv space
-  self.render = function (source, normalSource, occSource, lights, prm) {
+  self.render = function (source, normalSource, occSource, wetSource, lights, prm) {
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     gl.bindTexture(gl.TEXTURE_2D, self.sceneTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
@@ -7778,6 +7820,28 @@ function PostFX(canvas) {
       gl.uniform3fv(lp.u.uSunCol, prm.sunCol);
       blit(lp, self.lit);
       srcTex = self.lit.tex;
+      gl.activeTexture(gl.TEXTURE0);
+    }
+
+    // 0b. wet-ground reflections, before bloom so reflected lights glow too
+    if (wetSource && prm.wet > 0.001 && srcTex !== self.sceneTex) {
+      gl.bindTexture(gl.TEXTURE_2D, self.wetTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, wetSource);
+      var wp = self.progWet;
+      gl.useProgram(wp.p);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, srcTex);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, self.wetTex);
+      gl.uniform1i(wp.u.uLit, 0);
+      gl.uniform1i(wp.u.uWet, 1);
+      gl.uniform1f(wp.u.uTime, prm.time);
+      gl.uniform1f(wp.u.uStrength, prm.wet);
+      gl.uniform1f(wp.u.uFade, prm.wetFade);
+      gl.uniform1f(wp.u.uSquash, prm.wetSquash);
+      gl.uniform3fv(wp.u.uTint, prm.wetTint);
+      blit(wp, self.wet);
+      srcTex = self.wet.tex;
       gl.activeTexture(gl.TEXTURE0);
     }
 
@@ -7879,6 +7943,10 @@ PostFX.defaults = function () {
     lighting: true, normalStrength: 1.5,
     shadows: true, shadowLights: 4, shadowStrength: 0.92,
     sunShadow: 0.85, sunLen: 0.13,
+    // rain-slicked stone: mirror strength, how fast it fades with depth,
+    // and a cool tint because the reflection is of a night sky
+    wet: 0.5, wetFade: 17.0, wetSquash: 3.6,
+    wetTint: new Float32Array([0.78, 0.86, 1.05]),
     // moon shafts: centre tracks the moon, updated per frame by the game
     rays: 0.34, rayX: 0.70, rayY: 0.86, rayDensity: 0.62, rayWeight: 0.055, rayDecay: 0.93,
     ambient: new Float32Array([0.64, 0.66, 0.78]),
@@ -8904,6 +8972,10 @@ class Game {
     this.ocv.width = Math.round(CW * 0.25);
     this.ocv.height = Math.round(CH * 0.25);
     this.octx = this.ocv.getContext('2d');
+    this.wcv = document.createElement('canvas');
+    this.wcv.width = Math.round(CW * 0.5);
+    this.wcv.height = Math.round(CH * 0.5);
+    this.wctx = this.wcv.getContext('2d');
     this.lights = [];
     return true;
   }
@@ -8976,6 +9048,35 @@ class Game {
     }
     const p = this.player;
     if (p && !p.dead) ell(p.rect);
+  }
+
+  // ── wet surfaces ─────────────────────────────────────────────────────
+  // Marks every exposed floor top and records, in the green channel, the v
+  // coordinate of that surface so the shader knows what line to mirror about.
+  drawWet(camX) {
+    const o = this.wctx;
+    o.setTransform(0.5, 0, 0, 0.5, 0, 0);
+    o.globalAlpha = 1;
+    o.fillStyle = '#000';
+    o.fillRect(0, 0, CW, CH);
+    if (!this.world) return;
+    const w = this.world;
+    const c0 = Math.max(0, Math.floor(camX / TILE) - 1);
+    const c1 = Math.min(w.w - 1, Math.floor((camX + CW) / TILE) + 1);
+    for (let cy = 0; cy < w.h; cy++) {
+      for (let cx = c0; cx <= c1; cx++) {
+        const c = w.cells[cy * w.w + cx];
+        if (!c || !c.alive || c.t !== '#' || !c.top) continue;
+        const y = cy * TILE;
+        // never let the band spill past the solid mass underneath, or a thin
+        // ledge would paint reflections onto the sky below it
+        const deep = !!(w.cells[(cy + 1) * w.w + cx] && w.cells[(cy + 1) * w.w + cx].solid);
+        const band = deep ? 44 : 28;
+        const g = Math.round((1 - y / CH) * 255);
+        o.fillStyle = 'rgb(255,' + g + ',0)';
+        o.fillRect(cx * TILE - camX, y, TILE, band);
+      }
+    }
   }
 
   // ── scene lights ─────────────────────────────────────────────────────
@@ -9066,6 +9167,8 @@ class Game {
     p.rayX = (680 - camX * 0.04) / CW;
     p.rayY = 1 - 75 / CH;
     p.rays = 0.34 + fl * 0.55;
+    const rainAmt = this.world && this.world.level ? (this.world.level.rain || 0.6) : 0.6;
+    p.wet = 0.36 + 0.40 * rainAmt;
     if (this.state === ST.DEAD) { p.vignette = 1.5; p.saturation = 0.45; }
     else if (this.state === ST.TITLE) { p.vignette = 1.0; p.bloom += 0.14; }
     else p.vignette = 0.85;
@@ -9314,9 +9417,10 @@ class Game {
     if (this.fx2) {
       this.drawNormals(camX);
       this.drawOccluders(camX);
+      this.drawWet(camX);
       const lights = this.collectLights(camX);
       this.fx2.resize(this.cv.width, this.cv.height);
-      this.fx2.render(this.cv, this.ncv, this.ocv, lights, this.postParams());
+      this.fx2.render(this.cv, this.ncv, this.ocv, this.wcv, lights, this.postParams());
     }
   }
 
