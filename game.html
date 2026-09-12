@@ -6402,9 +6402,19 @@ function drawPenguinBoss(ctx, x, y, w, h, o) {
 
 // ── EL JOKER ───────────────────────────────────────────────────────────
 function BS_jokerFace(ctx, cx, cy, r, t, phase, laughing) {
-  ctx.fillStyle = PAL.face;
-  ctx.beginPath(); ctx.ellipse(cx, cy, r, r * 1.12, 0, 0, Math.PI * 2); ctx.fill();
-  // green hair
+  // hair goes behind the head so the strands read as a mane
+  ctx.fillStyle = '#1f6b16';
+  for (let i = 0; i < 7; i++) {
+    const a = -Math.PI * 1.02 + i * (Math.PI * 1.04 / 6);
+    const wob = Math.sin(t * 5 + i * 1.3) * 0.12;
+    const len = 1.7 + BS_rnd(i) * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * r * 0.92, cy + Math.sin(a) * r * 0.92);
+    ctx.quadraticCurveTo(
+      cx + Math.cos(a + wob) * r * len, cy + Math.sin(a + wob) * r * len,
+      cx + Math.cos(a + 0.32) * r * 0.86, cy + Math.sin(a + 0.32) * r * 0.86);
+    ctx.closePath(); ctx.fill();
+  }
   ctx.fillStyle = PAL.jokerGreen;
   for (let i = 0; i < 6; i++) {
     const a = -Math.PI * 0.95 + i * (Math.PI * 0.9 / 5);
@@ -6412,9 +6422,38 @@ function BS_jokerFace(ctx, cx, cy, r, t, phase, laughing) {
     ctx.beginPath();
     ctx.moveTo(cx + Math.cos(a) * r * 0.9, cy + Math.sin(a) * r * 0.9);
     ctx.quadraticCurveTo(
-      cx + Math.cos(a + wob) * r * 1.9, cy + Math.sin(a + wob) * r * 1.9,
+      cx + Math.cos(a + wob) * r * 1.45, cy + Math.sin(a + wob) * r * 1.45,
       cx + Math.cos(a + 0.3) * r * 0.85, cy + Math.sin(a + 0.3) * r * 0.85);
     ctx.closePath(); ctx.fill();
+  }
+  // chalk-white face, modelled instead of flat: lit from upper left, with a
+  // greenish bounce under the jaw
+  const fg = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.45, r * 0.1, cx, cy, r * 1.25);
+  fg.addColorStop(0, '#ffffff');
+  fg.addColorStop(0.55, PAL.face);
+  fg.addColorStop(1, '#9aa38c');
+  ctx.fillStyle = fg;
+  ctx.beginPath(); ctx.ellipse(cx, cy, r, r * 1.12, 0, 0, Math.PI * 2); ctx.fill();
+  // cheekbone shadow and a pointed chin
+  ctx.fillStyle = 'rgba(120,110,130,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + r * 0.62, r * 0.55, r * 0.34, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // sunken eye sockets with smeared makeup
+  ctx.fillStyle = 'rgba(60,30,80,0.45)';
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.ellipse(cx + s * r * 0.34, cy - r * 0.14, r * 0.3, r * 0.28, s * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // brow
+  ctx.strokeStyle = '#2a1630';
+  ctx.lineWidth = Math.max(1, r * 0.07);
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(cx + s * r * 0.12, cy - r * 0.44);
+    ctx.lineTo(cx + s * r * 0.56, cy - r * 0.3);
+    ctx.stroke();
   }
   // eyes
   ctx.fillStyle = '#1b1024';
@@ -6527,29 +6566,89 @@ function drawJokerBoss(ctx, x, y, w, h, o) {
   const armUp = st === 'taunt' || st === 'throw';
   ctx.save();
   ctx.translate(0, manTop);
-  // tailcoat
-  const cg = ctx.createLinearGradient(0, 0, 0, manH);
-  cg.addColorStop(0, PAL.jokerHi);
-  cg.addColorStop(1, '#3a1b5e');
+  // shoes first, so the coat tails fall over them
+  if (!riding) {
+    ctx.fillStyle = '#14101c';
+    for (const s of [-1, 1]) {
+      const step = Math.sin(t * 4 + (s > 0 ? 0 : Math.PI)) * manW * 0.06;
+      ctx.beginPath();
+      ctx.ellipse(s * manW * 0.2 + step, manH * 0.97, manW * 0.19, manH * 0.045, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // trousers
+    ctx.fillStyle = '#2c1548';
+    ctx.fillRect(-manW * 0.3, manH * 0.72, manW * 0.6, manH * 0.24);
+  }
+
+  // tailcoat: a real silhouette with shoulders, not a rounded box
+  const cg = ctx.createLinearGradient(-manW * 0.4, manH * 0.3, manW * 0.4, manH * 0.9);
+  cg.addColorStop(0, '#9a67d8');
+  cg.addColorStop(0.4, PAL.jokerHi);
+  cg.addColorStop(0.75, PAL.joker);
+  cg.addColorStop(1, '#2a1046');
   ctx.fillStyle = cg;
-  BS_roundRect(ctx, -manW / 2, manH * 0.3, manW, manH * 0.6, 4);
-  ctx.fill();
-  if (!riding) {  // coat tails flying
+  ctx.beginPath();
+  ctx.moveTo(-manW * 0.34, manH * 0.3);           // left shoulder
+  ctx.quadraticCurveTo(-manW * 0.56, manH * 0.34, -manW * 0.5, manH * 0.46);
+  ctx.lineTo(-manW * 0.42, manH * 0.84);          // waist
+  ctx.lineTo(manW * 0.42, manH * 0.84);
+  ctx.lineTo(manW * 0.5, manH * 0.46);
+  ctx.quadraticCurveTo(manW * 0.56, manH * 0.34, manW * 0.34, manH * 0.3);
+  ctx.closePath(); ctx.fill();
+
+  if (!riding) {  // coat tails flying behind
     ctx.beginPath();
-    ctx.moveTo(-manW / 2, manH * 0.72);
-    ctx.quadraticCurveTo(-manW * 0.95, manH * (0.86 + Math.sin(t * 6) * 0.06), -manW * 0.62, manH * 1.02);
-    ctx.lineTo(-manW * 0.2, manH * 0.86);
+    ctx.moveTo(-manW * 0.42, manH * 0.74);
+    ctx.quadraticCurveTo(-manW * 0.98, manH * (0.88 + Math.sin(t * 6) * 0.06), -manW * 0.66, manH * 1.04);
+    ctx.lineTo(-manW * 0.16, manH * 0.86);
     ctx.closePath(); ctx.fill();
   }
-  // waistcoat + tie
+
+  // waistcoat
+  ctx.fillStyle = '#2a8c1e';
+  ctx.beginPath();
+  ctx.moveTo(-manW * 0.2, manH * 0.33);
+  ctx.lineTo(manW * 0.2, manH * 0.33);
+  ctx.lineTo(manW * 0.13, manH * 0.78);
+  ctx.lineTo(-manW * 0.13, manH * 0.78);
+  ctx.closePath(); ctx.fill();
   ctx.fillStyle = PAL.jokerGreen;
   ctx.beginPath();
-  ctx.moveTo(-manW * 0.18, manH * 0.32);
-  ctx.lineTo(manW * 0.18, manH * 0.32);
-  ctx.lineTo(0, manH * 0.66);
+  ctx.moveTo(-manW * 0.18, manH * 0.34);
+  ctx.lineTo(manW * 0.05, manH * 0.34);
+  ctx.lineTo(-manW * 0.05, manH * 0.7);
+  ctx.lineTo(-manW * 0.12, manH * 0.7);
   ctx.closePath(); ctx.fill();
+
+  // lapels
+  ctx.fillStyle = '#5c2a94';
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(s * manW * 0.34, manH * 0.3);
+    ctx.lineTo(s * manW * 0.08, manH * 0.56);
+    ctx.lineTo(s * manW * 0.2, manH * 0.32);
+    ctx.closePath(); ctx.fill();
+  }
+
+  // bow tie
   ctx.fillStyle = PAL.orange;
-  ctx.beginPath(); ctx.arc(0, manH * 0.33, manW * 0.08, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-manW * 0.17, manH * 0.29); ctx.lineTo(0, manH * 0.34); ctx.lineTo(-manW * 0.17, manH * 0.39);
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(manW * 0.17, manH * 0.29); ctx.lineTo(0, manH * 0.34); ctx.lineTo(manW * 0.17, manH * 0.39);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#c05a10';
+  ctx.beginPath(); ctx.arc(0, manH * 0.34, manW * 0.05, 0, Math.PI * 2); ctx.fill();
+
+  // rim light down the leading edge
+  ctx.strokeStyle = 'rgba(210,190,255,0.45)';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(manW * 0.34, manH * 0.31);
+  ctx.quadraticCurveTo(manW * 0.55, manH * 0.35, manW * 0.49, manH * 0.47);
+  ctx.lineTo(manW * 0.41, manH * 0.83);
+  ctx.stroke();
 
   // arms
   ctx.strokeStyle = PAL.joker;
@@ -7918,7 +8017,12 @@ class Boss {
   get vulnerable() {
     if (this.defeated) return false;
     if (this.kind === 'penguin') return this.state === 'dazed';
-    return this.state === 'taunt' || this.state === 'arrive' || this.state === 'throw';
+    // One tell per phase, so each is learnable on its own terms. Measured
+    // across all three phases the old rule left him open 38.9% of the fight —
+    // in phase 2 both 'arrive' AND 'throw' counted, which is 2 of every 2.5s.
+    if (this.phase === 1) return this.state === 'taunt';      // the dip
+    if (this.phase === 2) return this.state === 'arrive';     // just landed
+    return this.state === 'throw';                            // arms raised
   }
   // contact only hurts while the boss is actually threatening
   get contactHurts() {
@@ -7998,10 +8102,10 @@ class Boss {
         this.rect.x = CO_approach(this.rect.x, target, 72 * dt);
         this.rect.y = hoverY + Math.sin(this.anim * 2.2) * 10;
         this.bombT -= dt;
-        const maxBombs = this.phase === 1 ? 2 : 3;
+        const maxBombs = this.phase === 1 ? 3 : (this.phase === 2 ? 4 : 5);
         if (this.bombT <= 0 && this.proj.length < maxBombs) {
           this.proj.push(new BossProjectile(this.rect.cx, this.rect.b - 10, this.face * 40, 40, 'bomb'));
-          this.bombT = 0.75;
+          this.bombT = 0.55;
         }
         const hoverLen = 2.6 - (this.phase - 1) * 0.35;
         if (this.t > hoverLen) this.setState('telegraph');
@@ -8031,7 +8135,7 @@ class Boss {
         break;
       }
       case 'dazed': {
-        if (this.t > 2.2) this.setState('recover');
+        if (this.t > 1.6) this.setState('recover');
         break;
       }
       case 'hurt': {
@@ -8040,7 +8144,7 @@ class Boss {
         break;
       }
       case 'recover': {
-        this.rect.y = CO_approach(this.rect.y, hoverY, 420 * dt);
+        this.rect.y = CO_approach(this.rect.y, hoverY, 640 * dt);
         if (Math.abs(this.rect.y - hoverY) < 4) {
           // phase 3 mixes in a ground-level charge the player must jump
           if (this.phase === 3 && (Math.floor(this.anim) % 2 === 0)) this.setState('charge');
@@ -8075,18 +8179,18 @@ class Boss {
           this.rect.y = 150 + Math.sin(this.anim * 1.6) * 16;
           this.cardT -= dt;
           if (this.cardT <= 0) {
-            this.throwCards(3, 1);
-            this.cardT = 1.7;
+            this.throwCards(4, 1.1);
+            this.cardT = 1.05;
           }
-          if (this.t > 3.4) { this.setState('taunt'); AUDIO.hurt(); }
+          if (this.t > 4.2) { this.setState('taunt'); AUDIO.hurt(); }
           break;
         }
         case 'taunt': {
           // dips low enough to stomp from a platform, then climbs away
           const dip = 330;
-          if (this.t < 1.6) this.rect.y = CO_approach(this.rect.y, dip, 300 * dt);
-          else this.rect.y = CO_approach(this.rect.y, 150, 300 * dt);
-          if (this.t > 2.6) this.setState('ride');
+          if (this.t < 0.95) this.rect.y = CO_approach(this.rect.y, dip, 420 * dt);
+          else this.rect.y = CO_approach(this.rect.y, 150, 420 * dt);
+          if (this.t > 1.7) this.setState('ride');
           break;
         }
         case 'hurt': {
