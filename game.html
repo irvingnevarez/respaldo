@@ -7414,6 +7414,166 @@ class Atmosphere {
 }
 
 
+// ═══ DECOR ═══════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+//  DECOR — street furniture that actually lights the scene.
+//
+//  Until now every light in the game came from a gameplay object: blocks,
+//  pickups, the beacon. The street itself emitted nothing, so Gotham was a
+//  painted backdrop rather than a lit place. Lamps and neon signs are placed
+//  deterministically from the level geometry, drawn into the world pass, and
+//  registered as real lights - so they cast shadows, pool on the wet ground
+//  and bloom like everything else.
+// ═══════════════════════════════════════════════════════════════════════
+
+function DC_hash(n) { const s = Math.sin(n * 53.77 + 19.31) * 43758.5453; return s - Math.floor(s); }
+
+class Decor {
+  constructor() { this.items = []; this.key = null; }
+
+  // Scan once per level rather than every frame: the layout never changes.
+  build(world, levelId) {
+    if (this.key === levelId) return;
+    this.key = levelId;
+    this.items = [];
+    if (!world) return;
+    // Walk the street in strides rather than hashing each column: a pure hash
+    // with a clear-air requirement on top produced four lamps in an entire
+    // 200-column level, none of them on screen. A stride guarantees the street
+    // is actually lit along its whole length.
+    let cx = 5;
+    while (cx < world.w - 5) {
+      for (let k = 0; k < 9; k++) {
+        const col = cx + k;
+        if (col >= world.w - 4) break;
+        let row = -1;
+        for (let cy = 13; cy < world.h; cy++) {
+          const c = world.cells[cy * world.w + col];
+          if (c && c.alive && c.solid) { row = cy; break; }
+        }
+        if (row < 0) continue;
+        let clear = true;
+        for (let j = 1; j <= 4; j++) {
+          const c = world.cells[(row - j) * world.w + col];
+          if (c && c.alive && c.solid) { clear = false; break; }
+        }
+        if (!clear) continue;
+        const neon = DC_hash(col * 7.7 + 4.4) < 0.34;
+        this.items.push({
+          x: col * TILE + TILE / 2,
+          y: row * TILE,
+          h: 66 + Math.round(DC_hash(col + 9) * 22),
+          neon: neon,
+          hue: neon ? DC_hash(col * 3.3) : 0,
+          seed: col,
+        });
+        break;
+      }
+      cx += 14 + Math.floor(DC_hash(cx * 1.7) * 8);
+    }
+  }
+
+  // amber sodium lamp, or a cold neon tube
+  colour(it) {
+    if (!it.neon) return [1.0, 0.78, 0.36];
+    if (it.hue < 0.34) return [1.0, 0.24, 0.42];   // hot pink
+    if (it.hue < 0.67) return [0.30, 0.85, 1.0];   // cyan
+    return [0.62, 0.38, 1.0];                       // violet
+  }
+
+  draw(ctx, camX, t) {
+    for (const it of this.items) {
+      const x = it.x - camX;
+      if (x < -60 || x > CW + 60) continue;
+      const c = this.colour(it);
+      const rgb = 'rgb(' + Math.round(c[0] * 255) + ',' + Math.round(c[1] * 255) + ',' + Math.round(c[2] * 255) + ')';
+      const flick = it.neon
+        ? (DC_hash(Math.floor(t * 9) + it.seed) > 0.06 ? 1 : 0.35)   // neon stutters
+        : 0.92 + 0.08 * Math.sin(t * 2.6 + it.seed);
+      const topY = it.y - it.h;
+
+      ctx.save();
+      // post
+      const pg = ctx.createLinearGradient(x - 3, 0, x + 3, 0);
+      pg.addColorStop(0, '#2a2636');
+      pg.addColorStop(0.5, '#4a4560');
+      pg.addColorStop(1, '#1a1726');
+      ctx.fillStyle = pg;
+      ctx.fillRect(x - 2.5, topY, 5, it.h);
+      ctx.fillStyle = '#221f30';
+      ctx.beginPath();
+      ctx.ellipse(x, it.y, 8, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (it.neon) {
+        // a vertical tube bracketed off the post
+        ctx.globalAlpha = flick;
+        ctx.strokeStyle = rgb;
+        ctx.lineWidth = 3;
+        ctx.shadowColor = rgb;
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.moveTo(x + 9, topY + 6);
+        ctx.lineTo(x + 9, topY + 30);
+        ctx.stroke();
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(x + 3, topY + 8);
+        ctx.lineTo(x + 9, topY + 8);
+        ctx.stroke();
+      } else {
+        // hooded lamp head
+        ctx.fillStyle = '#2e2a3c';
+        ctx.beginPath();
+        ctx.moveTo(x - 11, topY + 8);
+        ctx.lineTo(x + 11, topY + 8);
+        ctx.lineTo(x + 7, topY + 1);
+        ctx.lineTo(x - 7, topY + 1);
+        ctx.closePath(); ctx.fill();
+        ctx.globalAlpha = flick;
+        ctx.fillStyle = rgb;
+        ctx.shadowColor = rgb;
+        ctx.shadowBlur = 18;
+        ctx.beginPath();
+        ctx.ellipse(x, topY + 10, 7, 4.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        // the cone it throws down the wall
+        ctx.globalAlpha = 0.13 * flick;
+        const cg = ctx.createLinearGradient(0, topY + 10, 0, it.y);
+        cg.addColorStop(0, rgb);
+        cg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = cg;
+        ctx.beginPath();
+        ctx.moveTo(x - 7, topY + 10);
+        ctx.lineTo(x + 7, topY + 10);
+        ctx.lineTo(x + 30, it.y);
+        ctx.lineTo(x - 30, it.y);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+    }
+  }
+
+  // Fed into the deferred lighting pass alongside the gameplay lights.
+  addLights(push, camX, t) {
+    for (const it of this.items) {
+      const sx = it.x - camX;
+      if (sx < -140 || sx > CW + 140) continue;
+      const c = this.colour(it);
+      const flick = it.neon
+        ? (DC_hash(Math.floor(t * 9) + it.seed) > 0.06 ? 1 : 0.3)
+        : 0.92 + 0.08 * Math.sin(t * 2.6 + it.seed);
+      const bulbY = it.y - it.h + (it.neon ? 18 : 10);
+      push(it.x, bulbY, it.neon ? 150 : 210, c[0], c[1], c[2],
+        (it.neon ? 0.70 : 0.95) * flick, 0.09);
+    }
+  }
+}
+
+
 // ═══ POSTFX ═══════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════════════
 //  POST-PROCESSING — WebGL2 pipeline run over the 2D scene each frame.
@@ -7954,7 +8114,13 @@ function PostFX(canvas) {
   var self = {};
   self.gl = gl;
   self.canvas = canvas;
+  // w/h is the canvas the chain presents to; iw/ih is the resolution every
+  // intermediate buffer is actually rendered at. Splitting the two gives the
+  // quality ladder a lever that works: measuring the frame showed the cost is
+  // not in any one effect but in the fixed set of full-screen half-float passes,
+  // so the only thing that buys back time is shading fewer pixels.
   self.w = 0; self.h = 0;
+  self.iw = 0; self.ih = 0; self.scale = 1;
   self.ok = true;
 
   try {
@@ -7998,42 +8164,72 @@ function PostFX(canvas) {
   self.lcBuf = new Float32Array(PFX_MAXL * 4);
   self.mips = [];
 
-  self.resize = function (w, h) {
-    if (w === self.w && h === self.h) return;
-    self.w = w; self.h = h;
+  self.resize = function (w, h, scale) {
+    var s = scale === undefined ? self.scale : Math.max(0.35, Math.min(1, scale));
+    var iw = Math.max(1, Math.round(w * s)), ih = Math.max(1, Math.round(h * s));
+    if (w === self.w && h === self.h && iw === self.iw && ih === self.ih) return;
+    self.w = w; self.h = h; self.scale = s; self.iw = iw; self.ih = ih;
     canvas.width = w; canvas.height = h;
     for (var i = 0; i < self.mips.length; i++) {
       gl.deleteTexture(self.mips[i].tex);
       gl.deleteFramebuffer(self.mips[i].fbo);
     }
     self.mips = [];
-    var mw = Math.max(1, w >> 1), mh = Math.max(1, h >> 1);
-    for (var m = 0; m < PFX_MIPS; m++) {
+    // The mip count has to follow the internal resolution, not be fixed. Each
+    // level is accumulated additively, so a chain that bottoms out at a handful
+    // of pixels is adding a whole-screen average at full weight - at half scale
+    // a fixed six-deep chain washed the entire frame out in pale fog. Stopping
+    // around 14px keeps the widest bloom the same size on screen whatever
+    // resolution the tier is rendering at.
+    var mw = Math.max(1, iw >> 1), mh = Math.max(1, ih >> 1);
+    for (var m = 0; m < PFX_MIPS && mw >= 12 && mh >= 8; m++) {
       self.mips.push(PFX_target(gl, mw, mh, gl.RGBA16F, gl.HALF_FLOAT));
       mw = Math.max(1, mw >> 1); mh = Math.max(1, mh >> 1);
     }
+    if (!self.mips.length) self.mips.push(PFX_target(gl, Math.max(1, iw >> 1), Math.max(1, ih >> 1), gl.RGBA16F, gl.HALF_FLOAT));
     for (const k of ['bgHalf', 'bgQuarter', 'merged']) {
       if (self[k]) { gl.deleteTexture(self[k].tex); gl.deleteFramebuffer(self[k].fbo); }
     }
+    // Deliberately sized off the PRESENTED resolution, not the internal one.
+    // The depth-of-field blur is a fixed amount of defocus in screen terms, so
+    // if these shrink with the tier the backdrop gets blurred four times harder
+    // at half scale - which turned Gotham's skyline into flat pale fog even
+    // though the frame's average brightness was unchanged.
     self.bgHalf = PFX_target(gl, Math.max(1, w >> 1), Math.max(1, h >> 1), gl.RGBA16F, gl.HALF_FLOAT);
     self.bgQuarter = PFX_target(gl, Math.max(1, w >> 2), Math.max(1, h >> 2), gl.RGBA16F, gl.HALF_FLOAT);
-    self.merged = PFX_target(gl, w, h, gl.RGBA16F, gl.HALF_FLOAT);
+    self.merged = PFX_target(gl, iw, ih, gl.RGBA16F, gl.HALF_FLOAT);
     for (const k2 of ['streak', 'final']) {
       if (self[k2]) { gl.deleteTexture(self[k2].tex); gl.deleteFramebuffer(self[k2].fbo); }
     }
-    self.streak = PFX_target(gl, Math.max(1, w >> 2), Math.max(1, h >> 2), gl.RGBA16F, gl.HALF_FLOAT);
-    self.final = PFX_target(gl, w, h, gl.RGBA8, gl.UNSIGNED_BYTE);
+    self.streak = PFX_target(gl, Math.max(1, iw >> 2), Math.max(1, ih >> 2), gl.RGBA16F, gl.HALF_FLOAT);
+    self.final = PFX_target(gl, iw, ih, gl.RGBA8, gl.UNSIGNED_BYTE);
     if (self.lightBuf) { gl.deleteTexture(self.lightBuf.tex); gl.deleteFramebuffer(self.lightBuf.fbo); }
-    self.lightBuf = PFX_target(gl, Math.max(1, w >> 1), Math.max(1, h >> 1), gl.RGBA16F, gl.HALF_FLOAT);
+    self.lightBuf = PFX_target(gl, Math.max(1, iw >> 1), Math.max(1, ih >> 1), gl.RGBA16F, gl.HALF_FLOAT);
     if (self.wet) { gl.deleteTexture(self.wet.tex); gl.deleteFramebuffer(self.wet.fbo); }
-    self.wet = PFX_target(gl, w, h, gl.RGBA16F, gl.HALF_FLOAT);
+    self.wet = PFX_target(gl, iw, ih, gl.RGBA16F, gl.HALF_FLOAT);
     if (self.rays) { gl.deleteTexture(self.rays.tex); gl.deleteFramebuffer(self.rays.fbo); }
-    self.rays = PFX_target(gl, Math.max(1, w >> 2), Math.max(1, h >> 2), gl.RGBA16F, gl.HALF_FLOAT);
+    self.rays = PFX_target(gl, Math.max(1, iw >> 2), Math.max(1, ih >> 2), gl.RGBA16F, gl.HALF_FLOAT);
     if (self.lit) { gl.deleteTexture(self.lit.tex); gl.deleteFramebuffer(self.lit.fbo); }
     // half-float so lights can push past 1.0 and feed the bloom chain
-    self.lit = PFX_target(gl, w, h, gl.RGBA16F, gl.HALF_FLOAT);
+    self.lit = PFX_target(gl, iw, ih, gl.RGBA16F, gl.HALF_FLOAT);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   };
+
+  // Five 2D canvases are handed to the GPU every frame. texImage2D throws the
+  // old texture storage away and allocates new storage each time; once the size
+  // has settled - which is every frame but the first, and after a resize -
+  // texSubImage2D writes into the storage that is already there.
+  var upSize = {};
+  function upload(key, tex, src) {
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    var s = upSize[key];
+    if (s && s.w === src.width && s.h === src.height) {
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, src);
+    } else {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+      upSize[key] = { w: src.width, h: src.height };
+    }
+  }
 
   function blit(prog, target) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fbo : null);
@@ -8049,8 +8245,7 @@ function PostFX(canvas) {
   // lights       : array of {x,y,z,r, cr,cg,cb, i} in screen-uv space
   self.render = function (source, normalSource, occSource, wetSource, bgSource, lights, prm) {
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    gl.bindTexture(gl.TEXTURE_2D, self.sceneTex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    upload('scene', self.sceneTex, source);
 
     gl.disable(gl.BLEND);
     gl.disable(gl.DEPTH_TEST);
@@ -8059,13 +8254,16 @@ function PostFX(canvas) {
 
     // 0a. depth of field: blur the backdrop, then put the sharp foreground on it
     if (bgSource && prm.dof > 0.001) {
-      gl.bindTexture(gl.TEXTURE_2D, self.bgTex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bgSource);
+      upload('bg', self.bgTex, bgSource);
       gl.useProgram(self.progDown.p);
       gl.uniform1i(self.progDown.u.uTex, 0);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, self.bgTex);
-      gl.uniform2f(self.progDown.u.uTexel, 1 / self.w, 1 / self.h);
+      // the backdrop canvas is drawn at half resolution, so its texel is twice
+      // the screen texel - reading the source's own size keeps the 13-tap
+      // kernel the right width whatever the caller hands us
+      gl.uniform2f(self.progDown.u.uTexel,
+        1 / Math.max(1, bgSource.width), 1 / Math.max(1, bgSource.height));
       blit(self.progDown, self.bgHalf);
       gl.bindTexture(gl.TEXTURE_2D, self.bgHalf.tex);
       gl.uniform2f(self.progDown.u.uTexel, 1 / self.bgHalf.w, 1 / self.bgHalf.h);
@@ -8087,12 +8285,10 @@ function PostFX(canvas) {
 
     // 0. deferred lighting pass
     if (normalSource && prm.lighting !== false) {
-      gl.bindTexture(gl.TEXTURE_2D, self.normalTex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, normalSource);
+      upload('nrm', self.normalTex, normalSource);
       var castShadows = !!(occSource && prm.shadows !== false);
       if (castShadows) {
-        gl.bindTexture(gl.TEXTURE_2D, self.occTex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, occSource);
+        upload('occ', self.occTex, occSource);
       }
 
       var n = Math.min(lights ? lights.length : 0, PFX_MAXL);
@@ -8142,8 +8338,7 @@ function PostFX(canvas) {
 
     // 0b. wet-ground reflections, before bloom so reflected lights glow too
     if (wetSource && prm.wet > 0.001 && srcTex === self.lit.tex) {
-      gl.bindTexture(gl.TEXTURE_2D, self.wetTex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, wetSource);
+      upload('wet', self.wetTex, wetSource);
       var wp = self.progWet;
       gl.useProgram(wp.p);
       gl.activeTexture(gl.TEXTURE0);
@@ -8196,9 +8391,10 @@ function PostFX(canvas) {
     gl.disable(gl.BLEND);
 
     // 3b. light shafts, marched from the bright-pass buffer
+    var mid = self.mips[Math.min(1, self.mips.length - 1)];
     if (prm.rays > 0.0001) {
       gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, self.mips[1].tex);
+      gl.bindTexture(gl.TEXTURE_2D, mid.tex);
       var rp = self.progRays;
       gl.useProgram(rp.p);
       gl.uniform1i(rp.u.uTex, 0);
@@ -8212,11 +8408,11 @@ function PostFX(canvas) {
     // 3c. anamorphic streak off the bright pass
     if (prm.streak > 0.0001) {
       gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, self.mips[1].tex);
+      gl.bindTexture(gl.TEXTURE_2D, mid.tex);
       var sp = self.progStreak;
       gl.useProgram(sp.p);
       gl.uniform1i(sp.u.uTex, 0);
-      gl.uniform2f(sp.u.uTexel, 1 / self.mips[1].w, 1 / self.mips[1].h);
+      gl.uniform2f(sp.u.uTexel, 1 / mid.w, 1 / mid.h);
       gl.uniform1f(sp.u.uLen, prm.streakLen);
       blit(sp, self.streak);
     }
@@ -8242,7 +8438,7 @@ function PostFX(canvas) {
     gl.uniform1f(c.u.uHaze, prm.haze);
     gl.uniform1i(c.u.uStreak, 4);
     gl.uniform1f(c.u.uStreakAmt, prm.streak);
-    gl.uniform2f(c.u.uRes, self.w, self.h);
+    gl.uniform2f(c.u.uRes, self.iw, self.ih);
     gl.uniform1f(c.u.uTime, prm.time);
     gl.uniform1f(c.u.uBloomAmt, prm.bloom);
     gl.uniform1f(c.u.uAberr, prm.aberration);
@@ -8266,7 +8462,7 @@ function PostFX(canvas) {
       var fp = self.progFxaa;
       gl.useProgram(fp.p);
       gl.uniform1i(fp.u.uTex, 0);
-      gl.uniform2f(fp.u.uTexel, 1 / self.w, 1 / self.h);
+      gl.uniform2f(fp.u.uTexel, 1 / self.iw, 1 / self.ih);
       blit(fp, null);
     }
     gl.activeTexture(gl.TEXTURE0);
@@ -9284,6 +9480,7 @@ class Game {
     this.best = this.loadBest();
     this.fx = new ParticleSystem();
     this.atmos = new Atmosphere();
+    this.decor = new Decor();
     this.rain = new RainSystem();
     this.bolt = new Lightning();
     this.shake = new ScreenShake();
@@ -9294,29 +9491,51 @@ class Game {
     this.fxCanvas = null; this.perfAcc = 0; this.perfN = 0;
     this.boss = null; this.lastDt = 1 / 60;
     this.gfxTier = 3;
+    this.gfxScale = 1;
     this.strikeSeed = 0; this.prevFlash = 0;
   }
 
-  // Quality tiers. The old watchdog switched the whole chain off in one go,
-  // which both looked like a cliff and quietly hid how expensive the chain had
-  // become - every framerate reading taken after it fired was measuring the
-  // game WITHOUT post-processing. It now steps down one tier at a time,
-  // shedding the most expensive work first, and only falls off the end if that
-  // still is not enough.
+  // Quality tiers.
+  //
+  // The first version of this ladder shed one effect per step, which measured
+  // as almost useless: switching shadows, AO, bloom, DoF, wet, rays, streaks
+  // and FXAA off one at a time each moved the framerate by under 1 fps, while
+  // stubbing the whole GPU pass moved it from 6.7 to 27. The cost is not in any
+  // single effect - it is in the fixed set of full-screen half-float passes the
+  // chain always runs. So the lever that actually works is pixel count, and
+  // every step down now drops the internal render resolution as well.
+  //
+  // Resolution is also the least damaging thing to give up: bloom, lighting and
+  // the wet reflection are all low-frequency, so at 70% they are very hard to
+  // tell apart, and the chain keeps its whole look instead of losing features.
   applyTier() {
     const p = this.prm;
     if (!p) return;
     const t = this.gfxTier;
-    p.ao = t >= 3 ? 0.42 : 0.0;
-    p.shadowLights = t >= 3 ? 3 : (t >= 2 ? 1 : 0);
-    p.shadows = t >= 2;
-    p.sunShadow = t >= 2 ? 0.85 : 0.0;
-    p.dof = t >= 2 ? 1.0 : 0.0;
-    p.ripple = t >= 3 ? p.ripple : 0.0;
-    p.streak = t >= 2 ? 0.26 : 0.0;
-    p.fxaa = t >= 2;
-    p.haze = t >= 3 ? 0.010 : 0.0;
-    if (t < 2) { p.wet = 0.0; p.rays = 0.0; }
+    // 0.50 was tried and rejected: below about 0.6 the 2D scene is undersampled
+    // badly enough that the rain, the fog and the lit windows smear into a pale
+    // veil over the whole frame. 0.62 still holds the look.
+    const s = t >= 3 ? 1.0 : (t >= 2 ? 0.78 : 0.62);
+    this.gfxScale = s;
+    // AO, shadows, wet and the rest stay ON at every tier. The measurement is
+    // the reason: each of them individually was worth well under 1 fps, so
+    // switching them off only made the game look worse for nothing. The one
+    // thing that is genuinely proportional is the per-light shadow march.
+    p.shadowLights = t >= 3 ? 3 : (t >= 2 ? 2 : 1);
+    // Lens character has to shrink with the buffer or it stops being subtle:
+    // the aberration fringe and the grain are both authored in screen pixels,
+    // and upscaling a half-size buffer doubles them into obvious colour
+    // fringing and chunky 2x2 noise.
+    // aberration is rebuilt from scratch by postParams every frame (shake and
+    // lightning drive it), so scaling the live value is safe. grain and distort
+    // are not rewritten anywhere, so those come off the stored originals -
+    // multiplying them in place would walk them to zero within a second.
+    p.aberration *= s;
+    p.grain = this.gfxBase.grain * s;
+    p.distort = this.gfxBase.distort * s;
+    // below tier 3 the upscale is already a bilinear smooth, so FXAA on top of
+    // it only costs a pass and softens the sprite edges further
+    p.fxaa = t >= 3;
   }
 
   degradePostFX() {
@@ -9341,7 +9560,9 @@ class Game {
     this.fx2 = fx;
     this.fxCanvas = fxCanvas;
     this.prm = PostFX.defaults();
+    this.gfxBase = { grain: this.prm.grain, distort: this.prm.distort };
     this.gfxTier = 3;
+    this.gfxScale = 1;
     // Normals are low-frequency, so a half-res buffer is indistinguishable
     // and halves the per-frame texture upload.
     LT_init();
@@ -9517,6 +9738,9 @@ class Game {
     if (bc) push(bc.x + TILE / 2, bc.y - TILE * 1.5, 560, 1.0, 0.82, 0.32,
       bc.reached ? 3.0 : 1.70, 0.16);
 
+    // street furniture: the environment is a light source, not scenery
+    this.decor.addLights(push, camX, t);
+
     // live bat-signal blocks glow, spent ones go dark
     const w = this.world;
     const c0 = Math.max(0, Math.floor(camX / TILE) - 1);
@@ -9632,6 +9856,7 @@ class Game {
       }
     }
     this.boss = lv.boss ? new Boss(lv.boss) : null;
+    this.decor.build(this.world, lv.id);
     const wasBig = this.player ? this.player.big : false;
     this.player = new Player(lv.start.tx * TILE, (lv.start.ty + 1) * TILE - 42);
     if (wasBig) this.player.resize(true);
@@ -9810,11 +10035,16 @@ class Game {
     // it off there is nothing to composite against, so it goes straight in.
     let bg = ctx;
     if (this.fx2 && this.bgctx) {
-      if (this.bgcv.width !== this.cv.width || this.bgcv.height !== this.cv.height) {
-        this.bgcv.width = this.cv.width; this.bgcv.height = this.cv.height;
+      // Half resolution on purpose. The backdrop's only destination is the
+      // depth-of-field blur, which immediately downsamples it to a quarter, so
+      // every pixel drawn above half is thrown away - and it was being drawn by
+      // the CPU and uploaded to the GPU in full every single frame.
+      const bw = Math.max(1, this.cv.width >> 1), bh = Math.max(1, this.cv.height >> 1);
+      if (this.bgcv.width !== bw || this.bgcv.height !== bh) {
+        this.bgcv.width = bw; this.bgcv.height = bh;
       }
       bg = this.bgctx;
-      bg.setTransform(DPR, 0, 0, DPR, 0, 0);
+      bg.setTransform(DPR * 0.5, 0, 0, DPR * 0.5, 0, 0);
       ctx.clearRect(0, 0, CW, CH);
     }
     drawGothamSky(bg, camX, t, lightning);
@@ -9872,7 +10102,7 @@ class Game {
       this.drawOccluders(camX);
       this.drawWet(camX);
       const lights = this.collectLights(camX);
-      this.fx2.resize(this.cv.width, this.cv.height);
+      this.fx2.resize(this.cv.width, this.cv.height, this.gfxScale);
       this.fx2.render(this.cv, this.ncv, this.ocv, this.wcv, this.bgcv, lights, this.postParams());
     }
   }
@@ -9903,6 +10133,8 @@ class Game {
         else if (c.t === '?') drawBatSignalBlock(ctx, x, y, TILE, c.used, t);
       }
     }
+    this.decor.draw(ctx, camX, t);
+
     for (const k of this.pickups) {
       if (k.rect.r < camX - 40 || k.rect.x > camX + CW + 40) continue;
       const x = k.rect.x - camX, y = k.rect.y;
@@ -9943,7 +10175,9 @@ class Game {
     // sustained-low-framerate watchdog (skipped while capturing video)
     if (this.fx2 && !(typeof window !== 'undefined' && window.__capture)) {
       this.perfAcc += dt; this.perfN++;
-      if (this.perfAcc > 2.5) {
+      // 1.6s per step rather than 2.5: with three steps the old window left a
+      // slow machine stuttering for seven and a half seconds before it settled.
+      if (this.perfAcc > 1.6) {
         if (this.perfAcc / this.perfN > 0.026) this.degradePostFX();   // under ~38fps
         this.perfAcc = 0; this.perfN = 0;
       }
