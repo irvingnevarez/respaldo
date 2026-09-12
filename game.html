@@ -7485,6 +7485,7 @@ var PFX_LIGHT = PFX_HEAD + [
   'uniform float uShadowStrength;',
   'uniform float uSunShadow;',
   'uniform float uSunLen;',
+  'uniform float uAO;',
   'uniform vec3  uAmbient;',
   'uniform float uAspect;',
   'uniform float uNrmStrength;',
@@ -7498,22 +7499,20 @@ var PFX_LIGHT = PFX_HEAD + [
   // first couple of steps are skipped so a surface does not shadow itself,
   // and the taps widen with distance to fake a penumbra.
   'float PFX_shadow(vec2 uv, vec2 lp){',
-  '  const int ST = 12;',
+  '  const int ST = 9;',
   '  vec2 stepv = (lp - uv) / float(ST);',
   '  float occ = 0.0;',
+  // One tap per step, offset perpendicular by a step-varying amount: it
+  // softens the edge the same way three taps did, at a third of the cost.
   '  for (int i = 3; i <= ST; i++) {',
   '    float f = float(i) / float(ST);',
-  '    vec2 s = uv + stepv * float(i);',
-  '    vec2 w = stepv * f * 0.55;',              // widening tap offset
-  '    occ += texture(uOcc, s).r * 0.5;',
-  '    occ += texture(uOcc, s + vec2(w.y, -w.x)).r * 0.25;',
-  '    occ += texture(uOcc, s - vec2(w.y, -w.x)).r * 0.25;',
+  '    vec2 w = vec2(stepv.y, -stepv.x) * (f - 0.5) * 0.9;',
+  '    occ += texture(uOcc, uv + stepv * float(i) + w).r;',
   '  }',
   '  return clamp(1.0 - (occ / float(ST - 2)) * uShadowStrength, 0.0, 1.0);',
   '}',
   '',
   'void main(){',
-  '  vec3 a = texture(uAlbedo, vUV).rgb;',
   '  vec3 n = texture(uNrm, vUV).rgb * 2.0 - 1.0;',
   // The normal buffer is authored in canvas space (y grows downward) but every
   // light vector here is in UV space (y grows upward), so the vertical
@@ -7522,6 +7521,19 @@ var PFX_LIGHT = PFX_HEAD + [
   '  n.xy *= uNrmStrength;',
   '  n = normalize(n + vec3(0.0, 0.0, 1e-5));',
   '  vec3 lit = uAmbient;',
+  // Contact occlusion. Only air pixels are darkened, and only by how much
+  // geometry crowds them, so nooks where a wall meets the floor and the
+  // undersides of ledges pick up a soft grounding shadow. Pixels inside
+  // geometry are left alone - the tile art already shades its own volume.
+  '  if (uAO > 0.001 && texture(uOcc, vUV).r < 0.45) {',
+  '    float occ = 0.0;',
+  '    for (int i = 0; i < 6; i++) {',
+  '      float a = float(i) * 1.0471975;',
+  '      vec2 d = vec2(cos(a) / uAspect, sin(a));',
+  '      occ += texture(uOcc, vUV + d * 0.016).r;',
+  '    }',
+  '    lit *= 1.0 - clamp(occ / 6.0, 0.0, 1.0) * uAO;',
+  '  }',
   // Directional (moon) shadow: a fixed-length march along the light direction.
   // This is what produces the long raking shadows off every block and figure -
   // the point lights are small and local, so on their own they barely read.
@@ -7529,10 +7541,10 @@ var PFX_LIGHT = PFX_HEAD + [
   '  if (uSunShadow > 0.0) {',
   '    vec2 sd = normalize(vec2(uSunDir.x / uAspect, uSunDir.y)) * uSunLen;',
   '    float socc = 0.0;',
-  '    for (int i = 2; i <= 14; i++) {',
-  '      socc += texture(uOcc, vUV + sd * (float(i) / 14.0)).r;',
+  '    for (int i = 2; i <= 9; i++) {',
+  '      socc += texture(uOcc, vUV + sd * (float(i) / 9.0)).r;',
   '    }',
-  '    sunSh = clamp(1.0 - (socc / 13.0) * uSunShadow, 0.0, 1.0);',
+  '    sunSh = clamp(1.0 - (socc / 8.0) * uSunShadow, 0.0, 1.0);',
   '  }',
   '  lit += uSunCol * max(dot(n, normalize(uSunDir)), 0.0) * sunSh;',
   '  for (int i = 0; i < ' + PFX_MAXL + '; i++) {',
@@ -7550,7 +7562,20 @@ var PFX_LIGHT = PFX_HEAD + [
   '    float sh = (i < uShadowCount && att > 0.001) ? PFX_shadow(vUV, lp.xy) : 1.0;',
   '    lit += uLC[i].rgb * (uLC[i].a * att * ndl * sh);',
   '  }',
-  '  oColor = vec4(a * lit, 1.0);',
+  '  oColor = vec4(lit, 1.0);',
+  '}'
+].join('\n');
+
+// ── apply lighting ──────────────────────────────────────────────────────
+// Light, shadows and AO are all low-frequency, so the pass above runs at
+// half resolution and this multiplies the full-resolution albedo by the
+// upscaled result. Same picture, a quarter of the fragment work.
+var PFX_APPLY = PFX_HEAD + [
+  '',
+  'uniform sampler2D uAlbedo;',
+  'uniform sampler2D uLight;',
+  'void main(){',
+  '  oColor = vec4(texture(uAlbedo, vUV).rgb * texture(uLight, vUV).rgb, 1.0);',
   '}'
 ].join('\n');
 
@@ -7688,6 +7713,61 @@ var PFX_WET = PFX_HEAD + [
   '}'
 ].join('\n');
 
+// ── anamorphic streak ───────────────────────────────────────────────────
+// A wide horizontal-only blur of the bright pass. Real anamorphic lenses
+// smear highlights sideways and tint them blue; it is the single cheapest
+// thing that makes a frame read as "shot" rather than "rendered".
+var PFX_STREAK = PFX_HEAD + [
+  '',
+  'uniform sampler2D uTex;',
+  'uniform vec2 uTexel;',
+  'uniform float uLen;',
+  'void main(){',
+  '  vec3 acc = vec3(0.0);',
+  '  float wsum = 0.0;',
+  '  for (int i = -14; i <= 14; i++) {',
+  '    float fi = float(i);',
+  '    float w = 1.0 - abs(fi) / 15.0;',
+  '    w *= w;',
+  '    acc += texture(uTex, vUV + vec2(fi * uTexel.x * uLen, 0.0)).rgb * w;',
+  '    wsum += w;',
+  '  }',
+  '  oColor = vec4(acc / max(wsum, 1e-4), 1.0);',
+  '}'
+].join('\n');
+
+// ── FXAA ────────────────────────────────────────────────────────────────
+// The art is vector-drawn with hard edges and the frame is upscaled by CSS,
+// so diagonals were visibly stair-stepped. Standard luma FXAA on the final
+// LDR image, which is where it belongs.
+var PFX_FXAA = PFX_HEAD + [
+  '',
+  'uniform sampler2D uTex;',
+  'uniform vec2 uTexel;',
+  'float PFX_lum(vec3 c){ return dot(c, vec3(0.299, 0.587, 0.114)); }',
+  'void main(){',
+  '  vec3 rgbM = texture(uTex, vUV).rgb;',
+  '  float lM  = PFX_lum(rgbM);',
+  '  float lNW = PFX_lum(texture(uTex, vUV + vec2(-1.0, -1.0) * uTexel).rgb);',
+  '  float lNE = PFX_lum(texture(uTex, vUV + vec2( 1.0, -1.0) * uTexel).rgb);',
+  '  float lSW = PFX_lum(texture(uTex, vUV + vec2(-1.0,  1.0) * uTexel).rgb);',
+  '  float lSE = PFX_lum(texture(uTex, vUV + vec2( 1.0,  1.0) * uTexel).rgb);',
+  '  float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE)));',
+  '  float lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));',
+  '  if (lMax - lMin < max(0.0312, lMax * 0.125)) { oColor = vec4(rgbM, 1.0); return; }',
+  '  vec2 dir = vec2(-((lNW + lNE) - (lSW + lSE)), ((lNW + lSW) - (lNE + lSE)));',
+  '  float red = max((lNW + lNE + lSW + lSE) * 0.03125, 0.0078125);',
+  '  float rcp = 1.0 / (min(abs(dir.x), abs(dir.y)) + red);',
+  '  dir = clamp(dir * rcp, -8.0, 8.0) * uTexel;',
+  '  vec3 rgbA = 0.5 * (texture(uTex, vUV + dir * (1.0 / 3.0 - 0.5)).rgb',
+  '                   + texture(uTex, vUV + dir * (2.0 / 3.0 - 0.5)).rgb);',
+  '  vec3 rgbB = rgbA * 0.5 + 0.25 * (texture(uTex, vUV + dir * -0.5).rgb',
+  '                                 + texture(uTex, vUV + dir *  0.5).rgb);',
+  '  float lB = PFX_lum(rgbB);',
+  '  oColor = vec4((lB < lMin || lB > lMax) ? rgbA : rgbB, 1.0);',
+  '}'
+].join('\n');
+
 // ── volumetric light shafts ─────────────────────────────────────────────
 // Radial scattering march (the classic Mitchell approach): step from the
 // fragment toward the light, accumulating the bright-pass buffer with a
@@ -7720,6 +7800,8 @@ var PFX_COMP = PFX_HEAD + [
   'uniform sampler2D uBloom;',
   'uniform sampler2D uRays;',
   'uniform sampler2D uHazeTex;',
+  'uniform sampler2D uStreak;',
+  'uniform float uStreakAmt;',
   'uniform float uRaysAmt;',
   'uniform float uHaze;',
   'uniform vec2  uRes;',
@@ -7774,6 +7856,7 @@ var PFX_COMP = PFX_HEAD + [
   '  vec3 bloom = texture(uBloom, uv).rgb;',
   '  vec3 col = scene + bloom * uBloomAmt;',
   '  col += texture(uRays, uv).rgb * uRaysAmt;',
+  '  col += texture(uStreak, uv).rgb * uStreakAmt * vec3(0.55, 0.76, 1.35);',
   '',
   '  col *= uExposure;',
   '  col += uFlash;',                                    // lightning wash
@@ -7882,6 +7965,9 @@ function PostFX(canvas) {
     self.progRays = PFX_program(gl, PFX_RAYS);
     self.progWet = PFX_program(gl, PFX_WET);
     self.progMerge = PFX_program(gl, PFX_MERGE);
+    self.progStreak = PFX_program(gl, PFX_STREAK);
+    self.progFxaa = PFX_program(gl, PFX_FXAA);
+    self.progApply = PFX_program(gl, PFX_APPLY);
     self.progComp = PFX_program(gl, PFX_COMP);
   } catch (e) {
     self.error = e.message;
@@ -7907,6 +7993,7 @@ function PostFX(canvas) {
   self.rays = null;
   self.wet = null;
   self.bgHalf = null; self.bgQuarter = null; self.merged = null;
+  self.streak = null; self.final = null; self.lightBuf = null;
   self.lpBuf = new Float32Array(PFX_MAXL * 4);
   self.lcBuf = new Float32Array(PFX_MAXL * 4);
   self.mips = [];
@@ -7931,6 +8018,13 @@ function PostFX(canvas) {
     self.bgHalf = PFX_target(gl, Math.max(1, w >> 1), Math.max(1, h >> 1), gl.RGBA16F, gl.HALF_FLOAT);
     self.bgQuarter = PFX_target(gl, Math.max(1, w >> 2), Math.max(1, h >> 2), gl.RGBA16F, gl.HALF_FLOAT);
     self.merged = PFX_target(gl, w, h, gl.RGBA16F, gl.HALF_FLOAT);
+    for (const k2 of ['streak', 'final']) {
+      if (self[k2]) { gl.deleteTexture(self[k2].tex); gl.deleteFramebuffer(self[k2].fbo); }
+    }
+    self.streak = PFX_target(gl, Math.max(1, w >> 2), Math.max(1, h >> 2), gl.RGBA16F, gl.HALF_FLOAT);
+    self.final = PFX_target(gl, w, h, gl.RGBA8, gl.UNSIGNED_BYTE);
+    if (self.lightBuf) { gl.deleteTexture(self.lightBuf.tex); gl.deleteFramebuffer(self.lightBuf.fbo); }
+    self.lightBuf = PFX_target(gl, Math.max(1, w >> 1), Math.max(1, h >> 1), gl.RGBA16F, gl.HALF_FLOAT);
     if (self.wet) { gl.deleteTexture(self.wet.tex); gl.deleteFramebuffer(self.wet.fbo); }
     self.wet = PFX_target(gl, w, h, gl.RGBA16F, gl.HALF_FLOAT);
     if (self.rays) { gl.deleteTexture(self.rays.tex); gl.deleteFramebuffer(self.rays.fbo); }
@@ -8017,13 +8111,13 @@ function PostFX(canvas) {
       gl.bindTexture(gl.TEXTURE_2D, self.normalTex);
       gl.activeTexture(gl.TEXTURE2);
       gl.bindTexture(gl.TEXTURE_2D, self.occTex);
-      gl.uniform1i(lp.u.uAlbedo, 0);
       gl.uniform1i(lp.u.uNrm, 1);
       gl.uniform1i(lp.u.uOcc, 2);
       gl.uniform1i(lp.u.uShadowCount, castShadows ? Math.min(prm.shadowLights, n) : 0);
       gl.uniform1f(lp.u.uShadowStrength, prm.shadowStrength);
       gl.uniform1f(lp.u.uSunShadow, castShadows ? prm.sunShadow : 0.0);
       gl.uniform1f(lp.u.uSunLen, prm.sunLen);
+      gl.uniform1f(lp.u.uAO, prm.ao);
       gl.uniform3fv(lp.u.uAmbient, prm.ambient);
       gl.uniform1f(lp.u.uAspect, self.w / Math.max(1, self.h));
       gl.uniform1f(lp.u.uNrmStrength, prm.normalStrength);
@@ -8032,7 +8126,16 @@ function PostFX(canvas) {
       if (lp.u['uLC[0]']) gl.uniform4fv(lp.u['uLC[0]'], self.lcBuf);
       gl.uniform3fv(lp.u.uSunDir, prm.sunDir);
       gl.uniform3fv(lp.u.uSunCol, prm.sunCol);
-      blit(lp, self.lit);
+      blit(lp, self.lightBuf);
+      var ap = self.progApply;
+      gl.useProgram(ap.p);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, srcTex);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, self.lightBuf.tex);
+      gl.uniform1i(ap.u.uAlbedo, 0);
+      gl.uniform1i(ap.u.uLight, 1);
+      blit(ap, self.lit);
       srcTex = self.lit.tex;
       gl.activeTexture(gl.TEXTURE0);
     }
@@ -8106,7 +8209,19 @@ function PostFX(canvas) {
       blit(rp, self.rays);
     }
 
-    // 4. composite to the screen
+    // 3c. anamorphic streak off the bright pass
+    if (prm.streak > 0.0001) {
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, self.mips[1].tex);
+      var sp = self.progStreak;
+      gl.useProgram(sp.p);
+      gl.uniform1i(sp.u.uTex, 0);
+      gl.uniform2f(sp.u.uTexel, 1 / self.mips[1].w, 1 / self.mips[1].h);
+      gl.uniform1f(sp.u.uLen, prm.streakLen);
+      blit(sp, self.streak);
+    }
+
+    // 4. composite
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, srcTex);
     gl.activeTexture(gl.TEXTURE1);
@@ -8115,6 +8230,8 @@ function PostFX(canvas) {
     gl.bindTexture(gl.TEXTURE_2D, self.rays.tex);
     gl.activeTexture(gl.TEXTURE3);
     gl.bindTexture(gl.TEXTURE_2D, self.wetTex);
+    gl.activeTexture(gl.TEXTURE4);
+    gl.bindTexture(gl.TEXTURE_2D, self.streak.tex);
     var c = self.progComp;
     gl.useProgram(c.p);
     gl.uniform1i(c.u.uScene, 0);
@@ -8123,6 +8240,8 @@ function PostFX(canvas) {
     gl.uniform1f(c.u.uRaysAmt, prm.rays);
     gl.uniform1i(c.u.uHazeTex, 3);
     gl.uniform1f(c.u.uHaze, prm.haze);
+    gl.uniform1i(c.u.uStreak, 4);
+    gl.uniform1f(c.u.uStreakAmt, prm.streak);
     gl.uniform2f(c.u.uRes, self.w, self.h);
     gl.uniform1f(c.u.uTime, prm.time);
     gl.uniform1f(c.u.uBloomAmt, prm.bloom);
@@ -8139,7 +8258,17 @@ function PostFX(canvas) {
     gl.uniform3fv(c.u.uGain, prm.gain);
     gl.uniform3fv(c.u.uShadowTint, prm.shadowTint);
     gl.uniform3fv(c.u.uHiTint, prm.hiTint);
-    blit(c, null);
+    // 5. composite lands in an LDR buffer so FXAA has something to smooth
+    blit(c, prm.fxaa ? self.final : null);
+    if (prm.fxaa) {
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, self.final.tex);
+      var fp = self.progFxaa;
+      gl.useProgram(fp.p);
+      gl.uniform1i(fp.u.uTex, 0);
+      gl.uniform2f(fp.u.uTexel, 1 / self.w, 1 / self.h);
+      blit(fp, null);
+    }
     gl.activeTexture(gl.TEXTURE0);
   };
 
@@ -8160,12 +8289,13 @@ PostFX.defaults = function () {
     // Ambient sits high on purpose: the art carries its own baked shading, so
     // the dynamic lights are a highlight layer, not the primary illumination.
     lighting: true, normalStrength: 1.5,
-    shadows: true, shadowLights: 4, shadowStrength: 0.92,
+    shadows: true, shadowLights: 3, shadowStrength: 0.92,
     sunShadow: 0.85, sunLen: 0.13,
     // rain-slicked stone: mirror strength, how fast it fades with depth,
     // and a cool tint because the reflection is of a night sky
     wet: 0.5, wetFade: 17.0, wetSquash: 3.6, ripple: 1.0, haze: 0.010,
-    dof: 1.0, bgDim: 1.0,
+    dof: 1.0, bgDim: 1.0, ao: 0.42,
+    streak: 0.26, streakLen: 2.4, fxaa: true,
     wetTint: new Float32Array([0.78, 0.86, 1.05]),
     // moon shafts: centre tracks the moon, updated per frame by the game
     rays: 0.34, rayX: 0.70, rayY: 0.86, rayDensity: 0.62, rayWeight: 0.055, rayDecay: 0.93,
@@ -9163,13 +9293,39 @@ class Game {
     this.fx2 = null; this.prm = null; this.aberrPulse = 0;
     this.fxCanvas = null; this.perfAcc = 0; this.perfN = 0;
     this.boss = null; this.lastDt = 1 / 60;
+    this.gfxTier = 3;
     this.strikeSeed = 0; this.prevFlash = 0;
   }
 
-  // If the device cannot hold a reasonable frame rate with the post chain on,
-  // drop it rather than shipping a slideshow. Playability beats atmosphere.
+  // Quality tiers. The old watchdog switched the whole chain off in one go,
+  // which both looked like a cliff and quietly hid how expensive the chain had
+  // become - every framerate reading taken after it fired was measuring the
+  // game WITHOUT post-processing. It now steps down one tier at a time,
+  // shedding the most expensive work first, and only falls off the end if that
+  // still is not enough.
+  applyTier() {
+    const p = this.prm;
+    if (!p) return;
+    const t = this.gfxTier;
+    p.ao = t >= 3 ? 0.42 : 0.0;
+    p.shadowLights = t >= 3 ? 3 : (t >= 2 ? 1 : 0);
+    p.shadows = t >= 2;
+    p.sunShadow = t >= 2 ? 0.85 : 0.0;
+    p.dof = t >= 2 ? 1.0 : 0.0;
+    p.ripple = t >= 3 ? p.ripple : 0.0;
+    p.streak = t >= 2 ? 0.26 : 0.0;
+    p.fxaa = t >= 2;
+    p.haze = t >= 3 ? 0.010 : 0.0;
+    if (t < 2) { p.wet = 0.0; p.rays = 0.0; }
+  }
+
   degradePostFX() {
     if (!this.fx2) return;
+    if (this.gfxTier > 1) {
+      this.gfxTier--;
+      this.applyTier();
+      return;
+    }
     this.fx2 = null;
     if (this.fxCanvas) this.fxCanvas.style.display = 'none';
     this.cv.style.display = 'block';
@@ -9185,6 +9341,7 @@ class Game {
     this.fx2 = fx;
     this.fxCanvas = fxCanvas;
     this.prm = PostFX.defaults();
+    this.gfxTier = 3;
     // Normals are low-frequency, so a half-res buffer is indistinguishable
     // and halves the per-frame texture upload.
     LT_init();
@@ -9452,6 +9609,7 @@ class Game {
     if (this.state === ST.DEAD) { p.vignette = 1.5; p.saturation = 0.45; }
     else if (this.state === ST.TITLE) { p.vignette = 1.0; p.bloom += 0.14; }
     else p.vignette = 0.85;
+    this.applyTier();   // postParams rewrote several tier-controlled values
     return p;
   }
   loadBest() { try { return parseInt(localStorage.getItem('bat_best') || '0', 10) || 0; } catch (e) { return 0; } }
