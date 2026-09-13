@@ -114,7 +114,8 @@ const FPS = 60, TOTAL = Math.round(SECS * FPS);
 
   const hist = [];
   let cleared = false, clearFrame = -1, deaths = 0, lastLives = LIVES;
-  let maxX = 0, stalledSince = 0, stallFrame = -1;
+  let maxX = 0, stalledSince = 0, stallFrame = -1, firstDeath = -1, lastHp = -1;
+  const hits = [], deathAt = [];
   const CHUNK = 120;
 
   outer:
@@ -125,7 +126,9 @@ const FPS = 60, TOTAL = Math.round(SECS * FPS);
       hist.push(s);
       if (s.x > maxX) { maxX = s.x; stalledSince = s.f; }
       if (stallFrame < 0 && s.f - stalledSince > 60 * 12) stallFrame = s.f;
-      if (s.lives < lastLives) { deaths++; lastLives = s.lives; }
+      if (s.boss && lastHp >= 0 && s.boss.hp < lastHp) hits.push(+(s.f/FPS).toFixed(1));
+      if (s.boss) lastHp = s.boss.hp;
+      if (s.lives < lastLives) { deaths++; deathAt.push(+(s.f/FPS).toFixed(1)); lastLives = s.lives; if (firstDeath < 0) firstDeath = s.f; }
       if (s.st === 'clear') { cleared = true; clearFrame = s.f; break outer; }
       if (s.st === 'over') break outer;
       // a boss arena never scrolls, so x-stall is not a failure there; give up
@@ -147,6 +150,8 @@ const FPS = 60, TOTAL = Math.round(SECS * FPS);
     maxX: maxX,
     stalled: stallFrame > 0,
     boss: last.boss || null,
+    bossHitsAt: hits, deathsAt: deathAt,
+    firstDeathAt: firstDeath < 0 ? null : +(firstDeath / FPS).toFixed(2),
     pageErrors: errs.length,
     apError: apErr,
   };
