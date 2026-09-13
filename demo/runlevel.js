@@ -19,6 +19,7 @@ function flagVal(name, dflt) {
 }
 const BOT = flagVal('--bot', 'autopilot.js');
 const POLICY = flagVal('--policy', null);
+const LIVES = parseInt(flagVal('--lives', '3'), 10);
 const SECS = parseFloat(process.argv[3] || '75');
 const TRACE = process.argv.indexOf('--trace') >= 0;
 const FPS = 60, TOTAL = Math.round(SECS * FPS);
@@ -57,6 +58,7 @@ const FPS = 60, TOTAL = Math.round(SECS * FPS);
     // clock to a few seconds, which is what makes iterating on the bot viable.
     g.draw = function () { };
     g.startRun();
+    g.lives = a[2];
     g.lvIdx = a[1];
     g.loadLevel(a[1]);
     g.state = 'play';
@@ -85,8 +87,11 @@ const FPS = 60, TOTAL = Math.round(SECS * FPS);
         boss: b ? { hp: b.hp, phase: b.phase, state: b.state, vuln: !!b.vulnerable,
                     bx: Math.round(b.rect.x), by: Math.round(b.rect.y),
                     proj: b.proj.length, waves: b.waves.length,
-                    gas: Math.round(b.gasY) } : null,
+                    gas: Math.round(b.gasY),
+                    pj: b.proj.map(q => q.kind[0] + Math.round(q.rect.cx - (p ? p.rect.cx : 0)) +
+                        (q.blast > 0 ? 'BLAST' : '') + '/' + Math.round(q.rect.cy)).join(' ') } : null,
         ap: window.__ap || null,
+        bp: window.__bp || null,
         near: gg.enemies.filter(e => e.alive && p && Math.abs(e.rect.cx - p.rect.cx) < 150)
           .map(e => e.kind + '@' + Math.round(e.rect.cx - p.rect.cx)),
       };
@@ -105,10 +110,10 @@ const FPS = 60, TOTAL = Math.round(SECS * FPS);
       }
       return out;
     };
-  }, [src, LV]);
+  }, [src, LV, LIVES]);
 
   const hist = [];
-  let cleared = false, clearFrame = -1, deaths = 0, lastLives = 3;
+  let cleared = false, clearFrame = -1, deaths = 0, lastLives = LIVES;
   let maxX = 0, stalledSince = 0, stallFrame = -1;
   const CHUNK = 120;
 
@@ -160,11 +165,11 @@ const FPS = 60, TOTAL = Math.round(SECS * FPS);
         String(h.vx).padStart(5) + String(h.vy).padStart(5) +
         (h.onG ? '   Y' : '   .') + '  ' + (h.act || '-').padEnd(10) + ' ' +
         (h.boss ? 'hp' + h.boss.hp + ' p' + h.boss.phase + ' ' + h.boss.state +
-          (h.boss.vuln ? ' VULN' : '') + ' pr' + h.boss.proj + ' wv' + h.boss.waves : '') +
+          (h.boss.vuln ? ' VULN' : '') + ' pr[' + h.boss.pj + '] wv' + h.boss.waves : '') +
         ' ' + (h.ap ? 'wj' + h.ap.wj + (h.ap.gL ? ' goL' : '') + (h.ap.brk ? ' BRK' : '') +
           (h.ap.beh ? ' beh' : '') + (h.ap.thr ? ' thr' : '') + (h.ap.pn ? ' PIT' : '') +
           (h.ap.tgt >= 0 ? ' tgt' + h.ap.tgt : '') : '') +
-        ' ' + h.near.join(' '));
+        ' ' + (h.bp||'') + ' ' + h.near.join(' '));
     });
   }
 })().catch(e => { console.error('RUNLEVEL FAILED: ' + e.message); process.exit(9); });

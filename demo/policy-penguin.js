@@ -28,7 +28,27 @@ function BP_jump(n) {
   if (BP_jf <= 0 && !BP_prevJump) BP_jf = n;
 }
 
+// The arena has waist-high platforms at both ends. Walking into the side of
+// one and holding the button is indistinguishable, from the policy's point of
+// view, from walking freely — and the bot spent whole phases pinned against a
+// platform edge while bombs landed on it. So the check lives here, in the one
+// place every branch goes through: pressing a direction and not moving means
+// jump, and if that does not help, give up on that direction.
+var BP_stuck = 0, BP_flip = 0, BP_lastP = null;
+var BP_dir = 1, BP_run = true;   // held through an arc
 function BP_emit(L, R, run) {
+  var p = BP_lastP;
+  // Reset while airborne. Leaving the counter latched there was a self-feeding
+  // loop: being stuck triggered a jump, the jump made us airborne, airborne
+  // never cleared the counter, so it jumped again — forever, on the spot.
+  if (!p || !p.onGround) BP_stuck = 0;
+  else if ((L || R) && Math.abs(p.vx) < 22) BP_stuck++;
+  else BP_stuck = 0;
+  if (BP_stuck > 7) {
+    BP_jump(21);
+    if (BP_stuck > 26) { BP_flip = 40; BP_stuck = 0; }
+  }
+  if (BP_flip > 0) { BP_flip--; var t0 = L; L = R; R = t0; }
   var j = false;
   if (BP_jf > 0) { j = true; BP_jf--; }
   var o = { L: !!L, R: !!R, run: !!run, jump: j };
@@ -39,14 +59,16 @@ function BP_emit(L, R, run) {
 // Is a floor-level hazard about to reach us? Shockwaves are 40x42 ridges that
 // race along the ground; they are jumpable and that is the whole point.
 function BP_waveThreat(b, p) {
+  var best = null;
   for (var i = 0; i < b.waves.length; i++) {
     var w = b.waves[i];
     if (!w.alive) continue;
     var dx = w.rect.cx - p.rect.cx;
     var closing = (dx > 0 && w.dir < 0) || (dx < 0 && w.dir > 0);
-    if (closing && Math.abs(dx) < 130) return Math.abs(dx);
+    if (!closing || Math.abs(dx) > 170) continue;
+    if (!best || Math.abs(dx) < Math.abs(best.dx)) best = { dx: dx, dir: w.dir };
   }
-  return -1;
+  return best;
 }
 
 // A bomb only hurts while its blast is live, and the blast sits on the floor.
@@ -72,17 +94,22 @@ function BP_blastNear(b, p) {
 // does not work: the bot lands back inside it. The only answer is not to be
 // there, so blasts (and bombs about to become blasts) become no-go bands that
 // the walk logic refuses to cross.
-function BP_dangerBands(b) {
+function BP_dangerBands(b, liveOnly) {
   var out = [];
   for (var i = 0; i < b.proj.length; i++) {
     var pr = b.proj[i];
     if (!pr.alive) continue;
     if (pr.kind === 'bomb') {
+      // A live blast blocks the floor, and so does a bomb that is about to
+      // become one. Both halves matter: with only live blasts the bot ran
+      // straight into a bomb and arrived on the frame it detonated; with a
+      // full landing prediction it reversed away from bombs and backed into
+      // the slam. The fix is in the RESPONSE, not the detection — see BP_goto.
       if (pr.blast > 0) { out.push(pr.rect.cx); continue; }
-      // predict where it lands: vy grows at 900, and it blows on contact
+      if (liveOnly) continue;
       var t = 0, vy = pr.vy, y = pr.rect.b;
-      while (y < BP_GROUND && t < 3) { vy += 900 / 60; y += vy / 60; t += 1 / 60; }
-      if (t < 0.85) out.push(pr.rect.cx + pr.vx * t);
+      while (y < BP_GROUND && t < 2) { vy += 900 / 60; y += vy / 60; t += 1 / 60; }
+      if (t < 0.7) out.push(pr.rect.cx + pr.vx * t);
     } else {
       out.push(pr.rect.cx);
     }
@@ -103,11 +130,22 @@ function BP_blocked(bands, from, to) {
 // walked straight into the side of a platform and stood there pressing left
 // for ten seconds while the fight went on without it.
 var BP_blockT = 0;
+var BP_why = '-';
 function BP_goto(p, tx, run, bands) {
   // never walk through a live or imminent blast: stop on our side of it
   if (bands) {
     var hit = BP_blocked(bands, p.rect.cx, tx);
-    if (hit !== null) tx = hit > p.rect.cx ? hit - 105 : hit + 105;
+    if (hit !== null) {
+      var stop = hit > p.rect.cx ? hit - 105 : hit + 105;
+      // Stop short of it — never reverse past where we already are. Reversing
+      // is what walked the bot back under the boss and got it slammed; the
+      // blast only lasts 0.34s, so simply waiting is both safer and faster.
+      var fwd = tx > p.rect.cx;
+      if ((fwd && stop < p.rect.cx) || (!fwd && stop > p.rect.cx)) {
+        return BP_emit(false, false, false);
+      }
+      tx = stop;
+    }
   }
   var d = tx - p.rect.cx;
   var moving = Math.abs(p.vx) > 24;
@@ -118,58 +156,79 @@ function BP_goto(p, tx, run, bands) {
 }
 
 function BP_penguin(g, p, b) {
+  BP_lastP = p;
   var onG = p.onGround;
+  var bands = BP_dangerBands(b, false);   // live blasts + bombs about to land
+  var live = BP_dangerBands(b, true);     // live blasts only
   var wave = BP_waveThreat(b, p);
-  var bands = BP_dangerBands(b);
 
-  // standing inside a band is the emergency: walk out of it, either way
-  var here = BP_blocked(bands, p.rect.cx, p.rect.cx);
-  if (here !== null && b.state !== 'dazed') {
-    var away2 = here > p.rect.cx ? -1 : 1;
-    if (p.rect.cx < 150) away2 = 1;
-    if (p.rect.cx > 810) away2 = -1;
-    return BP_emit(away2 < 0, away2 > 0, true);
+  // Airborne: hold the course chosen on take-off. Emitting no direction here is
+  // the same bug that made the bot jump straight up in the starting notch.
+  if (!onG) return BP_emit(BP_dir < 0, BP_dir > 0, BP_run);
+
+  function go(dir, run) { BP_dir = dir; BP_run = run; return BP_emit(dir < 0, dir > 0, run); }
+
+  // 1. A shockwave outranks everything: it is the one hazard that is certain to
+  //    connect. Jump it, and keep running the way it is going — standing still
+  //    to clear one is how the bot got caught by the second of a pair.
+  if (wave) {
+    BP_why = 'wave';
+    if (Math.abs(wave.dx) < 118) BP_jump(21);
+    var flee = wave.dx > 0 ? -1 : 1;
+    if (p.rect.cx < 140) flee = 1;
+    if (p.rect.cx > 820) flee = -1;
+    return go(flee, true);
   }
 
-  // 1. A shockwave beats everything: it is the only hazard here that is certain
-  //    to connect, and clearing it is one well-timed jump.
-  if (wave >= 0) {
-    if (wave < 100 && onG) BP_jump(20);
-    return BP_emit(false, false, false);
-  }
-
-  // 2. The punish window: face-down in the floor for 1.6s, long enough to cross
-  //    half the arena, so commit hard.
+  // 2. The punish window: 1.6s face-down in the floor.
   if (b.state === 'dazed') {
+    BP_why = 'punish';
     var d2 = b.rect.cx - p.rect.cx;
-    if (Math.abs(d2) > 62) return BP_goto(p, b.rect.cx, true, null);
-    if (onG && p.rect.b > b.rect.y + 20) BP_jump(18);
-    return BP_emit(d2 < -8, d2 > 8, false);
+    if (Math.abs(d2) > 88) { var r2 = BP_goto(p, b.rect.cx, true, null); BP_dir = d2 > 0 ? 1 : -1; BP_run = true; return r2; }
+    if (p.rect.b > b.rect.y + 20) BP_jump(19);
+    return go(d2 > 6 ? 1 : (d2 < -6 ? -1 : BP_dir), true);
   }
 
-  // 3. He slams straight down on wherever he is hovering, so the safe place is
-  //    simply "not under him" — expressed as an absolute spot in the arena
-  //    rather than a direction, so it cannot walk into a wall.
-  var mirror = BP_LEFT + BP_RIGHT - b.rect.cx;
-  if (mirror < 150) mirror = 150;
-  if (mirror > 810) mirror = 810;
-
+  // 3. He drops straight down onto his own column, so be anywhere else.
   if (b.state === 'telegraph' || b.state === 'slam') {
-    return BP_goto(p, mirror, true, bands);
-  }
-  if (b.state === 'charge') {
-    // a phase-3 ground charge has to be jumped, not outrun
-    if (Math.abs(b.rect.cx - p.rect.cx) < 210 && onG && b.rect.b > BP_GROUND - 50) BP_jump(22);
-    return BP_emit(false, false, false);
+    BP_why = 'slam';
+    var mirror = 40 + 920 - b.rect.cx;
+    if (mirror < 150) mirror = 150;
+    if (mirror > 810) mirror = 810;
+    var r3 = BP_goto(p, mirror, true, bands);
+    BP_dir = mirror > p.rect.cx ? 1 : -1; BP_run = true;
+    return r3;
   }
 
-  // 4. Hovering: he drifts towards us dropping bombs. Sit at a working distance
-  //    — near enough to punish the instant he is dazed, far enough that the
-  //    slam does not land on our head — and hop live blasts.
-  var stand = b.rect.cx + (b.rect.cx > 480 ? -210 : 210);
-  if (stand < 150) stand = 150;
-  if (stand > 810) stand = 810;
-  return BP_goto(p, stand, false, bands);
+  // 4. A phase-3 charge crosses the floor at 430 px/s and cannot be outrun at
+  //    310, so it has to be cleared. A full jump puts our feet at 336 and his
+  //    head at 370.
+  if (b.state === 'charge') {
+    BP_why = 'charge';
+    var cdx = b.rect.cx - p.rect.cx;
+    var inbound = (cdx > 0 && b.face < 0) || (cdx < 0 && b.face > 0) || Math.abs(cdx) < 120;
+    if (inbound && Math.abs(cdx) < 165) BP_jump(24);
+    return go(BP_dir, false);
+  }
+
+  // 5. Hovering is the long phase and standing still in it is fatal: he homes
+  //    in at 72 px/s and rains bombs, so any stationary spot is eventually
+  //    covered. Always move; the only question is which way. Prefer crossing
+  //    UNDER him, because he throws the bombs towards the player — fleeing
+  //    keeps the whole pattern falling ahead of you.
+  BP_why = 'hover';
+  var near = null, nd = 1e9;
+  for (var i2 = 0; i2 < bands.length; i2++) {
+    var d3 = bands[i2] - p.rect.cx;
+    if (Math.abs(d3) < nd) { nd = Math.abs(d3); near = bands[i2]; }
+  }
+  var dir3;
+  if (near !== null && nd < 210) dir3 = near > p.rect.cx ? -1 : 1;
+  else if (Math.abs(b.rect.cx - p.rect.cx) > 230) dir3 = b.rect.cx > p.rect.cx ? 1 : -1;
+  else dir3 = p.rect.cx < b.rect.cx ? 1 : -1;
+  if (p.rect.cx < 150) dir3 = 1;
+  if (p.rect.cx > 800) dir3 = -1;
+  return go(dir3, true);
 }
 
 function AP_BOSS(g, p, b, tick) {

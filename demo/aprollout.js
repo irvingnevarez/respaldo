@@ -109,10 +109,12 @@ function RO_sim(g, w, p, hold, run, frames, foes, dir) {
       var t = (f + 1) / 60;
       for (var k = 0; k < foes.length; k++) {
         var e = foes[k];
-        var ex = e.x + e.vx * t, ey = e.y + (e.fly ? 0 : 0);
+        var ex = e.x + e.vx * t, ey = e.y;
+        if (e.after !== undefined && t < e.after - 0.06) continue;   // not there yet
         if (b.x < ex + e.w && b.x + b.w > ex && b.y < ey + e.h && b.y + b.h > ey) {
-          // the engine only counts a stomp when descending onto the top
-          if (vy > 0 && b.y + b.h < ey + 16) stomps++;
+          // the engine only counts a stomp when descending onto the top, and a
+          // shockwave or a blast cannot be landed on at all
+          if (!e.noStomp && vy > 0 && b.y + b.h < ey + 16) stomps++;
           else hits++;
           break;
         }
@@ -216,6 +218,83 @@ function RO_bestJump(g, w, p, horizon) {
       var r2 = RO_sim(g, w, p, hold, rr === 1, horizon, foes2);
       var sc = RO_score(g, w, p, r2, 0, rr === 1);
       if (sc > bestScore) { bestScore = sc; best = hold; }
+    }
+  }
+  return best;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  BOSS ROLLOUT — the same one-ply search, pointed at a fight.
+//
+//  The hand-written boss policy kept failing the same way the traversal rules
+//  did: every threshold was right for one hazard and wrong for the next, and a
+//  rule that dodged a shockwave walked into a bomb. A fight is the same
+//  question as a gap — "which action leaves me alive, and nearer to the thing
+//  I want" — so it gets the same answer.
+//
+//  Hazards are expressed in the shape RO_sim already understands. The one
+//  addition is `noStomp`: a shockwave or a blast cannot be landed on, so ANY
+//  overlap with it is a hit, whereas the boss itself is a stomp target exactly
+//  when the engine says it is vulnerable.
+// ═══════════════════════════════════════════════════════════════════════
+
+var RO_BOSS_HOLDS = [0, 8, 13, 18, 23, 27];
+
+function RO_bossHazards(b, p) {
+  var h = [];
+  for (var i = 0; i < b.waves.length; i++) {
+    var w = b.waves[i];
+    if (!w.alive) continue;
+    h.push({ x: w.rect.x, y: w.rect.y, w: w.rect.w, h: w.rect.h,
+             vx: w.dir * w.speed, noStomp: true });
+  }
+  for (var j = 0; j < b.proj.length; j++) {
+    var pr = b.proj[j];
+    if (!pr.alive) continue;
+    if (pr.kind === 'bomb' && pr.blast <= 0) {
+      // predict the blast: it detonates on contact with the floor and then
+      // covers a 68x44 patch of it for a third of a second
+      var t = 0, vy = pr.vy, y = pr.rect.b;
+      while (y < 15 * 32 && t < 2) { vy += 900 / 60; y += vy / 60; t += 1 / 60; }
+      if (t < 1.1) {
+        h.push({ x: pr.rect.cx + pr.vx * t - 34, y: 15 * 32 - 44, w: 68, h: 44,
+                 vx: 0, noStomp: true, after: t });
+      }
+      continue;
+    }
+    h.push({ x: pr.rect.x, y: pr.rect.y, w: pr.rect.w, h: pr.rect.h,
+             vx: pr.vx, noStomp: true });
+  }
+  return h;
+}
+
+// Score a rollout for a fight: survival first, then the objective.
+function RO_bossScore(r, goalX, wantStomp) {
+  if (r.dead) return -1e9;
+  var s = -Math.abs(r.x + 15 - goalX);
+  s -= 4000 * r.hits;
+  if (wantStomp) s += 6000 * r.stomps;
+  return s;
+}
+
+// Public: pick {hold, dir, run} for a boss frame.
+//   goalX     where we would like to be standing
+//   bossFoe   the boss itself, as a foe (stompable only when vulnerable)
+function RO_bossChoose(g, w, p, b, goalX, bossFoe, horizon) {
+  if (!w || !p || !p.onGround) return null;
+  var haz = RO_bossHazards(b, p);
+  if (bossFoe) haz.push(bossFoe);
+  var best = null, bestScore = -Infinity;
+  for (var i = 0; i < RO_BOSS_HOLDS.length; i++) {
+    for (var d = -1; d <= 1; d++) {
+      for (var rr = 0; rr < 2; rr++) {
+        if (d === 0 && rr) continue;
+        var hold = RO_BOSS_HOLDS[i], run = rr === 1;
+        var r = RO_sim(g, w, p, hold, run, horizon || 70, haz, d);
+        var sc = RO_bossScore(r, goalX, !!(bossFoe && bossFoe.stompable));
+        if (hold > 0) sc -= 15;
+        if (sc > bestScore) { bestScore = sc; best = { hold: hold, dir: d, run: run }; }
+      }
     }
   }
   return best;
