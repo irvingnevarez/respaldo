@@ -168,15 +168,19 @@ body{
 <script>
 
 const PAL = {
-  skyTop:'#05060f', skyMid:'#0d1226', skyLow:'#1a1033', skyGlow:'#2a1b4a',
-  moon:'#e8eaf0', moonGlow:'#aab4d8',
-  bldgFar:'#0f1226', bldgMid:'#161a33', bldgNear:'#1d2142', bldgWin:'#f5c518',
-  bat:'#1c1f2e', batHi:'#2f3548', batLo:'#101320', cape:'#12141f', capeHi:'#242840',
-  yellow:'#f5c518', yellowD:'#c99c0a', eye:'#dfe6f5',
-  stone:'#3a3550', stoneD:'#241f3a', stoneL:'#514a70', mortar:'#1a1630',
-  joker:'#6b3fa0', jokerHi:'#8a5cc4', jokerGreen:'#3fa02c', face:'#efe6d8', smile:'#c0392b',
-  peng:'#14141c', pengHi:'#2a2a38', pengW:'#e8e8f0', orange:'#e08030',
-  rain:'#7f93c9', white:'#ffffff', danger:'#e03b3b'
+  // Cold steel, not violet. The old palette ran navy -> purple with saturated
+  // sodium amber on top, which reads as arcade; the look we want is close to
+  // monochrome, separated by VALUE rather than by hue, with colour used only
+  // where something is actually emitting light.
+  skyTop:'#0a0e14', skyMid:'#18202b', skyLow:'#2b3641', skyGlow:'#3e4d5c',
+  moon:'#e9eef4', moonGlow:'#9fb2c6',
+  bldgFar:'#1e2833', bldgMid:'#1f2934', bldgNear:'#212b36', bldgWin:'#c9d8e8',
+  bat:'#191c22', batHi:'#2e343e', batLo:'#0c0e13', cape:'#101216', capeHi:'#222831',
+  yellow:'#e8c34a', yellowD:'#9c7f26', eye:'#dfe9f5',
+  stone:'#2f3742', stoneD:'#1c222a', stoneL:'#48525f', mortar:'#141920',
+  joker:'#5d4a75', jokerHi:'#7c6699', jokerGreen:'#4a8f3e', face:'#e4e6e2', smile:'#a8423c',
+  peng:'#14171c', pengHi:'#2a2f38', pengW:'#e6eaf0', orange:'#c98a4a',
+  rain:'#8fa3bb', white:'#ffffff', danger:'#c2453f'
 };
 const TILE = 32, CW = 960, CH = 540;
 let DPR = 1;
@@ -434,8 +438,8 @@ function BM_drawCape(ctx, g, W, H, u){
   }
   // rim light along the trailing edge
   BM_capePath(ctx, g, 1);
-  ctx.strokeStyle = 'rgba(126,148,210,0.30)';
-  ctx.lineWidth = 1.0*u; ctx.lineJoin='round';
+  ctx.strokeStyle = 'rgba(158,182,228,0.46)';
+  ctx.lineWidth = 1.15*u; ctx.lineJoin='round';
   ctx.stroke();
   ctx.restore();
 }
@@ -680,8 +684,8 @@ function BM_drawHead(ctx, W, H, u, t, state){
     }
   }
   // cowl rim light down the face front
-  ctx.strokeStyle = 'rgba(168,192,255,0.55)';
-  ctx.lineWidth = Math.max(0.7, 0.95*u);
+  ctx.strokeStyle = 'rgba(198,220,255,0.82)';
+  ctx.lineWidth = Math.max(0.8, 1.15*u);
   ctx.beginPath();
   ctx.moveTo(cx+hw*0.60, ty-0.108*H);
   ctx.lineTo(cx+hw*0.87, ty+0.008*H);
@@ -903,9 +907,12 @@ function drawBatmanSprite(ctx, x, y, w, h, o){
 
   // ---- front-edge rim light -------------------------------------------
   ctx.save();
+  // The rim is what makes a near-black figure readable against a dark city,
+  // and it is the single most recognisable thing about the reference look:
+  // a cold hard edge down the lit side, falling off to nothing in shadow.
   ctx.strokeStyle = BM_grad(ctx,'rim'+H.toFixed(1), 0, 0.26*H, 0, H,
-    [[0,'rgba(190,212,255,0.75)'],[0.55,'rgba(150,176,240,0.40)'],[1,'rgba(120,145,210,0.05)']]);
-  ctx.lineWidth = Math.max(0.75, 1.15*u);
+    [[0,'rgba(214,232,255,0.98)'],[0.55,'rgba(176,200,246,0.62)'],[1,'rgba(130,156,214,0.08)']]);
+  ctx.lineWidth = Math.max(0.9, 1.5*u);
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(0.255*W, 0.292*H);
@@ -1359,7 +1366,7 @@ function EN_minionHead(ctx, cx, cy, hr, face, t, flat) {
   ctx.ellipse(cx, cy, hr, hr * (flat ? 0.72 : 1.02), 0,
     face > 0 ? -Math.PI * 0.55 : Math.PI * 0.45,
     face > 0 ? Math.PI * 0.45 : Math.PI * 1.45);
-  EN_rimStroke(ctx, '#eaf2ff', 1.2, 0.55);
+  EN_rimStroke(ctx, '#dCEAff', 1.3, 0.72);
   ctx.restore();
 
   ctx.restore();
@@ -1747,7 +1754,7 @@ function drawPenguinHenchman(ctx, x, y, w, h, o) {
   ctx.ellipse(hcx, hcy, hrx, hry, 0,
     face > 0 ? -Math.PI * 0.45 : Math.PI * 0.55,
     face > 0 ? Math.PI * 0.35 : Math.PI * 1.35);
-  EN_rimStroke(ctx, '#9fb4ee', 1.3, 0.6);
+  EN_rimStroke(ctx, '#bed2f6', 1.4, 0.78);
   ctx.restore();
 
   ctx.restore(); // tilt
@@ -2641,11 +2648,11 @@ function drawGothamSky(ctx, camX, t, lightning) {
 
   // --- sodium-vapour city glow bleeding up from the horizon -------------
   const glow = ENV_linear(ctx, 'horizon', 0, CH * 0.42, 0, CH, [
-    [0, 'rgba(42,27,74,0)'],
-    [0.34, 'rgba(58,36,92,0.34)'],
-    [0.62, 'rgba(108,60,86,0.40)'],
-    [0.84, 'rgba(176,96,52,0.38)'],
-    [1, 'rgba(206,120,54,0.46)']
+    [0, 'rgba(40,52,66,0)'],
+    [0.34, 'rgba(58,74,92,0.34)'],
+    [0.62, 'rgba(82,100,120,0.42)'],
+    [0.84, 'rgba(108,128,150,0.46)'],
+    [1, 'rgba(126,146,168,0.52)']
   ]);
   ctx.fillStyle = glow;
   ctx.fillRect(0, CH * 0.42, CW, CH * 0.58);
@@ -2656,7 +2663,7 @@ function drawGothamSky(ctx, camX, t, lightning) {
     if (gx < -260) gx += 1380;
     if (gx > CW + 260) continue;
     ENV_puff(ctx, 'sodium', gx, 452, 250, 96, [
-      [0, 'rgba(232,144,58,0.30)'], [0.45, 'rgba(190,104,46,0.13)'], [1, 'rgba(150,80,40,0)']
+      [0, 'rgba(150,172,196,0.24)'], [0.45, 'rgba(110,132,158,0.11)'], [1, 'rgba(90,110,134,0)']
     ], 0.55 + 0.12 * Math.sin(t * 0.5 + i));
   }
 
@@ -2939,14 +2946,18 @@ function ENV_layer(ctx, camX, t, L, tier) {
   }
 
   // ---- haze sitting on top of the layer, pushing it back ---------------
-  const hz = tier === 0 ? 0.40 : (tier === 1 ? 0.26 : 0.13);
+  // Aerial perspective, pushed hard. This is the single effect that makes a
+  // frame read as "deep" rather than "flat": each layer further back is washed
+  // further toward the sky's value, so the near playfield reads dark against a
+  // pale, misty city instead of every layer sharing one muddy blue.
+  const hz = tier === 0 ? 0.92 : (tier === 1 ? 0.66 : 0.34);
   const hk2 = 'haze' + tier;
   let hg = ENV_cache(ctx).lin[hk2];
   if (!hg) {
     hg = ctx.createLinearGradient(0, baseY - maxH, 0, baseY + 20);
-    hg.addColorStop(0, 'rgba(46,32,74,0)');
-    hg.addColorStop(0.55, 'rgba(62,42,86,' + (hz * 0.55).toFixed(3) + ')');
-    hg.addColorStop(1, 'rgba(150,84,52,' + hz.toFixed(3) + ')');
+    hg.addColorStop(0, 'rgba(78,92,108,0)');
+    hg.addColorStop(0.55, 'rgba(96,112,130,' + (hz * 0.66).toFixed(3) + ')');
+    hg.addColorStop(1, 'rgba(122,140,160,' + hz.toFixed(3) + ')');
     ENV_cache(ctx).lin[hk2] = hg;
   }
   ctx.fillStyle = hg;
@@ -3187,15 +3198,19 @@ function drawGroundTile(ctx, x, y, s, o) {
 
   if (top) {
     // damp sheen: wet reflective band along the exposed surface
+    // Rain-slicked stone. The sheen and the lip are deliberately strong: a
+    // bright wet edge along every walkable surface is what makes the playfield
+    // read as solid geometry in front of the city, rather than one more dark
+    // shape among the buildings.
     ctx.fillStyle = TL_grad(ctx, 'gndwet' + s, 0, 0, 0, s * 0.5, [
-      [0, 'rgba(150,175,235,0.30)'], [0.35, 'rgba(110,135,200,0.10)'], [1, 'rgba(0,0,0,0)']
+      [0, 'rgba(176,198,232,0.44)'], [0.35, 'rgba(126,148,182,0.16)'], [1, 'rgba(0,0,0,0)']
     ]);
     ctx.fillRect(0, 0, s, s * 0.5);
     // bright top lip
-    ctx.fillStyle = 'rgba(205,218,255,0.55)';
-    ctx.fillRect(0, 0, s, 1.5);
-    ctx.fillStyle = 'rgba(140,158,205,0.32)';
-    ctx.fillRect(0, 1.5, s, 1);
+    ctx.fillStyle = 'rgba(226,238,255,0.82)';
+    ctx.fillRect(0, 0, s, 1.6);
+    ctx.fillStyle = 'rgba(158,178,208,0.44)';
+    ctx.fillRect(0, 1.6, s, 1.2);
     // dark inner shadow just under the lip
     ctx.fillStyle = TL_grad(ctx, 'gndlip' + s, 0, 2.5, 0, 9, [
       [0, 'rgba(0,0,0,0.55)'], [1, 'rgba(0,0,0,0)']
@@ -5497,162 +5512,89 @@ function UI_emblem(ctx, cx, cy, r, t, halo){
 function drawHUD(ctx, s){
   s = s || {};
   const t     = s.time || 0;
-  const H     = 66;
   const star  = !!s.starActive;
-  const pulse = 0.5 + 0.5*Math.sin(t*7);
   const lives = Math.max(0, s.lives|0);
-  const slots = Math.max(3, lives);
-  const gold  = star ? '#ffe680' : PAL.yellow;
+  const pulse = 0.5 + 0.5*Math.sin(t*7);
 
   ctx.save();
 
-  // ---- glass panel -------------------------------------------------------
-  ctx.beginPath();
-  UI_roundRect(ctx, -4, -10, CW+8, H+10, [0,0,22,22]);
-  ctx.fillStyle = UI_lg(ctx, 'hudPanel', 0,0,0,H, [
-    [0,'rgba(7,8,17,0.96)'], [0.55,'rgba(13,15,31,0.90)'], [1,'rgba(5,6,13,0.80)']
+  // A scrim, not a panel. The old HUD was a glass slab with a gold border and
+  // heavy letterpress type — unmistakably arcade. A modern one gets out of the
+  // way: a soft darkening so text stays legible over a bright sky, and nothing
+  // else. No frame, no fill, no glow.
+  const scrim = UI_lg(ctx, 'hudScrim2', 0, 0, 0, 96, [
+    [0, 'rgba(4,6,10,0.78)'], [0.55, 'rgba(4,6,10,0.34)'], [1, 'rgba(4,6,10,0)']
   ]);
-  ctx.fill();
+  ctx.fillStyle = scrim;
+  ctx.fillRect(0, 0, CW, 96);
 
-  ctx.save();
-  ctx.clip();
-  // top sheen
-  ctx.fillStyle = UI_lg(ctx, 'hudSheen', 0,0,0,H*0.62, [
-    [0,'rgba(130,150,225,0.15)'], [1,'rgba(130,150,225,0)']
-  ]);
-  ctx.fillRect(0,0,CW,H*0.62);
-  // faint diagonal hatch for texture
-  ctx.globalAlpha = 0.05;
-  ctx.strokeStyle = '#8fa2d8';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  for(let x=-H; x<CW; x+=14){ ctx.moveTo(x, H); ctx.lineTo(x+H, 0); }
-  ctx.stroke();
-  ctx.globalAlpha = 1;
-  // gold under-glow hugging the border
-  ctx.fillStyle = UI_lg(ctx, star ? 'hudUGs' : 'hudUG', 0, H-22, 0, H, [
-    [0,'rgba(245,197,24,0)'], [1, star ? 'rgba(255,224,120,0.26)' : 'rgba(245,197,24,0.13)']
-  ]);
-  ctx.fillRect(0, H-22, CW, 22);
-  ctx.restore();
+  // --- helpers -----------------------------------------------------------
+  function label(txt, x, y, align){
+    ctx.font = '600 9px Oswald, system-ui, sans-serif';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = 'rgba(196,210,228,0.42)';
+    UI_tracked(ctx, txt, x, y, 2.9, align || 'left', false);
+  }
+  function value(txt, x, y, size, align, alpha){
+    ctx.font = '500 ' + size + 'px "JetBrains Mono", ui-monospace, monospace';
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = align || 'left';
+    ctx.fillStyle = 'rgba(233,240,250,' + (alpha == null ? 0.92 : alpha) + ')';
+    ctx.fillText(txt, x, y);
+    ctx.textAlign = 'left';
+  }
 
-  // ---- luminous bottom border -------------------------------------------
-  ctx.save();
-  ctx.shadowColor = gold;
-  ctx.shadowBlur = star ? 18 + 8*pulse : 9;
-  ctx.fillStyle = UI_lg(ctx, star ? 'hudBs' : 'hudB', 0,0,CW,0, [
-    [0,'rgba(245,197,24,0)'], [0.10, gold], [0.5, star ? '#fff1c0' : gold], [0.90, gold], [1,'rgba(245,197,24,0)']
-  ]);
-  ctx.fillRect(0, H-2, CW, star ? 2.6 : 1.8);
-  ctx.restore();
-
-  // ---- LIVES -------------------------------------------------------------
-  UI_caption(ctx, 'VIDAS', 22, 22, 9, 'rgba(150,166,208,0.60)', 2.6, 'left');
-  for(let i=0;i<slots;i++){
-    const ex = 30 + i*25, ey = 43;
+  // --- lives: small glyphs, not gold medallions ---------------------------
+  label('VIDAS', 24, 30, 'left');
+  for(let i=0;i<Math.max(3, lives);i++){
+    const ex = 30 + i*19, ey = 46;
+    ctx.save();
     if(i < lives){
-      ctx.save();
-      ctx.shadowColor = 'rgba(245,197,24,0.55)';
-      ctx.shadowBlur = 7 + (i === lives-1 ? 5*pulse : 0);
-      drawBatSymbol(ctx, ex, ey, 10.5, PAL.yellowD);
-      ctx.restore();
-      drawBatSymbol(ctx, ex, ey - 0.6, 9.6, UI_lg(ctx, 'lifeE', 0,-6,0,5, [
-        [0,'#fff2bd'], [0.5, PAL.yellow], [1,'#b9860a']
-      ]));
+      ctx.globalAlpha = 0.88;
+      drawBatSymbol(ctx, ex, ey, 7.4, 'rgba(226,236,248,1)');
     } else {
-      ctx.save();
-      ctx.globalAlpha = 0.30;
-      drawBatSymbol(ctx, ex, ey, 10.2, '#2b3049');
-      ctx.globalAlpha = 0.22;
-      drawBatSymbol(ctx, ex, ey - 0.6, 9.2, '#5b6488');
-      ctx.restore();
+      ctx.globalAlpha = 0.16;
+      drawBatSymbol(ctx, ex, ey, 7.4, 'rgba(200,214,232,1)');
     }
+    ctx.restore();
   }
 
-  // ---- SCORE -------------------------------------------------------------
-  UI_caption(ctx, 'PUNTOS', 158, 22, 9, 'rgba(150,166,208,0.60)', 2.6, 'left');
-  UI_num(ctx, UI_pad(s.score, 6), 158, 48, 23, 'left', '#fff3c4', PAL.yellowD, 10);
+  // --- score / batarangs / time ------------------------------------------
+  label('PUNTOS', 150, 30, 'left');
+  value(UI_pad(s.score, 6), 150, 52, 21, 'left', 0.95);
 
-  // ---- BATARANGS ---------------------------------------------------------
-  UI_caption(ctx, 'BATARANGS', 300, 22, 9, 'rgba(150,166,208,0.60)', 2.6, 'left');
-  UI_batarangIcon(ctx, 311, 42, 10, t*3.4);
-  UI_num(ctx, UI_pad(Math.max(0, s.batarangs|0), 2), 328, 49, 20, 'left', '#e6eeff', '#7f8cb4', 0);
+  label('BATARANGS', 290, 30, 'left');
+  ctx.save();
+  ctx.globalAlpha = 0.72;
+  UI_batarangIcon(ctx, 299, 44, 7.5, t*3.4);
+  ctx.restore();
+  value(UI_pad(Math.max(0, s.batarangs|0), 2), 314, 51, 18, 'left', 0.82);
 
-  // ---- TIME --------------------------------------------------------------
-  const secs = Math.max(0, Math.floor(s.time||0));
-  const tstr = UI_pad(Math.floor(secs/60), 2) + ':' + UI_pad(secs%60, 2);
-  UI_caption(ctx, 'TIEMPO', 398, 22, 9, 'rgba(150,166,208,0.60)', 2.6, 'left');
-  UI_num(ctx, tstr, 398, 48, 19, 'left', '#dfe8ff', '#7f8cb4', 0);
+  const secs = Math.max(0, Math.floor(t));
+  label('TIEMPO', 392, 30, 'left');
+  value(UI_pad(Math.floor(secs/60), 2) + ':' + UI_pad(secs%60, 2), 392, 51, 18, 'left', 0.82);
 
-  // ---- STAR / POWER BAR --------------------------------------------------
+  // --- bat-power: a thin rule, not a chunky meter ------------------------
   if(star){
-    const bx = 512, by = 30, bw = 190, bh = 13;
+    const bx = 500, by = 40, bw = 172;
     const frac = UI_clamp((s.starTimer||0)/10, 0, 1);
-    UI_caption(ctx, 'PODER MURCIÉLAGO', bx, 22, 9, 'rgba(255,226,140,0.85)', 2.6, 'left');
-    // trough
-    ctx.save();
-    ctx.beginPath(); UI_roundRect(ctx, bx, by, bw, bh, bh/2);
-    ctx.fillStyle = 'rgba(4,5,12,0.85)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(245,197,24,0.35)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    // fill
-    ctx.save();
-    ctx.beginPath(); UI_roundRect(ctx, bx+1.5, by+1.5, bw-3, bh-3, (bh-3)/2);
-    ctx.clip();
-    const fw = (bw-3) * frac;
-    ctx.shadowColor = 'rgba(255,214,80,0.9)';
-    ctx.shadowBlur = 12 + 6*pulse;
-    ctx.fillStyle = UI_lg(ctx, 'powFill', bx,0, bx+bw,0, [
-      [0,'#ffd34d'], [0.5,'#fff0b0'], [1,'#ffb320']
-    ]);
-    ctx.fillRect(bx+1.5, by+1.5, fw, bh-3);
-    ctx.shadowBlur = 0;
-    // travelling shimmer inside the fill
-    ctx.globalCompositeOperation = 'lighter';
-    const shx = bx + ((t*150) % (bw+80)) - 40;
-    ctx.globalAlpha = 0.55;
-    ctx.fillStyle = UI_lg(ctx, 'powShim', 0,0,44,0, [
-      [0,'rgba(255,255,255,0)'], [0.5,'rgba(255,255,255,0.9)'], [1,'rgba(255,255,255,0)']
-    ]);
-    ctx.translate(shx, 0);
-    ctx.fillRect(0, by+1.5, 44, bh-3);
-    ctx.restore();
-    // leading spark
-    if(frac > 0.02){
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = 'rgba(255,242,190,' + (0.45 + 0.35*pulse).toFixed(3) + ')';
-      ctx.beginPath();
-      ctx.arc(bx+1.5+fw, by+bh/2, 5 + 2*pulse, 0, Math.PI*2);
-      ctx.fill();
-      ctx.globalCompositeOperation = 'source-over';
-    }
-    ctx.restore();
-    UI_num(ctx, (Math.max(0, s.starTimer||0)).toFixed(1), bx+bw+10, by+12, 14, 'left', '#fff0b8', '#c99c0a', 0);
+    label('PODER MURCIÉLAGO', bx, 30, 'left');
+    ctx.fillStyle = 'rgba(180,196,216,0.18)';
+    ctx.fillRect(bx, by, bw, 2);
+    ctx.fillStyle = 'rgba(240,246,255,' + (0.72 + 0.24*pulse).toFixed(3) + ')';
+    ctx.fillRect(bx, by, bw*frac, 2);
   }
 
-  // ---- LEVEL / BEST (right) ---------------------------------------------
-  const rx = CW - 22;
-  ctx.save();
-  ctx.font = UI_dispFont(15);
+  // --- level, right aligned ----------------------------------------------
+  const rx = CW - 24;
+  ctx.font = '600 15px Oswald, system-ui, sans-serif';
   ctx.textBaseline = 'alphabetic';
-  ctx.shadowColor = 'rgba(245,197,24,0.45)';
-  ctx.shadowBlur = 10;
-  ctx.fillStyle = '#f0e3bb';
-  UI_tracked(ctx, String(s.levelName || 'GOTHAM').toUpperCase(), rx, 26, 4.2, 'right', false);
-  ctx.restore();
-
-  UI_caption(ctx, 'NIVEL ' + String(s.levelId == null ? '1-1' : s.levelId), rx, 44, 9, 'rgba(150,166,208,0.62)', 2.6, 'right');
+  ctx.fillStyle = 'rgba(236,243,252,0.90)';
+  UI_tracked(ctx, String(s.levelName || 'GOTHAM').toUpperCase(), rx, 32, 3.6, 'right', false);
+  label(String(s.levelId == null ? '1-1' : s.levelId), rx, 50, 'right');
   ctx.save();
-  ctx.globalAlpha = 0.55;
-  UI_num(ctx, 'RÉCORD ' + UI_pad(s.best, 6), rx, 58, 11, 'right', '#cbd5f0', '#6d779c', 0);
-  ctx.restore();
-
-  // small bat watermark tucked in the right corner
-  ctx.save();
-  ctx.globalAlpha = 0.10;
-  drawBatSymbol(ctx, CW - 120, 33, 28, '#9fb0e0');
+  ctx.globalAlpha = 0.38;
+  value('RÉCORD ' + UI_pad(s.best, 6), rx, 68, 10, 'right', 1);
   ctx.restore();
 
   ctx.restore();
@@ -6828,47 +6770,37 @@ function drawBossHealthBar(ctx, x, y, w, h, o) {
   o = o || {};
   const hp = o.hp || 0, maxHp = Math.max(1, o.maxHp || 1);
   const flash = BS_clamp(o.flash || 0, 0, 1);
+  // Restyled to match the rest of the HUD: no gold frame, no glass plate, no
+  // gradient pips. A framed red slab with a drop-shadowed name is the most
+  // dated thing that can sit at the top of a screen.
+  const bw = Math.min(w, 440), bx = x + (w - bw) / 2;
   ctx.save();
-  ctx.translate(Math.sin((o.t || 0) * 60) * flash * 3, 0);
+  ctx.translate(Math.sin((o.t || 0) * 60) * flash * 2.5, 0);
 
-  // name
-  ctx.font = BS_disp(15);
+  ctx.font = '600 12px Oswald, system-ui, sans-serif';
+  ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'center';
-  ctx.fillStyle = 'rgba(10,8,16,0.85)';
-  ctx.fillText(o.name || '', x + w / 2 + 1, y - 7 + 1);
-  ctx.fillStyle = flash > 0.2 ? '#fff' : PAL.yellow;
-  ctx.fillText(o.name || '', x + w / 2, y - 7);
+  ctx.fillStyle = flash > 0.2 ? 'rgba(255,255,255,0.95)' : 'rgba(228,238,250,0.78)';
+  const nm = String(o.name || '');
+  let spaced = '';
+  for (let i = 0; i < nm.length; i++) spaced += nm[i] + (i < nm.length - 1 ? ' ' : '');
+  ctx.fillText(spaced, bx + bw / 2, y - 8);
+  ctx.textAlign = 'left';
 
-  // frame
-  ctx.fillStyle = 'rgba(6,6,14,0.82)';
-  BS_roundRect(ctx, x - 3, y - 3, w + 6, h + 6, 4); ctx.fill();
-  ctx.strokeStyle = flash > 0.2 ? '#ffffff' : 'rgba(245,197,24,0.75)';
-  ctx.lineWidth = 1.6;
-  BS_roundRect(ctx, x - 3, y - 3, w + 6, h + 6, 4); ctx.stroke();
-
-  // segmented pips, one per hit point
-  const gap = 3, seg = (w - gap * (maxHp - 1)) / maxHp;
+  // a thin rule, segmented by hit points
+  const gap = 4, seg = (bw - gap * (maxHp - 1)) / maxHp;
   for (let i = 0; i < maxHp; i++) {
-    const sx = x + i * (seg + gap);
-    if (i < hp) {
-      const g = ctx.createLinearGradient(sx, y, sx, y + h);
-      g.addColorStop(0, '#ff6a4a');
-      g.addColorStop(0.5, PAL.danger);
-      g.addColorStop(1, '#6d1414');
-      ctx.fillStyle = g;
-      ctx.fillRect(sx, y, seg, h);
-      ctx.fillStyle = 'rgba(255,220,200,0.55)';
-      ctx.fillRect(sx, y, seg, 2);
-    } else {
-      ctx.fillStyle = 'rgba(50,40,55,0.7)';
-      ctx.fillRect(sx, y, seg, h);
-    }
+    const sx = bx + i * (seg + gap);
+    ctx.fillStyle = i < hp
+      ? (flash > 0.2 ? 'rgba(255,255,255,0.95)' : 'rgba(206,74,68,0.92)')
+      : 'rgba(150,168,190,0.16)';
+    ctx.fillRect(sx, y, seg, 3);
   }
-  // phase marker
-  ctx.font = BS_disp(10);
+
+  ctx.font = '600 9px Oswald, system-ui, sans-serif';
   ctx.textAlign = 'right';
-  ctx.fillStyle = 'rgba(180,190,220,0.75)';
-  ctx.fillText('FASE ' + (o.phase || 1), x + w, y + h + 13);
+  ctx.fillStyle = 'rgba(196,210,228,0.40)';
+  ctx.fillText('FASE ' + (o.phase || 1), bx + bw, y + 16);
 
   ctx.restore();
   ctx.textAlign = 'left';
@@ -6887,26 +6819,22 @@ function drawBossIntro(ctx, t, name, subtitle, progress) {
   const slide = (1 - Math.min(1, p / 0.25));
   ctx.translate(-slide * 420, 0);
 
-  // slash band behind the name
-  ctx.fillStyle = 'rgba(150,20,20,0.55)';
-  ctx.beginPath();
-  ctx.moveTo(0, CH / 2 - 46); ctx.lineTo(CW, CH / 2 - 58);
-  ctx.lineTo(CW, CH / 2 + 34); ctx.lineTo(0, CH / 2 + 46);
-  ctx.closePath(); ctx.fill();
+  // Letterbox bars rather than a painted red slash: the slash read as a
+  // fighting-game banner, which is exactly the register we are moving away from.
+  ctx.fillStyle = 'rgba(3,5,9,0.92)';
+  ctx.fillRect(0, 0, CW, CH / 2 - 62);
+  ctx.fillRect(0, CH / 2 + 58, CW, CH / 2 - 58);
+  ctx.fillStyle = 'rgba(198,214,236,0.22)';
+  ctx.fillRect(CW * 0.5 - 150, CH / 2 - 62, 300, 1);
+  ctx.fillRect(CW * 0.5 - 150, CH / 2 + 58, 300, 1);
 
   ctx.textAlign = 'center';
-  ctx.font = BS_disp(58);
-  ctx.fillStyle = 'rgba(0,0,0,0.8)';
-  ctx.fillText(name || '', CW / 2 + 3, CH / 2 + 12);
-  const g = ctx.createLinearGradient(0, CH / 2 - 40, 0, CH / 2 + 18);
-  g.addColorStop(0, '#fff2bd');
-  g.addColorStop(0.5, PAL.yellow);
-  g.addColorStop(1, '#9a7410');
-  ctx.fillStyle = g;
-  ctx.fillText(name || '', CW / 2, CH / 2 + 9);
+  ctx.font = BS_disp(52);
+  ctx.fillStyle = 'rgba(236,243,252,0.96)';
+  ctx.fillText(name || '', CW / 2, CH / 2 + 6);
 
-  ctx.font = BS_disp(16);
-  ctx.fillStyle = 'rgba(220,225,245,0.9)';
+  ctx.font = BS_disp(13);
+  ctx.fillStyle = 'rgba(190,206,228,0.62)';
   let sub = subtitle || '';
   let spaced = '';
   for (let i = 0; i < sub.length; i++) spaced += sub[i] + (i < sub.length - 1 ? ' ' : '');
@@ -7474,11 +7402,14 @@ class Decor {
   }
 
   // amber sodium lamp, or a cold neon tube
+  // Muted. Saturated pink and violet neon was the loudest colour in the frame
+  // and fought the near-monochrome grade; these still read as neon against a
+  // grey street without repainting it.
   colour(it) {
-    if (!it.neon) return [1.0, 0.78, 0.36];
-    if (it.hue < 0.34) return [1.0, 0.24, 0.42];   // hot pink
-    if (it.hue < 0.67) return [0.30, 0.85, 1.0];   // cyan
-    return [0.62, 0.38, 1.0];                       // violet
+    if (!it.neon) return [1.0, 0.86, 0.62];        // cool sodium
+    if (it.hue < 0.34) return [0.95, 0.48, 0.52];  // dull rose
+    if (it.hue < 0.67) return [0.52, 0.82, 0.95];  // ice
+    return [0.66, 0.60, 0.88];                     // pale violet
   }
 
   draw(ctx, camX, t) {
@@ -7568,7 +7499,7 @@ class Decor {
         : 0.92 + 0.08 * Math.sin(t * 2.6 + it.seed);
       const bulbY = it.y - it.h + (it.neon ? 18 : 10);
       push(it.x, bulbY, it.neon ? 150 : 210, c[0], c[1], c[2],
-        (it.neon ? 0.70 : 0.95) * flick, 0.09);
+        (it.neon ? 0.48 : 0.82) * flick, 0.09);
     }
   }
 }
@@ -8478,10 +8409,19 @@ function PostFX(canvas) {
 // subtle, and readability of the player beats any amount of atmosphere.
 PostFX.defaults = function () {
   return {
-    threshold: 0.80, knee: 0.20, warm: 0.25, radius: 1.0,
-    bloom: 0.30, aberration: 0.45, vignette: 0.70, grain: 0.014,
-    exposure: 1.34, contrast: 1.02, saturation: 1.0, distort: 0.010,
-    tonemap: 0.35, flash: 0.0, time: 0,
+    // Restraint, pushed further than before. The reference look is almost
+    // monochrome: colour survives only in light sources, everything else is
+    // separated by value. Saturation at 0.58 is the single biggest lever, and
+    // dropping the warm bloom bias from 0.25 to 0.04 is what stops every lamp
+    // in the city painting the frame gold.
+    threshold: 0.74, knee: 0.22, warm: 0.04, radius: 1.15,
+    bloom: 0.24, aberration: 0.30, vignette: 0.72, grain: 0.018,
+    // Desaturating without raising exposure just produced a black screen. The
+    // reference frame is dark but READABLE: its mood comes from haze lifting
+    // the background away from a near-black figure, not from crushing
+    // everything equally. So exposure goes UP, and the tonemap backs off.
+    exposure: 1.95, contrast: 1.06, saturation: 0.44, distort: 0.008,
+    tonemap: 0.40, flash: 0.0, time: 0,
     // Ambient sits high on purpose: the art carries its own baked shading, so
     // the dynamic lights are a highlight layer, not the primary illumination.
     lighting: true, normalStrength: 1.5,
@@ -8495,30 +8435,38 @@ PostFX.defaults = function () {
     wetTint: new Float32Array([0.78, 0.86, 1.05]),
     // moon shafts: centre tracks the moon, updated per frame by the game
     rays: 0.34, rayX: 0.70, rayY: 0.86, rayDensity: 0.62, rayWeight: 0.055, rayDecay: 0.93,
-    ambient: new Float32Array([0.64, 0.66, 0.78]),
+    // Near-neutral. A blue-tinted ambient was re-saturating everything the
+    // grade had just taken out, so the picture stayed one flat blue.
+    ambient: new Float32Array([0.94, 0.96, 1.00]),
     sunDir: new Float32Array([0.38, 0.58, 0.72]),    // moon, upper right (UV space, y up)
     sunCol: new Float32Array([0.30, 0.33, 0.44]),
-    lift: new Float32Array([0.000, 0.001, 0.004]),
-    gain: new Float32Array([1.01, 1.00, 1.00]),
-    shadowTint: new Float32Array([0.98, 1.00, 1.05]),
-    hiTint: new Float32Array([1.04, 1.00, 0.97]),
+    // A real camera never reaches pure black, and crushed blacks are the
+    // clearest tell of a hobby renderer. Lift them slightly and tint the lift
+    // cold; keep the gain neutral so highlights stay white rather than gold.
+    lift: new Float32Array([0.012, 0.015, 0.020]),
+    gain: new Float32Array([0.98, 0.99, 1.02]),
+    shadowTint: new Float32Array([0.97, 0.99, 1.04]),
+    hiTint: new Float32Array([1.00, 1.00, 1.02]),
   };
 };
 
 // Per-level looks — a nudge each, not a repaint.
+// Per-level looks. All three are now variations on the same cold steel — the
+// old set swung from violet to sickly green to blue, which made the game feel
+// like three different games rather than one city at night.
 PostFX.grade = function (prm, lvl) {
-  if (lvl === 1) {            // rooftops: a touch of electric violet
-    prm.shadowTint.set([1.00, 0.98, 1.06]);
-    prm.hiTint.set([1.05, 1.00, 0.98]);
-    prm.bloom = 0.34;
-  } else if (lvl === 2) {     // Arkham: faintly sickly green
-    prm.shadowTint.set([0.97, 1.02, 1.00]);
-    prm.hiTint.set([1.03, 1.03, 0.96]);
-    prm.bloom = 0.28; prm.contrast = 1.04;
-  } else {                    // docks: cold and wet
-    prm.shadowTint.set([0.98, 1.00, 1.05]);
-    prm.hiTint.set([1.04, 1.00, 0.97]);
-    prm.bloom = 0.30; prm.contrast = 1.02;
+  if (lvl === 1) {            // rooftops: highest and coldest
+    prm.shadowTint.set([0.92, 0.98, 1.12]);
+    prm.hiTint.set([0.99, 1.00, 1.04]);
+    prm.bloom = 0.26; prm.contrast = 1.14;
+  } else if (lvl === 2) {     // Arkham: a faint institutional green in the shadows
+    prm.shadowTint.set([0.94, 1.02, 1.04]);
+    prm.hiTint.set([1.00, 1.01, 1.00]);
+    prm.bloom = 0.22; prm.contrast = 1.13;
+  } else {                    // docks: wet and slightly warmer at the horizon
+    prm.shadowTint.set([0.95, 0.99, 1.08]);
+    prm.hiTint.set([1.02, 1.00, 1.00]);
+    prm.bloom = 0.24; prm.contrast = 1.12;
   }
 };
 
@@ -9782,9 +9730,12 @@ class Game {
     p.flash = fl * 0.22;
     // and drives the directional light, so a strike genuinely rakes across the
     // geometry instead of just brightening the image
-    p.sunCol[0] = 0.13 + fl * 0.85;
-    p.sunCol[1] = 0.15 + fl * 0.92;
-    p.sunCol[2] = 0.22 + fl * 1.05;
+    // The moon is the key light, so it has to be bright enough to model the
+    // geometry: at 0.13 it was barely above the ambient and every surface came
+    // out the same value, which is why the playfield merged into the skyline.
+    p.sunCol[0] = 0.30 + fl * 0.85;
+    p.sunCol[1] = 0.33 + fl * 0.92;
+    p.sunCol[2] = 0.39 + fl * 1.05;
 
     // A strike is a light source, not a colour wash. Each one picks its own
     // steep angle and, while it lasts, takes over the directional shadow with
@@ -9828,7 +9779,7 @@ class Game {
     p.rayY = 1 - 75 / CH;
     p.rays = 0.34 + fl * 0.55;
     const rainAmt = this.world && this.world.level ? (this.world.level.rain || 0.6) : 0.6;
-    p.wet = 0.36 + 0.40 * rainAmt;
+    p.wet = 0.48 + 0.46 * rainAmt;
     p.ripple = rainAmt;              // no rain, no rings
     if (this.state === ST.DEAD) { p.vignette = 1.5; p.saturation = 0.45; }
     else if (this.state === ST.TITLE) { p.vignette = 1.0; p.bloom += 0.14; }
