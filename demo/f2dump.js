@@ -15,11 +15,11 @@ const { chromium } = require(path.join(execSync('npm root -g').toString().trim()
     const g=window.__game; g.draw=function(){};
     g.startRun(); g.lvIdx=7; g.loadLevel(7); g.state='play'; g.lives=9999;
     const log=[]; window.__pj=false;
-    for(let i=0;i<60*26;i++){
+    for(let i=0;i<60*30;i++){
       const pl=g.player, bo=g.boss;
       let act={L:0,R:0,run:0,jump:0};
       try{act=AUTOPILOT(g,i)||act}catch(e){if(!window.__ae)window.__ae=e.message;}
-      if(bo && bo.phase===2 && i%5===0){
+      if(bo && bo.phase===3 && i%5===0){
         log.push('t='+(i/60).toFixed(2)+' px='+Math.round(pl.rect.cx)+' pies='+Math.round(pl.rect.b)+
           ' plat='+BJ_onPlat(pl)+' tp='+bo.tpIndex+' '+bo.state.padEnd(8)+
           ' bx='+Math.round(bo.rect.cx)+' gas='+Math.round(bo.gasY)+

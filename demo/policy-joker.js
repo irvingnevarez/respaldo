@@ -257,7 +257,12 @@ function BJ_joker(g, p, b) {
     BJ_why = 'apartarse';
     var aw = bx < p.rect.cx ? 1 : -1;
     var lim = BJ_onPlat(p);
-    var tx2 = p.rect.cx + aw * 150;
+    // Retreat to a distance FROM HIM, not by a fixed displacement. In phase 3 a
+    // blind 150px step was walking out of the safe inner zone and into the
+    // 103-213 ring where his fan crosses the player's height — the bot died at
+    // D=116 to a card it had just backed into. 85 clears his 48px hitbox with
+    // room and still sits well inside the ring.
+    var tx2 = b.phase === 3 ? bx + aw * 85 : p.rect.cx + aw * 150;
     // in phase 2 the floor is gas, so the retreat must stay on the deck
     if (b.phase === 2 && lim >= 0) {
       tx2 = Math.max(BJ_PLAT[lim].x0 + 24, Math.min(BJ_PLAT[lim].x1 - 24, tx2));
@@ -409,38 +414,72 @@ function BJ_joker(g, p, b) {
   }
 
   // ── PHASE 3: centre of the floor, cards and minions ──────────────────
+  //
+  // This phase is fought at RANGE, which is the opposite of phases 1 and 2 and
+  // took a measurement to accept. `if (this.t < 0.05) throwCards(5, 1.3)` runs
+  // for three frames, so every throw is fifteen cards rather than five and
+  // thirty are alive at once — the fan is dense enough that it has no hole in
+  // the middle the way the airborne one does. Pinning the player at fixed
+  // standoffs: D=300 and D=360 take ZERO hits across eleven full throw cycles,
+  // while everything from 0 to 250 is hit within one. An earlier version parked
+  // at 78 on an arc calculation that said the inner zone was safe; it is not.
+  //
+  // So: wait out of reach, and commit only once the volley is away. The cards
+  // all leave in the first three frames of 'throw', so after about half a
+  // second the lane is clear and there is time to cross and jump.
   if (b.state === 'throw') {
     BJ_why = 'punish3';
+    // Strike IMMEDIATELY and get airborne. The cards all leave in the first
+    // three frames and then cross the player's STANDING height; a jump puts the
+    // feet at 336 while that plane is down at 400-470, so the volley passes
+    // underneath. Waiting for the lane to clear instead was tried and does not
+    // work -- the clear window is only about 0.3s, far too short to cross 300px.
     var dx3 = bx - p.rect.cx;
-    if (Math.abs(dx3) > 26) return BJ_walk(p, bx, true, -1);
+    // Only commit if the strike can actually land. Charging in from range is
+    // strictly worse than not trying: the standoff table says everything inside
+    // 250 is hit within one cycle, so a run that starts at 170 eats the fan and
+    // arrives nowhere. Traced, the bot turned at D=169, jumped, topped out at
+    // 394 because x~490 sits under the centre deck, and came down into the
+    // cards 184px short of him.
+    if (Math.abs(dx3) > 130) {
+      var an3 = Math.abs(176 - bx) > Math.abs(784 - bx) ? 176 : 784;
+      var dr = an3 - p.rect.cx;
+      if (Math.abs(dr) < 22) { BJ_run = false; return BP_emit(false, false, false); }
+      BJ_why = 'lejos3';
+      BJ_dir = dr > 0 ? 1 : -1; BJ_run = true;
+      return BP_emit(dr < 0, dr > 0, true);
+    }
+    if (Math.abs(dx3) > 26) {
+      if (Math.abs(dx3) < 120) BP_jump(22);
+      BJ_dir = dx3 > 0 ? 1 : -1; BJ_run = true;
+      return BP_emit(dx3 < 0, dx3 > 0, true);
+    }
     BP_jump(21);
     return BP_emit(false, false, false);
   }
+
   BJ_why = 'wait3';
-  // This is the densest phase in the game: five cards every 1.3s and they do
-  // not expire until they leave the screen, so the count reaches thirty and the
-  // whole band at the player's height fills up. A "step away from the nearest
-  // one" rule cannot read that, and measured it is what ended every run here.
-  // Use the same forward simulation phase 1 uses — it is built for exactly this
-  // and it already has the card paths integrated.
+  // Wait on a MEASURED-SAFE ANCHOR, not at an offset from him.
   //
-  // The heading it is nudged toward loiters just outside his contact range, so
-  // the next punish is a short hop rather than a sprint across the minions he
-  // keeps spawning.
-  // STAND CLOSE. Same annulus argument as phase 1, re-derived for him standing
-  // on the floor: his cards leave at cy=432 and cross the player's height
-  // (~458) between 103 and 213px away, so the ring that kills is 103-213 and
-  // parking at 130 — which is what this did — is the worst spot on the floor.
-  // Inside it, anywhere past his 48px hitbox is clear. So loiter at 78: close
-  // enough that the fan passes overhead, far enough not to be touching him,
-  // and a short hop from the punish.
-  var side = p.rect.cx < bx ? -1 : 1;
-  var park = bx + side * 78;
-  if (park < 100) park = 100;
-  if (park > 860) park = 860;
-  var w3 = Math.abs(park - p.rect.cx) < 30 ? 0 : (park > p.rect.cx ? 1 : -1);
-  var pk3 = BJ_pick(b, p, w3);
-  if (pk3.dir === 0) { BJ_run = false; return BP_emit(false, false, false); }
-  BJ_dir = pk3.dir; BJ_run = true;
-  return BP_emit(pk3.dir < 0, pk3.dir > 0, true);
+  // He enters this phase standing on the left deck at x=150 and walks to the
+  // centre, so "park 190px from him" put the bot at x=340 early on -- the one
+  // floor column the standoff table marks as lethal. Pinning fixed positions
+  // for eleven full throw cycles: x=176 and x=784 both take ZERO hits, on the
+  // deck or on the floor under it, while the middle of the arena is hit within
+  // one cycle. Pick whichever anchor is further from him and sit on it.
+  //
+  // Then close to striking range only in the back half of 'ground', which is
+  // the quiet second: the previous volley is thrown at the start of 'throw' and
+  // has expired by the time this state begins.
+  var anchor = Math.abs(176 - bx) > Math.abs(784 - bx) ? 176 : 784;
+  var tgt = anchor;
+  if (b.state === 'ground' && b.t > 0.45) {
+    tgt = bx + (anchor < bx ? -200 : 200);
+    if (tgt < 100) tgt = 100;
+    if (tgt > 860) tgt = 860;
+  }
+  var dw = tgt - p.rect.cx;
+  if (Math.abs(dw) < 22) { BJ_run = false; return BP_emit(false, false, false); }
+  BJ_dir = dw > 0 ? 1 : -1; BJ_run = Math.abs(dw) > 80;
+  return BP_emit(dw < 0, dw > 0, BJ_run);
 }
