@@ -50,7 +50,17 @@ const TL_STONEPAL = (function () {
   for (let w = 0; w < 3; w++) {
     const wm = w - 1;
     for (let i = 0; i < 16; i++) {
-      const b = 20 + (i / 15) * 54;
+      // 70..165, arrived at by probe rather than by argument: painting the
+      // stone bright red showed the colour reaching the screen at roughly half
+      // strength after the grade, so a 20..74 ramp could only ever land the
+      // floor around 0.08 luminance however the lighting was tuned.
+      //
+      // The "wet stone is dark, let the specular put it back" reasoning was
+      // right in principle and wrong here: ambient sits near 1.0, so for most
+      // of the frame the albedo IS the final value, and specular only fires
+      // where a light happens to strike at the right angle. The playfield has
+      // to carry itself.
+      const b = 70 + (i / 15) * 95;
       a.push('rgb(' + ((b + wm * 4.0) | 0) + ',' +
         ((b + wm * 1.2) | 0) + ',' + ((b - wm * 3.0 + 5) | 0) + ')');
     }
@@ -104,7 +114,7 @@ function drawGroundTile(ctx, x, y, s, o) {
   // 1. the bed the setts sit in: wet grime, almost black, so every joint is a
   //    hole rather than a drawn line
   ctx.fillStyle = TL_grad(ctx, 'gbed' + s, 0, 0, 0, s, [
-    [0, '#1a1f26'], [0.5, '#11151b'], [1, '#090c12']
+    [0, '#39414c'], [0.5, '#2a313a'], [1, '#1d232a']
   ]);
   ctx.fillRect(0, 0, s, s);
 
@@ -163,7 +173,7 @@ function drawGroundTile(ctx, x, y, s, o) {
         ctx.fill();
 
         // grime wedged into the joint under and beside every stone
-        ctx.fillStyle = 'rgba(0,0,0,0.40)';
+        ctx.fillStyle = 'rgba(0,0,0,0.26)';
         ctx.fillRect(bx, by + bhi - 1.2, bwi, 1.2);
         ctx.fillRect(bx + bwi - 1.1, by, 1.1, bhi);
         // the barest cool catch on the worn upper arris -- the lighting pass
@@ -249,9 +259,9 @@ function drawGroundTile(ctx, x, y, s, o) {
   if (top) {
     // one cool arris along the walked edge -- enough to carry the silhouette
     // of the playfield against the fog without being a baked highlight
-    ctx.fillStyle = 'rgba(166,186,210,0.52)';
+    ctx.fillStyle = 'rgba(176,196,220,0.80)';
     ctx.fillRect(0, 0, s, 1.2);
-    ctx.fillStyle = 'rgba(112,132,158,0.22)';
+    ctx.fillStyle = 'rgba(120,142,170,0.36)';
     ctx.fillRect(0, 1.2, s, 1);
     ctx.fillStyle = TL_grad(ctx, 'gndlip' + s, 0, 2.2, 0, 8, [
       [0, 'rgba(0,0,0,0.46)'], [1, 'rgba(0,0,0,0)']

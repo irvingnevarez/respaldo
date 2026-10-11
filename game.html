@@ -177,8 +177,8 @@ const PAL = {
   bat:'#191c22', batHi:'#2e343e', batLo:'#0c0e13', cape:'#101216', capeHi:'#222831',
   yellow:'#e8c34a', yellowD:'#9c7f26', eye:'#dfe9f5',
   stone:'#2f3742', stoneD:'#1c222a', stoneL:'#48525f', mortar:'#141920',
-  joker:'#5d4a75', jokerHi:'#7c6699', jokerGreen:'#4a8f3e', face:'#e4e6e2', smile:'#a8423c',
-  peng:'#14171c', pengHi:'#2a2f38', pengW:'#e6eaf0', orange:'#c98a4a',
+  joker:'#5d4a75', jokerHi:'#7c6699', jokerGreen:'#4a8f3e', face:'#c4c3bb', smile:'#9a3d38',
+  peng:'#14171c', pengHi:'#2a2f38', pengW:'#c2c7d0', orange:'#b87f45',
   rain:'#8fa3bb', white:'#ffffff', danger:'#c2453f'
 };
 const TILE = 32, CW = 960, CH = 540;
@@ -1613,7 +1613,7 @@ function EN_minionHead(ctx, cx, cy, hr, face, t, flat) {
 
   // --- face base ------------------------------------------------------------
   const fg = EN_radGrad(ctx, 'mfc', cx - hr * 0.35, cy - hr * 0.45, hr * 0.1, cx, cy, hr * 1.25, [
-    [0, '#ffffff'], [0.45, PAL.face], [0.85, '#bfb2a2'], [1, '#8d8274']
+    [0, '#d6d0c4'], [0.45, PAL.face], [0.85, '#bfb2a2'], [1, '#8d8274']
   ]);
   EN_ellipse(ctx, cx, cy, hr, hr * (flat ? 0.72 : 1.02), 0);
   ctx.fillStyle = fg;
@@ -1721,7 +1721,7 @@ function EN_minionGrin(ctx, cx, my, hr, t, flat) {
   ctx.fill();
   ctx.clip();
   // teeth
-  ctx.fillStyle = '#f3efe2';
+  ctx.fillStyle = '#cfcabd';
   const n = 5;
   for (let i = 0; i < n; i++) {
     const tx = cx - hr * 0.56 + (i / n) * hr * 1.12;
@@ -1801,7 +1801,7 @@ function EN_minionSquashed(ctx, cx, baseY, w, h, t, face, dying) {
 
   // flattened face
   const fg = EN_radGrad(ctx, 'msqf', cx - w * 0.12, py + ph * 0.05, 1, cx, py + ph * 0.30, w * 0.5, [
-    [0, '#ffffff'], [0.5, PAL.face], [1, '#a2978a']
+    [0, '#d6d0c4'], [0.5, PAL.face], [1, '#a2978a']
   ]);
   EN_ellipse(ctx, cx, py + ph * 0.30, w * 0.42, ph * 0.34, 0);
   ctx.fillStyle = fg;
@@ -1942,7 +1942,7 @@ function drawPenguinHenchman(ctx, x, y, w, h, o) {
   const shy = bTop + (bBot - bTop) * 0.52;
   EN_ellipse(ctx, shx, shy, w * 0.245, (bBot - bTop) * 0.40, 0);
   const wg = EN_radGrad(ctx, 'pws', shx - w * 0.08, shy - (bBot - bTop) * 0.20, 1, shx, shy, w * 0.34, [
-    [0, '#ffffff'], [0.55, PAL.pengW], [1, '#9fa3b8']
+    [0, '#c3c7d1'], [0.55, PAL.pengW], [1, '#9fa3b8']
   ]);
   ctx.fillStyle = wg;
   ctx.fill();
@@ -2013,7 +2013,7 @@ function drawPenguinHenchman(ctx, x, y, w, h, o) {
   ctx.clip();
   ctx.fillStyle = EN_radGrad(ctx, 'pfp', hcx + face * hrx * 0.25, hcy + hry * 0.20, 1,
     hcx + face * hrx * 0.25, hcy + hry * 0.20, hrx * 0.95, [
-      [0, '#ffffff'], [0.6, PAL.pengW], [1, 'rgba(200,203,220,0)']
+      [0, '#c6ccd5'], [0.6, PAL.pengW], [1, 'rgba(200,203,220,0)']
     ]);
   EN_ellipse(ctx, hcx + face * hrx * 0.28, hcy + hry * 0.25, hrx * 0.62, hry * 0.78, 0);
   ctx.fill();
@@ -3440,7 +3440,17 @@ const TL_STONEPAL = (function () {
   for (let w = 0; w < 3; w++) {
     const wm = w - 1;
     for (let i = 0; i < 16; i++) {
-      const b = 20 + (i / 15) * 54;
+      // 70..165, arrived at by probe rather than by argument: painting the
+      // stone bright red showed the colour reaching the screen at roughly half
+      // strength after the grade, so a 20..74 ramp could only ever land the
+      // floor around 0.08 luminance however the lighting was tuned.
+      //
+      // The "wet stone is dark, let the specular put it back" reasoning was
+      // right in principle and wrong here: ambient sits near 1.0, so for most
+      // of the frame the albedo IS the final value, and specular only fires
+      // where a light happens to strike at the right angle. The playfield has
+      // to carry itself.
+      const b = 70 + (i / 15) * 95;
       a.push('rgb(' + ((b + wm * 4.0) | 0) + ',' +
         ((b + wm * 1.2) | 0) + ',' + ((b - wm * 3.0 + 5) | 0) + ')');
     }
@@ -3494,7 +3504,7 @@ function drawGroundTile(ctx, x, y, s, o) {
   // 1. the bed the setts sit in: wet grime, almost black, so every joint is a
   //    hole rather than a drawn line
   ctx.fillStyle = TL_grad(ctx, 'gbed' + s, 0, 0, 0, s, [
-    [0, '#1a1f26'], [0.5, '#11151b'], [1, '#090c12']
+    [0, '#39414c'], [0.5, '#2a313a'], [1, '#1d232a']
   ]);
   ctx.fillRect(0, 0, s, s);
 
@@ -3553,7 +3563,7 @@ function drawGroundTile(ctx, x, y, s, o) {
         ctx.fill();
 
         // grime wedged into the joint under and beside every stone
-        ctx.fillStyle = 'rgba(0,0,0,0.40)';
+        ctx.fillStyle = 'rgba(0,0,0,0.26)';
         ctx.fillRect(bx, by + bhi - 1.2, bwi, 1.2);
         ctx.fillRect(bx + bwi - 1.1, by, 1.1, bhi);
         // the barest cool catch on the worn upper arris -- the lighting pass
@@ -3639,9 +3649,9 @@ function drawGroundTile(ctx, x, y, s, o) {
   if (top) {
     // one cool arris along the walked edge -- enough to carry the silhouette
     // of the playfield against the fog without being a baked highlight
-    ctx.fillStyle = 'rgba(166,186,210,0.52)';
+    ctx.fillStyle = 'rgba(176,196,220,0.80)';
     ctx.fillRect(0, 0, s, 1.2);
-    ctx.fillStyle = 'rgba(112,132,158,0.22)';
+    ctx.fillStyle = 'rgba(120,142,170,0.36)';
     ctx.fillRect(0, 1.2, s, 1);
     ctx.fillStyle = TL_grad(ctx, 'gndlip' + s, 0, 2.2, 0, 8, [
       [0, 'rgba(0,0,0,0.46)'], [1, 'rgba(0,0,0,0)']
@@ -6663,6 +6673,11 @@ function drawWinOverlay(ctx, t, score, best, blink){
 
 
 // ═══ BOSSES ═══════════════════════════════════════
+// NOTE ON VALUE: nothing in here may render at paper white. The grade is
+// near-monochrome and sits between 0.1 and 0.3 luminance, so a white fill is
+// four stops hot, blooms, and turns a character into a glowing blob — which is
+// exactly what the Penguin had become. Small specular dots and eye glints are
+// the exception: those are highlights and are meant to clip.
 // ═══════════════════════════════════════════════════════════════════════
 //  BOSS ART — the two arena bosses, their projectiles and their UI.
 //  Module prefix BS_.  All animation is driven by the passed time so frames
@@ -6791,8 +6806,8 @@ function drawPenguinBoss(ctx, x, y, w, h, o) {
 
   // shirt front
   const sg = ctx.createLinearGradient(0, bodyTop + bh * 0.15, 0, bodyTop + bh);
-  sg.addColorStop(0, '#ffffff');
-  sg.addColorStop(1, '#b9bccc');
+  sg.addColorStop(0, '#c3c6cf');
+  sg.addColorStop(1, '#8d919e');
   ctx.fillStyle = sg;
   ctx.beginPath();
   ctx.ellipse(0, bodyTop + bh * 0.58 + bob, bw * 0.26, bh * 0.34, 0, 0, Math.PI * 2);
@@ -6822,7 +6837,7 @@ function drawPenguinBoss(ctx, x, y, w, h, o) {
   const hy = bodyTop + bh * 0.12 + bob;
   ctx.fillStyle = '#1a1a24';
   ctx.beginPath(); ctx.ellipse(0, hy, bw * 0.3, bh * 0.2, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#f3f1ea';
+  ctx.fillStyle = '#cdcbc1';
   ctx.beginPath(); ctx.ellipse(bw * 0.05, hy + 3, bw * 0.2, bh * 0.13, 0, 0, Math.PI * 2); ctx.fill();
 
   // beak + cigarette holder
@@ -6927,9 +6942,9 @@ function BS_jokerFace(ctx, cx, cy, r, t, phase, laughing) {
   // chalk-white face, modelled instead of flat: lit from upper left, with a
   // greenish bounce under the jaw
   const fg = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.45, r * 0.1, cx, cy, r * 1.25);
-  fg.addColorStop(0, '#ffffff');
+  fg.addColorStop(0, '#d4d2c8');
   fg.addColorStop(0.55, PAL.face);
-  fg.addColorStop(1, '#9aa38c');
+  fg.addColorStop(1, '#848b79');
   ctx.fillStyle = fg;
   ctx.beginPath(); ctx.ellipse(cx, cy, r, r * 1.12, 0, 0, Math.PI * 2); ctx.fill();
   // cheekbone shadow and a pointed chin
@@ -10311,6 +10326,16 @@ class Game {
     // below tier 3 the upscale is already a bilinear smooth, so FXAA on top of
     // it only costs a pass and softens the sprite edges further
     p.fxaa = t >= 3;
+
+    // Effects added for the realism pass, gated by what each actually costs.
+    // The extra scatter centres are a whole quarter-resolution march apiece, so
+    // they go first. Lens dirt and the sharpen are a handful of taps and
+    // survive to tier 2. The specular IS the look, so it only softens.
+    p.lampRays = t >= 3;
+    p.dirt = t >= 2 ? 0.55 : 0.0;
+    p.sharpen = t >= 2 ? 0.34 : 0.0;
+    p.specular = t >= 2 ? 0.72 : 0.46;
+    this.fgOn = t >= 2;
   }
 
   degradePostFX() {
@@ -10649,7 +10674,8 @@ class Game {
     if (ls && ls.length) {
       const pts = p.rayPts;
       pts.length = 0;
-      for (let i = 0; i < ls.length && pts.length < 6; i++) {
+      const want = p.lampRays === false ? 0 : 6;
+      for (let i = 0; i < ls.length && pts.length < want; i++) {
         const L = ls[i];
         if (L.x < -0.1 || L.x > 1.1 || L.i < 0.5) continue;
         pts.push(L.x, L.y, Math.min(0.85, L.i * 0.38));
@@ -10898,7 +10924,7 @@ class Game {
     // half of where the eye gets depth from — but before the rain, so rain
     // still falls in front of it, and before the HUD, which must never be
     // covered.
-    if (this.world) this.fg.draw(ctx, camX, t);
+    if (this.world && this.fgOn !== false) this.fg.draw(ctx, camX, t);
     this.rain.draw(ctx, camX, lv ? lv.rain : 0.6);
     drawForegroundVignette(ctx, lightning);
 

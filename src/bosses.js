@@ -1,3 +1,8 @@
+// NOTE ON VALUE: nothing in here may render at paper white. The grade is
+// near-monochrome and sits between 0.1 and 0.3 luminance, so a white fill is
+// four stops hot, blooms, and turns a character into a glowing blob — which is
+// exactly what the Penguin had become. Small specular dots and eye glints are
+// the exception: those are highlights and are meant to clip.
 // ═══════════════════════════════════════════════════════════════════════
 //  BOSS ART — the two arena bosses, their projectiles and their UI.
 //  Module prefix BS_.  All animation is driven by the passed time so frames
@@ -126,8 +131,8 @@ function drawPenguinBoss(ctx, x, y, w, h, o) {
 
   // shirt front
   const sg = ctx.createLinearGradient(0, bodyTop + bh * 0.15, 0, bodyTop + bh);
-  sg.addColorStop(0, '#ffffff');
-  sg.addColorStop(1, '#b9bccc');
+  sg.addColorStop(0, '#c3c6cf');
+  sg.addColorStop(1, '#8d919e');
   ctx.fillStyle = sg;
   ctx.beginPath();
   ctx.ellipse(0, bodyTop + bh * 0.58 + bob, bw * 0.26, bh * 0.34, 0, 0, Math.PI * 2);
@@ -157,7 +162,7 @@ function drawPenguinBoss(ctx, x, y, w, h, o) {
   const hy = bodyTop + bh * 0.12 + bob;
   ctx.fillStyle = '#1a1a24';
   ctx.beginPath(); ctx.ellipse(0, hy, bw * 0.3, bh * 0.2, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#f3f1ea';
+  ctx.fillStyle = '#cdcbc1';
   ctx.beginPath(); ctx.ellipse(bw * 0.05, hy + 3, bw * 0.2, bh * 0.13, 0, 0, Math.PI * 2); ctx.fill();
 
   // beak + cigarette holder
@@ -262,9 +267,9 @@ function BS_jokerFace(ctx, cx, cy, r, t, phase, laughing) {
   // chalk-white face, modelled instead of flat: lit from upper left, with a
   // greenish bounce under the jaw
   const fg = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.45, r * 0.1, cx, cy, r * 1.25);
-  fg.addColorStop(0, '#ffffff');
+  fg.addColorStop(0, '#d4d2c8');
   fg.addColorStop(0.55, PAL.face);
-  fg.addColorStop(1, '#9aa38c');
+  fg.addColorStop(1, '#848b79');
   ctx.fillStyle = fg;
   ctx.beginPath(); ctx.ellipse(cx, cy, r, r * 1.12, 0, 0, Math.PI * 2); ctx.fill();
   // cheekbone shadow and a pointed chin

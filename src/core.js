@@ -568,6 +568,16 @@ class Game {
     // below tier 3 the upscale is already a bilinear smooth, so FXAA on top of
     // it only costs a pass and softens the sprite edges further
     p.fxaa = t >= 3;
+
+    // Effects added for the realism pass, gated by what each actually costs.
+    // The extra scatter centres are a whole quarter-resolution march apiece, so
+    // they go first. Lens dirt and the sharpen are a handful of taps and
+    // survive to tier 2. The specular IS the look, so it only softens.
+    p.lampRays = t >= 3;
+    p.dirt = t >= 2 ? 0.55 : 0.0;
+    p.sharpen = t >= 2 ? 0.34 : 0.0;
+    p.specular = t >= 2 ? 0.72 : 0.46;
+    this.fgOn = t >= 2;
   }
 
   degradePostFX() {
@@ -906,7 +916,8 @@ class Game {
     if (ls && ls.length) {
       const pts = p.rayPts;
       pts.length = 0;
-      for (let i = 0; i < ls.length && pts.length < 6; i++) {
+      const want = p.lampRays === false ? 0 : 6;
+      for (let i = 0; i < ls.length && pts.length < want; i++) {
         const L = ls[i];
         if (L.x < -0.1 || L.x > 1.1 || L.i < 0.5) continue;
         pts.push(L.x, L.y, Math.min(0.85, L.i * 0.38));
@@ -1155,7 +1166,7 @@ class Game {
     // half of where the eye gets depth from — but before the rain, so rain
     // still falls in front of it, and before the HUD, which must never be
     // covered.
-    if (this.world) this.fg.draw(ctx, camX, t);
+    if (this.world && this.fgOn !== false) this.fg.draw(ctx, camX, t);
     this.rain.draw(ctx, camX, lv ? lv.rain : 0.6);
     drawForegroundVignette(ctx, lightning);
 

@@ -1,0 +1,135 @@
+// One command that answers "is the build still sound?".
+//
+//   node demo/verify.js [path/to/game.html]
+//
+// Checks, in order:
+//   escritorio   boots, no page errors, post-processing attached, frame rate
+//   sin WebGL    the no-WebGL fallback still shows a playable 2D canvas
+//   táctil       the touch pad never overlaps the canvas, no horizontal scroll
+//   jefes        both boss arenas run for 20s without throwing
+//
+// Exits non-zero if anything fails, so it can gate a commit.
+const { execSync } = require('child_process');
+const path = require('path');
+const { chromium } = require(path.join(execSync('npm root -g').toString().trim(), 'playwright'));
+
+const GAME = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '..', 'game.html'));
+let failures = 0;
+const ok = (name, good, detail) => {
+  console.log((good ? '  OK   ' : '  FALLA') + '  ' + name.padEnd(14) + (detail || ''));
+  if (!good) failures++;
+};
+
+async function fresh(browser, opts) {
+  const ctx = await browser.newContext(opts || {});
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(e.message));
+  return { page, errs, ctx };
+}
+
+(async () => {
+  const browser = await chromium.launch();
+
+  // ── escritorio ────────────────────────────────────────────────────────
+  {
+    const { page, errs } = await fresh(browser, { viewport: { width: 1280, height: 800 } });
+    await page.goto(GAME, { waitUntil: 'load' });
+    await page.waitForFunction(() => !!window.__game, null, { timeout: 25000 });
+    await page.evaluate(() => { const g = window.__game; g.startRun(); g.state = 'play'; });
+    const r = await page.evaluate(() => new Promise(res => {
+      let n = 0; const t0 = performance.now();
+      (function tick() {
+        n++;
+        if (performance.now() - t0 < 2500) requestAnimationFrame(tick);
+        else res({
+          fps: +(n / ((performance.now() - t0) / 1000)).toFixed(1),
+          post: !!window.__game.fx2, tier: window.__game.gfxTier,
+          levels: LEVELS.length,
+        });
+      })();
+    }));
+    ok('escritorio', errs.length === 0 && r.levels === 8,
+      'fps=' + r.fps + ' nivel-gfx=' + r.tier + ' postfx=' + r.post +
+      ' niveles=' + r.levels + ' errores=' + errs.length);
+    if (errs.length) errs.slice(0, 3).forEach(e => console.log('         ' + e));
+    await page.close();
+  }
+
+  // ── sin WebGL ─────────────────────────────────────────────────────────
+  {
+    const { page, errs } = await fresh(browser, { viewport: { width: 1100, height: 700 } });
+    await page.addInitScript(() => {
+      const real = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (t, o) {
+        if (String(t).indexOf('webgl') === 0) return null;
+        return real.call(this, t, o);
+      };
+    });
+    await page.goto(GAME, { waitUntil: 'load' });
+    await page.waitForFunction(() => !!window.__game, null, { timeout: 25000 });
+    await page.waitForTimeout(900);
+    const r = await page.evaluate(() => ({
+      post: !!window.__game.fx2,
+      gc: getComputedStyle(document.getElementById('gc')).display,
+      fx: getComputedStyle(document.getElementById('fx')).display,
+    }));
+    ok('sin WebGL', errs.length === 0 && !r.post && r.gc !== 'none' && r.fx === 'none',
+      'postfx=' + r.post + ' lienzo2D=' + r.gc + ' lienzoFX=' + r.fx + ' errores=' + errs.length);
+    await page.close();
+  }
+
+  // ── táctil, retrato y paisaje ─────────────────────────────────────────
+  for (const [name, vp] of [['retrato', { width: 402, height: 820 }],
+                            ['paisaje', { width: 874, height: 402 }]]) {
+    const { page, errs } = await fresh(browser, {
+      viewport: vp, hasTouch: true, isMobile: true, deviceScaleFactor: 2,
+    });
+    await page.goto(GAME, { waitUntil: 'load' });
+    await page.waitForFunction(() => !!window.__game, null, { timeout: 25000 });
+    await page.waitForTimeout(600);
+    const r = await page.evaluate(() => {
+      const pad = document.getElementById('pad').getBoundingClientRect();
+      const st = document.getElementById('stage').getBoundingClientRect();
+      return {
+        shown: getComputedStyle(document.getElementById('pad')).display !== 'none',
+        overlap: pad.top < st.bottom && pad.bottom > st.top,
+        hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+      };
+    });
+    ok('táctil ' + name, errs.length === 0 && r.shown && !r.overlap && !r.hscroll,
+      'pad=' + r.shown + ' solapa=' + r.overlap + ' scrollH=' + r.hscroll + ' errores=' + errs.length);
+    await page.close();
+  }
+
+  // ── los dos jefes ─────────────────────────────────────────────────────
+  for (const [name, idx] of [['pingüino', 3], ['joker', 7]]) {
+    const { page, errs } = await fresh(browser, { viewport: { width: 1000, height: 640 } });
+    await page.addInitScript(() => {
+      window.__capture = true; window.__q = [];
+      window.requestAnimationFrame = c => { window.__q.push(c); return 1; };
+      window.cancelAnimationFrame = () => { };
+      window.__flush = ts => {
+        const q = window.__q; window.__q = [];
+        for (const c of q) { try { c(ts); } catch (e) { if (!window.__err) window.__err = e.message; } }
+      };
+    });
+    await page.goto(GAME, { waitUntil: 'load' });
+    await page.waitForFunction(() => !!window.__game, null, { timeout: 25000 });
+    const r = await page.evaluate(lv => {
+      const g = window.__game;
+      g.draw = function () { };            // physics only: this is a crash test
+      g.startRun(); g.lvIdx = lv; g.loadLevel(lv); g.state = 'play';
+      for (let i = 0; i < 20 * 60; i++) window.__flush(i * (1000 / 60));
+      return { st: g.state, hp: g.boss ? g.boss.hp : -1, err: window.__err || null };
+    }, idx);
+    ok('jefe ' + name, errs.length === 0 && !r.err,
+      'estado=' + r.st + ' vida=' + r.hp + (r.err ? '  BUCLE: ' + r.err : '') +
+      ' errores=' + errs.length);
+    await page.close();
+  }
+
+  await browser.close();
+  console.log(failures ? '\n' + failures + ' FALLO(S)' : '\nTodo en verde');
+  process.exit(failures ? 1 : 0);
+})().catch(e => { console.error('VERIFY FAILED: ' + e.message); process.exit(9); });
