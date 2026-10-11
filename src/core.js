@@ -540,6 +540,13 @@ class Game {
   // Resolution is also the least damaging thing to give up: bloom, lighting and
   // the wet reflection are all low-frequency, so at 70% they are very hard to
   // tell apart, and the chain keeps its whole look instead of losing features.
+  // Are the surface maps usable right now? They decode asynchronously, they
+  // need Path2D, and on the lowest tier the two extra pattern fills are not
+  // worth their cost on a machine that is already struggling.
+  texOn() {
+    return TEX.ready && this.gfxTier >= 1 && typeof Path2D !== 'undefined';
+  }
+
   applyTier() {
     const p = this.prm;
     if (!p) return;
@@ -643,17 +650,33 @@ class Game {
     const w = this.world;
     const c0 = Math.max(0, Math.floor(camX / TILE) - 1);
     const c1 = Math.min(w.w - 1, Math.floor((camX + CW) / TILE) + 1);
+    const nsurf = this.texOn() ? new Path2D() : null;
     for (let cy = 0; cy < w.h; cy++) {
+      let rs = -1, ry = 0;
       for (let cx = c0; cx <= c1; cx++) {
         const c = w.cells[cy * w.w + cx];
-        if (!c || !c.alive) continue;
-        const x = cx * TILE - camX;
-        const y = cy * TILE - (c.bump > 0 ? Math.sin(c.bump * Math.PI) * 9 : 0);
-        // ground rows rake light across them; floating blocks get a hard chamfer
-        const spr = c.t === '#' ? (c.top ? L.bevelSoft : L.ground) : L.bevel;
-        n.drawImage(spr, x, y, TILE, TILE);
+        let y = 0, tex = false;
+        if (c && c.alive) {
+          const x = cx * TILE - camX;
+          y = cy * TILE - (c.bump > 0 ? Math.sin(c.bump * Math.PI) * 9 : 0);
+          // ground rows rake light across them; floating blocks get a chamfer
+          const spr = c.t === '#' ? (c.top ? L.bevelSoft : L.ground) : L.bevel;
+          n.drawImage(spr, x, y, TILE, TILE);
+          tex = c.t !== '?';
+        }
+        if (nsurf) {
+          if (tex && rs < 0) { rs = cx; ry = y; }
+          else if (rs >= 0 && (!tex || y !== ry)) {
+            nsurf.rect(rs * TILE - camX, ry, (cx - rs) * TILE, TILE);
+            rs = tex ? cx : -1; ry = y;
+          }
+        }
       }
+      if (nsurf && rs >= 0) nsurf.rect(rs * TILE - camX, ry, (c1 + 1 - rs) * TILE, TILE);
     }
+    // real surface relief on top of the baked bevels, so the lights rake
+    // across grain instead of across a flat plane
+    if (nsurf) TEX_normals(n, nsurf, camX);
     for (const k of this.pickups) {
       if (k.rect.r < camX - 40 || k.rect.x > camX + CW + 40) continue;
       n.drawImage(L.dome, k.rect.x - camX, k.rect.y, k.rect.w, k.rect.h);
@@ -1234,18 +1257,39 @@ class Game {
     if (w.beacon && w.beacon.x + 200 > camX && w.beacon.x - 200 < camX + CW)
       drawBeacon(ctx, w.beacon.x - camX, w.beacon.y, TILE, t, w.beacon.reached);
 
+    // Collected while the tiles are drawn so the surface maps can be laid over
+    // all of them in two fills, rather than one per tile. The signal blocks are
+    // left out on purpose: they are lacquered metal, not stone.
+    const surf = this.texOn() ? new Path2D() : null;
     for (let cy = 0; cy < w.h; cy++) {
+      let rs = -1, ry = 0;          // open run: start column, and its y
       for (let cx = c0; cx <= c1; cx++) {
         const c = w.cells[cy * w.w + cx];
-        if (!c || !c.alive) continue;
-        const x = cx * TILE - camX;
-        const y = cy * TILE - (c.bump > 0 ? Math.sin(c.bump * Math.PI) * 9 : 0);
-        if (c.t === '#') drawGroundTile(ctx, x, y, TILE, { top: !!c.top, idx: c.idx });
-        else if (c.t === 'X') drawStoneBlock(ctx, x, y, TILE, c.idx);
-        else if (c.t === 'B') drawBrickBlock(ctx, x, y, TILE, c.idx);
-        else if (c.t === '?') drawBatSignalBlock(ctx, x, y, TILE, c.used, t);
+        let y = 0, tex = false;
+        if (c && c.alive) {
+          const x = cx * TILE - camX;
+          y = cy * TILE - (c.bump > 0 ? Math.sin(c.bump * Math.PI) * 9 : 0);
+          if (c.t === '#') drawGroundTile(ctx, x, y, TILE, { top: !!c.top, idx: c.idx });
+          else if (c.t === 'X') drawStoneBlock(ctx, x, y, TILE, c.idx);
+          else if (c.t === 'B') drawBrickBlock(ctx, x, y, TILE, c.idx);
+          else if (c.t === '?') drawBatSignalBlock(ctx, x, y, TILE, c.used, t);
+          tex = c.t !== '?';
+        }
+        // Merge neighbours into runs. A ground row is 30 identical rects, and
+        // filling a 400-rect path with a pattern three times a frame measured
+        // as real cost; as runs it is a handful of rects. A run breaks on a
+        // bumped tile because that one is lifted out of line.
+        if (surf) {
+          if (tex && rs < 0) { rs = cx; ry = y; }
+          else if (rs >= 0 && (!tex || y !== ry)) {
+            surf.rect(rs * TILE - camX, ry, (cx - rs) * TILE, TILE);
+            rs = tex ? cx : -1; ry = y;
+          }
+        }
       }
+      if (surf && rs >= 0) surf.rect(rs * TILE - camX, ry, (c1 + 1 - rs) * TILE, TILE);
     }
+    if (surf) TEX_surface(ctx, surf, camX);
     this.decor.draw(ctx, camX, t);
 
     for (const k of this.pickups) {
@@ -1395,6 +1439,10 @@ window.__postfxOn = false;
 
 // ── boot ───────────────────────────────────────────────────────────────
 function start(saved){
+  // Kicked off before anything else and never waited on: the maps decode in
+  // the background and the surface passes check TEX.ready, so the first few
+  // frames simply render the old procedural look and then pick up the detail.
+  TEX_load();
   var game = new Game(document.getElementById('gc'));
   window.__game = game;
 

@@ -14,9 +14,12 @@ const SRC = __dirname;
 const ROOT = path.join(__dirname, '..');
 
 // Order matters: later modules may call into earlier ones at load time.
+// _texdata holds the generated surface maps as data URIs and must land before
+// textures.js, which reads TEX_SRC at load time.
 const ORDER = [
   'batman', 'enemies', 'environment', 'tiles', 'fx', 'ui', 'bosses',
-  'levels', 'lighting', 'atmos', 'decor', 'foreground', 'postfx', 'bossengine', 'core',
+  'levels', 'lighting', 'atmos', 'decor', 'foreground', '_texdata', 'textures',
+  'postfx', 'bossengine', 'core',
 ];
 
 // Anything the game cannot boot without. A missing one used to surface as a
@@ -29,6 +32,7 @@ const REQUIRED = [
   'drawBatSignalStar', 'ParticleSystem', 'RainSystem', 'Lightning',
   'ScreenShake', 'drawSpeedLines', 'FX_rimmed', 'drawHUD', 'drawTitleScreen',
   'drawPauseOverlay', 'drawDeathOverlay', 'drawLevelCompleteOverlay',
+  'TEX_SRC', 'TEX_load', 'TEX_surface', 'TEX_normals',
   'drawGameOverOverlay', 'drawWinOverlay', 'LEVELS', 'PostFX', 'Boss',
   'BossProjectile', 'Shockwave', 'Atmosphere', 'Decor', 'Foreground', 'Game',
   'drawBossHealthBar', 'drawBossIntro',
