@@ -17,6 +17,7 @@ echo $$ > .reel.pid
 SCALE=${SCALE:-1.3333}          # 1280x720
 OUT=${OUT:-batman-highlights.mp4}
 FF=./node_modules/ffmpeg-static/ffmpeg
+[ -x "$FF" ] || FF=$(command -v ffmpeg) || { echo 'no encuentro ffmpeg'; exit 4; }
 mkdir -p seg
 
 #   level  seconds  label                        why this length

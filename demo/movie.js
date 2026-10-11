@@ -18,7 +18,17 @@ const path = require('path');
 
 const GROOT = execSync('npm root -g').toString().trim();
 const { chromium } = require(path.join(GROOT, 'playwright'));
-const FFMPEG = path.join(__dirname, 'node_modules', 'ffmpeg-static', 'ffmpeg');
+// Prefer the pinned ffmpeg-static if the project has it, otherwise fall back to
+// whatever ffmpeg the machine provides. A container rebuild once took
+// node_modules with it and every recording tool died on ENOENT.
+const FFMPEG = (function () {
+  const local = path.join(__dirname, 'node_modules', 'ffmpeg-static', 'ffmpeg');
+  if (fs.existsSync(local)) return local;
+  for (const p of ['/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg']) {
+    if (fs.existsSync(p)) return p;
+  }
+  throw new Error('no encuentro ffmpeg');
+})();
 
 const OUT = process.argv[2] || path.join(__dirname, 'batman-completo.mp4');
 const SCALE = parseFloat(process.argv[3] || '2');      // 2 -> 1920x1080

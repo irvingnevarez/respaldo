@@ -19,7 +19,17 @@ const fs = require('fs');
 const path = require('path');
 const GROOT = execSync('npm root -g').toString().trim();
 const { chromium } = require(path.join(GROOT, 'playwright'));
-const FFMPEG = path.join(__dirname, 'node_modules', 'ffmpeg-static', 'ffmpeg');
+// Prefer the pinned ffmpeg-static if the project has it, otherwise fall back to
+// whatever ffmpeg the machine provides. A container rebuild once took
+// node_modules with it and every recording tool died on ENOENT.
+const FFMPEG = (function () {
+  const local = path.join(__dirname, 'node_modules', 'ffmpeg-static', 'ffmpeg');
+  if (fs.existsSync(local)) return local;
+  for (const p of ['/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg']) {
+    if (fs.existsSync(p)) return p;
+  }
+  throw new Error('no encuentro ffmpeg');
+})();
 
 const LV = parseInt(process.argv[2], 10);
 const SECS = parseFloat(process.argv[3]);
@@ -56,7 +66,7 @@ const TOTAL = Math.round(SECS * FPS);
       for (let i = 0; i < q.length; i++) { try { q[i](ts); } catch (e) { } }
     };
   });
-  await page.goto('file://' + path.join(__dirname, 'game.html'), { waitUntil: 'load' });
+  await page.goto('file://' + path.join(__dirname, '..', 'game.html'), { waitUntil: 'load' });
   await page.waitForFunction(() => !!window.__game, null, { timeout: 20000 });
 
   await page.evaluate(a => {

@@ -1,0 +1,8 @@
+# Recording intermediates: segment clips, the concatenated silent cut and the
+# synthesised score. All of them are rebuilt by demo/reel.sh from the sources,
+# and together they run to hundreds of megabytes.
+demo/seg/
+demo/.reel.lock
+demo/.reel.pid
+demo/node_modules/
+*.mp4
