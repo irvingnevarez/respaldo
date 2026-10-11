@@ -511,6 +511,7 @@ class Game {
     this.best = this.loadBest();
     this.fx = new ParticleSystem();
     this.atmos = new Atmosphere();
+    this.fg = new Foreground();
     this.decor = new Decor();
     this.rain = new RainSystem();
     this.bolt = new Lightning();
@@ -843,15 +844,19 @@ class Game {
     p.time = this.time;
     // lightning washes the whole frame, exactly as it does in the 2D pass
     const fl = this.bolt.flash;
-    p.flash = fl * 0.22;
+    // Exposure went from 1.30 to 1.95 when the grade was reworked, and the
+    // lightning was never rescaled to match — a strike blew the whole frame to
+    // flat white. A strike should read as a hard, brief wash that still leaves
+    // the silhouettes readable, so every term that feeds it is now smaller.
+    p.flash = fl * 0.10;
     // and drives the directional light, so a strike genuinely rakes across the
     // geometry instead of just brightening the image
     // The moon is the key light, so it has to be bright enough to model the
     // geometry: at 0.13 it was barely above the ambient and every surface came
     // out the same value, which is why the playfield merged into the skyline.
-    p.sunCol[0] = 0.30 + fl * 0.85;
-    p.sunCol[1] = 0.33 + fl * 0.92;
-    p.sunCol[2] = 0.39 + fl * 1.05;
+    p.sunCol[0] = 0.30 + fl * 0.46;
+    p.sunCol[1] = 0.33 + fl * 0.50;
+    p.sunCol[2] = 0.39 + fl * 0.58;
 
     // A strike is a light source, not a colour wash. Each one picks its own
     // steep angle and, while it lasts, takes over the directional shadow with
@@ -924,6 +929,7 @@ class Game {
     }
     this.boss = lv.boss ? new Boss(lv.boss) : null;
     this.decor.build(this.world, lv.id);
+    this.fg.build(this.world, lv.id);
     const wasBig = this.player ? this.player.big : false;
     this.player = new Player(lv.start.tx * TILE, (lv.start.ty + 1) * TILE - 42);
     if (wasBig) this.player.resize(true);
@@ -1131,6 +1137,12 @@ class Game {
     ctx.restore();
 
     const lv = this.world ? this.world.level : null;
+    // Out-of-focus clutter between the camera and the playfield. It goes in
+    // AFTER the world and the particles so it occludes them — occlusion is
+    // half of where the eye gets depth from — but before the rain, so rain
+    // still falls in front of it, and before the HUD, which must never be
+    // covered.
+    if (this.world) this.fg.draw(ctx, camX, t);
     this.rain.draw(ctx, camX, lv ? lv.rain : 0.6);
     drawForegroundVignette(ctx, lightning);
 

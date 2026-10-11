@@ -16,7 +16,7 @@ const ROOT = path.join(__dirname, '..');
 // Order matters: later modules may call into earlier ones at load time.
 const ORDER = [
   'batman', 'enemies', 'environment', 'tiles', 'fx', 'ui', 'bosses',
-  'levels', 'lighting', 'atmos', 'decor', 'postfx', 'bossengine', 'core',
+  'levels', 'lighting', 'atmos', 'decor', 'foreground', 'postfx', 'bossengine', 'core',
 ];
 
 // Anything the game cannot boot without. A missing one used to surface as a
@@ -30,7 +30,7 @@ const REQUIRED = [
   'ScreenShake', 'drawSpeedLines', 'drawHUD', 'drawTitleScreen',
   'drawPauseOverlay', 'drawDeathOverlay', 'drawLevelCompleteOverlay',
   'drawGameOverOverlay', 'drawWinOverlay', 'LEVELS', 'PostFX', 'Boss',
-  'BossProjectile', 'Shockwave', 'Atmosphere', 'Decor', 'Game',
+  'BossProjectile', 'Shockwave', 'Atmosphere', 'Decor', 'Foreground', 'Game',
   'drawBossHealthBar', 'drawBossIntro',
 ];
 

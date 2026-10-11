@@ -373,6 +373,7 @@ var PFX_FXAA = PFX_HEAD + [
   '',
   'uniform sampler2D uTex;',
   'uniform vec2 uTexel;',
+  'uniform float uSharp;',
   'float PFX_lum(vec3 c){ return dot(c, vec3(0.299, 0.587, 0.114)); }',
   'void main(){',
   '  vec3 rgbM = texture(uTex, vUV).rgb;',
@@ -393,7 +394,20 @@ var PFX_FXAA = PFX_HEAD + [
   '  vec3 rgbB = rgbA * 0.5 + 0.25 * (texture(uTex, vUV + dir * -0.5).rgb',
   '                                 + texture(uTex, vUV + dir *  0.5).rgb);',
   '  float lB = PFX_lum(rgbB);',
-  '  oColor = vec4((lB < lMin || lB > lMax) ? rgbA : rgbB, 1.0);',
+  '  vec3 aa = (lB < lMin || lB > lMax) ? rgbA : rgbB;',
+  // Contrast-adaptive sharpening, the same trick every current renderer ends
+  // its chain with. The frame has just been antialiased and, below the top
+  // quality tier, upscaled — both of which soften it. Sharpening by the LOCAL
+  // contrast rather than a flat amount puts the crispness back on edges
+  // without turning the grain and the rain into noise.
+  '  vec3 n4 = texture(uTex, vUV + vec2(0.0, -1.0) * uTexel).rgb',
+  '          + texture(uTex, vUV + vec2(0.0,  1.0) * uTexel).rgb',
+  '          + texture(uTex, vUV + vec2(-1.0, 0.0) * uTexel).rgb',
+  '          + texture(uTex, vUV + vec2( 1.0, 0.0) * uTexel).rgb;',
+  '  vec3 blur = n4 * 0.25;',
+  '  float contrast = clamp((lMax - lMin) * 3.0, 0.0, 1.0);',
+  '  aa += (aa - blur) * uSharp * contrast;',
+  '  oColor = vec4(clamp(aa, 0.0, 1.0), 1.0);',
   '}'
 ].join('\n');
 
@@ -436,6 +450,7 @@ var PFX_COMP = PFX_HEAD + [
   'uniform vec2  uRes;',
   'uniform float uTime;',
   'uniform float uBloomAmt;',
+  'uniform float uDirt;',
   'uniform float uAberr;',
   'uniform float uVignette;',
   'uniform float uGrain;',
@@ -457,6 +472,26 @@ var PFX_COMP = PFX_HEAD + [
   '  vec3 p3 = fract(vec3(p.xyx) * 0.1031);',
   '  p3 += dot(p3, p3.yzx + 33.33);',
   '  return fract((p3.x + p3.y) * p3.z);',
+  '}',
+  '',
+  // Lens dirt. Real glass is never clean, and a bloom that is perfectly even
+  // is the clearest sign a frame was computed rather than photographed. These
+  // are fixed smudges on the front element: they are invisible until something
+  // bright blooms through them, and then they streak.
+  'float PFX_dirt(vec2 uv){',
+  '  const int N = 7;',
+  '  vec3 blob[N];',
+  '  blob[0] = vec3(0.18, 0.72, 0.26); blob[1] = vec3(0.74, 0.31, 0.19);',
+  '  blob[2] = vec3(0.46, 0.14, 0.30); blob[3] = vec3(0.88, 0.66, 0.15);',
+  '  blob[4] = vec3(0.31, 0.49, 0.12); blob[5] = vec3(0.62, 0.84, 0.22);',
+  '  blob[6] = vec3(0.08, 0.22, 0.17);',
+  '  float d = 0.0;',
+  '  for (int i = 0; i < N; i++) {',
+  '    vec2 q = (uv - blob[i].xy) / blob[i].z;',
+  '    q.y *= 0.55;',                       // smears are wider than they are tall
+  '    d += exp(-dot(q, q) * 2.2);',
+  '  }',
+  '  return clamp(d, 0.0, 1.6);',
   '}',
   '',
   'void main(){',
@@ -483,7 +518,7 @@ var PFX_COMP = PFX_HEAD + [
   '  scene = pow(max(scene, 0.0), vec3(2.2));',
   '',
   '  vec3 bloom = texture(uBloom, uv).rgb;',
-  '  vec3 col = scene + bloom * uBloomAmt;',
+  '  vec3 col = scene + bloom * uBloomAmt * mix(1.0, 0.55 + PFX_dirt(uv), uDirt);',
   '  col += texture(uRays, uv).rgb * uRaysAmt;',
   '  col += texture(uStreak, uv).rgb * uStreakAmt * vec3(0.55, 0.76, 1.35);',
   '',
@@ -912,6 +947,7 @@ function PostFX(canvas) {
     gl.uniform2f(c.u.uRes, self.iw, self.ih);
     gl.uniform1f(c.u.uTime, prm.time);
     gl.uniform1f(c.u.uBloomAmt, prm.bloom);
+    gl.uniform1f(c.u.uDirt, prm.dirt);
     gl.uniform1f(c.u.uAberr, prm.aberration);
     gl.uniform1f(c.u.uVignette, prm.vignette);
     gl.uniform1f(c.u.uGrain, prm.grain);
@@ -934,6 +970,7 @@ function PostFX(canvas) {
       gl.useProgram(fp.p);
       gl.uniform1i(fp.u.uTex, 0);
       gl.uniform2f(fp.u.uTexel, 1 / self.iw, 1 / self.ih);
+      gl.uniform1f(fp.u.uSharp, prm.sharpen);
       blit(fp, null);
     }
     gl.activeTexture(gl.TEXTURE0);
@@ -972,7 +1009,7 @@ PostFX.defaults = function () {
     // and a cool tint because the reflection is of a night sky
     wet: 0.5, wetFade: 17.0, wetSquash: 3.6, ripple: 1.0, haze: 0.010,
     dof: 1.0, bgDim: 1.0, ao: 0.42,
-    streak: 0.26, streakLen: 2.4, fxaa: true,
+    streak: 0.26, streakLen: 2.4, fxaa: true, dirt: 0.55, sharpen: 0.34,
     wetTint: new Float32Array([0.78, 0.86, 1.05]),
     // moon shafts: centre tracks the moon, updated per frame by the game
     rays: 0.34, rayX: 0.70, rayY: 0.86, rayDensity: 0.62, rayWeight: 0.055, rayDecay: 0.93,

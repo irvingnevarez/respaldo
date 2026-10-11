@@ -7504,6 +7504,164 @@ class Decor {
 }
 
 
+// ═══ FOREGROUND ═══════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+//  FOREGROUND — out-of-focus clutter between the camera and the playfield.
+//
+//  A side-on game with nothing in front of the action always reads flat, no
+//  matter how good the lighting behind it is: the eye gets depth from
+//  OCCLUSION and from parallax, and a scene with exactly one plane offers
+//  neither. Contemporary 2D games all solve it the same way — near-black
+//  shapes drifting across the lens faster than the world, slightly defocused,
+//  that the player's eye reads as "I am standing behind something".
+//
+//  Everything here is a silhouette: no detail, no colour, soft edges. It is
+//  drawn after the world and before the HUD, at roughly 1.4x the camera speed,
+//  and it deliberately never covers the middle band where the player lives.
+//
+//  The blur is faked. A real defocus would mean another full-screen canvas and
+//  another upload per frame, which measured as a genuine cost; a silhouette
+//  built from soft radial and linear gradients is indistinguishable at this
+//  value range, because a near-black shape against a dark city has almost no
+//  edge contrast to give the trick away.
+// ═══════════════════════════════════════════════════════════════════════
+
+function FG_hash(n) { const s = Math.sin(n * 41.17 + 3.77) * 43758.5453; return s - Math.floor(s); }
+
+class Foreground {
+  constructor() { this.items = []; this.key = null; }
+
+  // Placed once per level from the level geometry, never per frame.
+  build(world, levelId) {
+    if (this.key === levelId) return;
+    this.key = levelId;
+    this.items = [];
+    if (!world) return;
+
+    const W = world.w;
+    let cx = 6;
+    while (cx < W - 4) {
+      const h = FG_hash(cx * 2.3);
+      let kind;
+      if (h < 0.34) kind = 'pipe';
+      else if (h < 0.60) kind = 'rail';
+      else if (h < 0.82) kind = 'cable';
+      else kind = 'post';
+      this.items.push({
+        x: cx * TILE,
+        kind: kind,
+        seed: cx,
+        // vertical placement: pipes and cables hang from the top of frame,
+        // rails and posts rise from the bottom
+        span: 0.5 + FG_hash(cx * 5.1) * 0.9,
+      });
+      cx += 19 + Math.floor(FG_hash(cx * 1.9) * 17);
+    }
+  }
+
+  // camX is the world camera; the foreground runs faster so it slides past.
+  draw(ctx, camX, t) {
+    if (!this.items.length) return;
+    const PAR = 1.42;
+    ctx.save();
+    for (const it of this.items) {
+      const x = it.x - camX * PAR;
+      if (x < -300 || x > CW + 300) continue;
+      const a = 0.62;
+      switch (it.kind) {
+        case 'pipe': this.pipe(ctx, x, it, a, t); break;
+        case 'rail': this.rail(ctx, x, it, a); break;
+        case 'cable': this.cable(ctx, x, it, a, t); break;
+        default: this.post(ctx, x, it, a); break;
+      }
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  // A soft-edged vertical bar: the gradient across its width IS the defocus.
+  soft(ctx, x, y, w, h, a) {
+    // The falloff has to be WIDE. A short ramp still reads as an edge, and an
+    // edge reads as a black bar laid over the picture rather than as something
+    // close to the lens. Two thirds of the width is transition.
+    const g = ctx.createLinearGradient(x - w, 0, x + w, 0);
+    g.addColorStop(0.00, 'rgba(2,4,7,0)');
+    g.addColorStop(0.22, 'rgba(2,4,7,' + (a * 0.18).toFixed(3) + ')');
+    g.addColorStop(0.40, 'rgba(2,4,7,' + (a * 0.70).toFixed(3) + ')');
+    g.addColorStop(0.60, 'rgba(2,4,7,' + (a * 0.70).toFixed(3) + ')');
+    g.addColorStop(0.78, 'rgba(2,4,7,' + (a * 0.18).toFixed(3) + ')');
+    g.addColorStop(1.00, 'rgba(2,4,7,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x - w, y, w * 2, h);
+  }
+
+  // a fat drainpipe running the full height, with a joint collar
+  pipe(ctx, x, it, a, t) {
+    const w = 17 + FG_hash(it.seed) * 13;
+    this.soft(ctx, x, -20, w, CH + 40, a);
+    const cy = CH * (0.18 + FG_hash(it.seed + 3) * 0.5);
+    this.soft(ctx, x, cy, w * 1.5, 16, a * 0.95);
+    const cy2 = cy + 120 + FG_hash(it.seed + 9) * 160;
+    if (cy2 < CH) this.soft(ctx, x, cy2, w * 1.4, 13, a * 0.9);
+  }
+
+  // a railing crossing the lower third: one top rail and a few uprights
+  rail(ctx, x, it, a) {
+    const y = CH * (0.62 + FG_hash(it.seed + 1) * 0.2);
+    const wide = 180 + FG_hash(it.seed + 4) * 220;
+    const g = ctx.createLinearGradient(0, y - 15, 0, y + 15);
+    g.addColorStop(0.0, 'rgba(2,4,7,0)');
+    g.addColorStop(0.32, 'rgba(2,4,7,' + (a * 0.38).toFixed(3) + ')');
+    g.addColorStop(0.5, 'rgba(2,4,7,' + (a * 0.80).toFixed(3) + ')');
+    g.addColorStop(0.68, 'rgba(2,4,7,' + (a * 0.38).toFixed(3) + ')');
+    g.addColorStop(1.0, 'rgba(2,4,7,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x - wide * 0.5, y - 15, wide, 30);
+    const n = 2 + Math.floor(FG_hash(it.seed + 7) * 3);
+    for (let i = 0; i <= n; i++) {
+      const px = x - wide * 0.5 + (wide * i) / n;
+      this.soft(ctx, px, y, 9, CH - y + 20, a * 0.8);
+    }
+  }
+
+  // a slack catenary sagging across the top of frame, swaying very slightly
+  cable(ctx, x, it, a, t) {
+    const y0 = CH * (0.05 + FG_hash(it.seed + 2) * 0.22);
+    const wide = 300 + FG_hash(it.seed + 6) * 320;
+    const sag = 60 + FG_hash(it.seed + 8) * 110 + Math.sin(t * 0.5 + it.seed) * 5;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(2,4,7,' + (a * 0.80).toFixed(3) + ')';
+    ctx.lineCap = 'round';
+    // three passes of decreasing width fake the soft edge of a defocused wire
+    for (const [lw, al] of [[11, 0.22], [7, 0.45], [3.6, 0.85]]) {
+      ctx.globalAlpha = al;
+      ctx.lineWidth = lw;
+      ctx.beginPath();
+      ctx.moveTo(x - wide * 0.5, y0);
+      ctx.quadraticCurveTo(x, y0 + sag * 2, x + wide * 0.5, y0 + FG_hash(it.seed + 11) * 30);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // a lamp post or sign pole crossing the whole frame
+  post(ctx, x, it, a) {
+    const w = 11 + FG_hash(it.seed + 5) * 9;
+    this.soft(ctx, x, -20, w, CH + 40, a * 0.92);
+    const ay = CH * (0.12 + FG_hash(it.seed + 13) * 0.22);
+    const arm = 60 + FG_hash(it.seed + 17) * 90;
+    const dir = FG_hash(it.seed + 19) > 0.5 ? 1 : -1;
+    const g = ctx.createLinearGradient(0, ay - 8, 0, ay + 8);
+    g.addColorStop(0, 'rgba(2,4,7,0)');
+    g.addColorStop(0.5, 'rgba(2,4,7,' + (a * 0.86).toFixed(3) + ')');
+    g.addColorStop(1, 'rgba(2,4,7,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(dir > 0 ? x : x - arm, ay - 8, arm, 16);
+  }
+}
+
+
 // ═══ POSTFX ═══════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════════════
 //  POST-PROCESSING — WebGL2 pipeline run over the 2D scene each frame.
@@ -7880,6 +8038,7 @@ var PFX_FXAA = PFX_HEAD + [
   '',
   'uniform sampler2D uTex;',
   'uniform vec2 uTexel;',
+  'uniform float uSharp;',
   'float PFX_lum(vec3 c){ return dot(c, vec3(0.299, 0.587, 0.114)); }',
   'void main(){',
   '  vec3 rgbM = texture(uTex, vUV).rgb;',
@@ -7900,7 +8059,20 @@ var PFX_FXAA = PFX_HEAD + [
   '  vec3 rgbB = rgbA * 0.5 + 0.25 * (texture(uTex, vUV + dir * -0.5).rgb',
   '                                 + texture(uTex, vUV + dir *  0.5).rgb);',
   '  float lB = PFX_lum(rgbB);',
-  '  oColor = vec4((lB < lMin || lB > lMax) ? rgbA : rgbB, 1.0);',
+  '  vec3 aa = (lB < lMin || lB > lMax) ? rgbA : rgbB;',
+  // Contrast-adaptive sharpening, the same trick every current renderer ends
+  // its chain with. The frame has just been antialiased and, below the top
+  // quality tier, upscaled — both of which soften it. Sharpening by the LOCAL
+  // contrast rather than a flat amount puts the crispness back on edges
+  // without turning the grain and the rain into noise.
+  '  vec3 n4 = texture(uTex, vUV + vec2(0.0, -1.0) * uTexel).rgb',
+  '          + texture(uTex, vUV + vec2(0.0,  1.0) * uTexel).rgb',
+  '          + texture(uTex, vUV + vec2(-1.0, 0.0) * uTexel).rgb',
+  '          + texture(uTex, vUV + vec2( 1.0, 0.0) * uTexel).rgb;',
+  '  vec3 blur = n4 * 0.25;',
+  '  float contrast = clamp((lMax - lMin) * 3.0, 0.0, 1.0);',
+  '  aa += (aa - blur) * uSharp * contrast;',
+  '  oColor = vec4(clamp(aa, 0.0, 1.0), 1.0);',
   '}'
 ].join('\n');
 
@@ -7943,6 +8115,7 @@ var PFX_COMP = PFX_HEAD + [
   'uniform vec2  uRes;',
   'uniform float uTime;',
   'uniform float uBloomAmt;',
+  'uniform float uDirt;',
   'uniform float uAberr;',
   'uniform float uVignette;',
   'uniform float uGrain;',
@@ -7964,6 +8137,26 @@ var PFX_COMP = PFX_HEAD + [
   '  vec3 p3 = fract(vec3(p.xyx) * 0.1031);',
   '  p3 += dot(p3, p3.yzx + 33.33);',
   '  return fract((p3.x + p3.y) * p3.z);',
+  '}',
+  '',
+  // Lens dirt. Real glass is never clean, and a bloom that is perfectly even
+  // is the clearest sign a frame was computed rather than photographed. These
+  // are fixed smudges on the front element: they are invisible until something
+  // bright blooms through them, and then they streak.
+  'float PFX_dirt(vec2 uv){',
+  '  const int N = 7;',
+  '  vec3 blob[N];',
+  '  blob[0] = vec3(0.18, 0.72, 0.26); blob[1] = vec3(0.74, 0.31, 0.19);',
+  '  blob[2] = vec3(0.46, 0.14, 0.30); blob[3] = vec3(0.88, 0.66, 0.15);',
+  '  blob[4] = vec3(0.31, 0.49, 0.12); blob[5] = vec3(0.62, 0.84, 0.22);',
+  '  blob[6] = vec3(0.08, 0.22, 0.17);',
+  '  float d = 0.0;',
+  '  for (int i = 0; i < N; i++) {',
+  '    vec2 q = (uv - blob[i].xy) / blob[i].z;',
+  '    q.y *= 0.55;',                       // smears are wider than they are tall
+  '    d += exp(-dot(q, q) * 2.2);',
+  '  }',
+  '  return clamp(d, 0.0, 1.6);',
   '}',
   '',
   'void main(){',
@@ -7990,7 +8183,7 @@ var PFX_COMP = PFX_HEAD + [
   '  scene = pow(max(scene, 0.0), vec3(2.2));',
   '',
   '  vec3 bloom = texture(uBloom, uv).rgb;',
-  '  vec3 col = scene + bloom * uBloomAmt;',
+  '  vec3 col = scene + bloom * uBloomAmt * mix(1.0, 0.55 + PFX_dirt(uv), uDirt);',
   '  col += texture(uRays, uv).rgb * uRaysAmt;',
   '  col += texture(uStreak, uv).rgb * uStreakAmt * vec3(0.55, 0.76, 1.35);',
   '',
@@ -8419,6 +8612,7 @@ function PostFX(canvas) {
     gl.uniform2f(c.u.uRes, self.iw, self.ih);
     gl.uniform1f(c.u.uTime, prm.time);
     gl.uniform1f(c.u.uBloomAmt, prm.bloom);
+    gl.uniform1f(c.u.uDirt, prm.dirt);
     gl.uniform1f(c.u.uAberr, prm.aberration);
     gl.uniform1f(c.u.uVignette, prm.vignette);
     gl.uniform1f(c.u.uGrain, prm.grain);
@@ -8441,6 +8635,7 @@ function PostFX(canvas) {
       gl.useProgram(fp.p);
       gl.uniform1i(fp.u.uTex, 0);
       gl.uniform2f(fp.u.uTexel, 1 / self.iw, 1 / self.ih);
+      gl.uniform1f(fp.u.uSharp, prm.sharpen);
       blit(fp, null);
     }
     gl.activeTexture(gl.TEXTURE0);
@@ -8479,7 +8674,7 @@ PostFX.defaults = function () {
     // and a cool tint because the reflection is of a night sky
     wet: 0.5, wetFade: 17.0, wetSquash: 3.6, ripple: 1.0, haze: 0.010,
     dof: 1.0, bgDim: 1.0, ao: 0.42,
-    streak: 0.26, streakLen: 2.4, fxaa: true,
+    streak: 0.26, streakLen: 2.4, fxaa: true, dirt: 0.55, sharpen: 0.34,
     wetTint: new Float32Array([0.78, 0.86, 1.05]),
     // moon shafts: centre tracks the moon, updated per frame by the game
     rays: 0.34, rayX: 0.70, rayY: 0.86, rayDensity: 0.62, rayWeight: 0.055, rayDecay: 0.93,
@@ -9476,6 +9671,7 @@ class Game {
     this.best = this.loadBest();
     this.fx = new ParticleSystem();
     this.atmos = new Atmosphere();
+    this.fg = new Foreground();
     this.decor = new Decor();
     this.rain = new RainSystem();
     this.bolt = new Lightning();
@@ -9808,15 +10004,19 @@ class Game {
     p.time = this.time;
     // lightning washes the whole frame, exactly as it does in the 2D pass
     const fl = this.bolt.flash;
-    p.flash = fl * 0.22;
+    // Exposure went from 1.30 to 1.95 when the grade was reworked, and the
+    // lightning was never rescaled to match — a strike blew the whole frame to
+    // flat white. A strike should read as a hard, brief wash that still leaves
+    // the silhouettes readable, so every term that feeds it is now smaller.
+    p.flash = fl * 0.10;
     // and drives the directional light, so a strike genuinely rakes across the
     // geometry instead of just brightening the image
     // The moon is the key light, so it has to be bright enough to model the
     // geometry: at 0.13 it was barely above the ambient and every surface came
     // out the same value, which is why the playfield merged into the skyline.
-    p.sunCol[0] = 0.30 + fl * 0.85;
-    p.sunCol[1] = 0.33 + fl * 0.92;
-    p.sunCol[2] = 0.39 + fl * 1.05;
+    p.sunCol[0] = 0.30 + fl * 0.46;
+    p.sunCol[1] = 0.33 + fl * 0.50;
+    p.sunCol[2] = 0.39 + fl * 0.58;
 
     // A strike is a light source, not a colour wash. Each one picks its own
     // steep angle and, while it lasts, takes over the directional shadow with
@@ -9889,6 +10089,7 @@ class Game {
     }
     this.boss = lv.boss ? new Boss(lv.boss) : null;
     this.decor.build(this.world, lv.id);
+    this.fg.build(this.world, lv.id);
     const wasBig = this.player ? this.player.big : false;
     this.player = new Player(lv.start.tx * TILE, (lv.start.ty + 1) * TILE - 42);
     if (wasBig) this.player.resize(true);
@@ -10096,6 +10297,12 @@ class Game {
     ctx.restore();
 
     const lv = this.world ? this.world.level : null;
+    // Out-of-focus clutter between the camera and the playfield. It goes in
+    // AFTER the world and the particles so it occludes them — occlusion is
+    // half of where the eye gets depth from — but before the rain, so rain
+    // still falls in front of it, and before the HUD, which must never be
+    // covered.
+    if (this.world) this.fg.draw(ctx, camX, t);
     this.rain.draw(ctx, camX, lv ? lv.rain : 0.6);
     drawForegroundVignette(ctx, lightning);
 
