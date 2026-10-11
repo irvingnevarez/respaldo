@@ -7,6 +7,12 @@
 // Deterministic — the autopilot drives a fixed number of simulated frames with
 // drawing disabled, then one frame is rendered and captured. The same command
 // always produces the same pixels, so two runs can be compared meaningfully.
+//
+// Set SIN_RAYO=1 to hold the lightning off. Two separate look regressions have
+// now been chased for an hour before turning out to be a frame that happened to
+// land mid-strike: a strike is worth ~30 points of mean brightness and flattens
+// the contrast, which reads exactly like "the haze got worse". Grade and art
+// comparisons should be made with it off; keep it on to judge the strike.
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -52,6 +58,12 @@ const LIST = (WANT.length ? WANT : ['calle', 'salto', 'azotea', 'jefe'])
     await p.evaluate(a => {
       (0, eval)(a[0]);
       const g = window.__game;
+      if (a[3]) {
+        // hold the storm off. `flash` is a getter over `_flash`, so assigning
+        // to it is a silent no-op — the backing field is the one to clear.
+        g.bolt.update = function () { this._flash = 0; this.strikeT = -1; };
+        g.bolt._flash = 0;
+      }
       if (a[1] >= 0) { g.startRun(); g.lvIdx = a[1]; g.loadLevel(a[1]); g.state = 'play'; }
       window.__pj = false;
       const real = g.draw; g.draw = function () { };
@@ -65,7 +77,7 @@ const LIST = (WANT.length ? WANT : ['calle', 'salto', 'azotea', 'jefe'])
       }
       g.draw = real;
       for (let k = 0; k < 3; k++) window.__flush((a[2] + k) * (1000 / 60));
-    }, [bot, lv, Math.round(secs * 60)]);
+    }, [bot, lv, Math.round(secs * 60), !!process.env.SIN_RAYO]);
     await p.waitForTimeout(1400);
     const file = OUT + '-' + key + '.png';
     await p.locator('#stage').screenshot({ path: file });

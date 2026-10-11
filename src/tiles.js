@@ -50,17 +50,20 @@ const TL_STONEPAL = (function () {
   for (let w = 0; w < 3; w++) {
     const wm = w - 1;
     for (let i = 0; i < 16; i++) {
-      // 70..165, arrived at by probe rather than by argument: painting the
-      // stone bright red showed the colour reaching the screen at roughly half
-      // strength after the grade, so a 20..74 ramp could only ever land the
-      // floor around 0.08 luminance however the lighting was tuned.
+      // 46..134. This ramp has been moved twice and it is worth saying why.
+      // It started at 20..74, which came out near-black; a probe (painting the
+      // stone red) showed colour reaching the screen at about half strength, so
+      // it was pushed to 70..165 to compensate. That halving was the contrast
+      // pivot crushing everything below 51/255, not a property of the lighting
+      // — with the pivot fixed, 70..165 renders as pale concrete and the street
+      // stops being the darkest plane in the picture, which is what gives a
+      // night exterior its weight. Back down, but not all the way: the original
+      // 20..74 was genuinely too dark even under a correct grade.
       //
-      // The "wet stone is dark, let the specular put it back" reasoning was
-      // right in principle and wrong here: ambient sits near 1.0, so for most
-      // of the frame the albedo IS the final value, and specular only fires
-      // where a light happens to strike at the right angle. The playfield has
-      // to carry itself.
-      const b = 70 + (i / 15) * 95;
+      // The underlying point still holds: ambient sits near 1.0, so for most of
+      // the frame the albedo IS the final value. The playfield has to carry
+      // itself; the deferred pass only adds highlights where a light strikes.
+      const b = 46 + (i / 15) * 88;
       a.push('rgb(' + ((b + wm * 4.0) | 0) + ',' +
         ((b + wm * 1.2) | 0) + ',' + ((b - wm * 3.0 + 5) | 0) + ')');
     }

@@ -131,8 +131,8 @@ function drawPenguinBoss(ctx, x, y, w, h, o) {
 
   // shirt front
   const sg = ctx.createLinearGradient(0, bodyTop + bh * 0.15, 0, bodyTop + bh);
-  sg.addColorStop(0, '#c3c6cf');
-  sg.addColorStop(1, '#8d919e');
+  sg.addColorStop(0, '#9aa0ab');
+  sg.addColorStop(1, '#6c7280');
   ctx.fillStyle = sg;
   ctx.beginPath();
   ctx.ellipse(0, bodyTop + bh * 0.58 + bob, bw * 0.26, bh * 0.34, 0, 0, Math.PI * 2);
@@ -162,7 +162,7 @@ function drawPenguinBoss(ctx, x, y, w, h, o) {
   const hy = bodyTop + bh * 0.12 + bob;
   ctx.fillStyle = '#1a1a24';
   ctx.beginPath(); ctx.ellipse(0, hy, bw * 0.3, bh * 0.2, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#cdcbc1';
+  ctx.fillStyle = '#a5a399';
   ctx.beginPath(); ctx.ellipse(bw * 0.05, hy + 3, bw * 0.2, bh * 0.13, 0, 0, Math.PI * 2); ctx.fill();
 
   // beak + cigarette holder
@@ -171,7 +171,7 @@ function drawPenguinBoss(ctx, x, y, w, h, o) {
   ctx.moveTo(bw * 0.18, hy); ctx.lineTo(bw * 0.44, hy + 3); ctx.lineTo(bw * 0.18, hy + 8);
   ctx.closePath(); ctx.fill();
   if (!dead) {
-    ctx.strokeStyle = '#ded8c8'; ctx.lineWidth = 2;
+    ctx.strokeStyle = '#b0ab9d'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(bw * 0.4, hy + 4); ctx.lineTo(bw * 0.62, hy - 4); ctx.stroke();
     ctx.fillStyle = '#ff7a3a';
     ctx.beginPath(); ctx.arc(bw * 0.63, hy - 5, 1.8, 0, Math.PI * 2); ctx.fill();
@@ -267,7 +267,7 @@ function BS_jokerFace(ctx, cx, cy, r, t, phase, laughing) {
   // chalk-white face, modelled instead of flat: lit from upper left, with a
   // greenish bounce under the jaw
   const fg = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.45, r * 0.1, cx, cy, r * 1.25);
-  fg.addColorStop(0, '#d4d2c8');
+  fg.addColorStop(0, '#aaa89f');
   fg.addColorStop(0.55, PAL.face);
   fg.addColorStop(1, '#848b79');
   ctx.fillStyle = fg;
@@ -506,7 +506,7 @@ function drawJokerBoss(ctx, x, y, w, h, o) {
       ctx.save();
       ctx.translate(manW * 0.62, manH * 0.16);
       ctx.rotate(-0.5 + i * 0.24);
-      ctx.fillStyle = '#f5f2e6';
+      ctx.fillStyle = '#c0bdb2';
       ctx.fillRect(0, -7, 9, 13);
       ctx.strokeStyle = PAL.smile; ctx.lineWidth = 1; ctx.strokeRect(0, -7, 9, 13);
       ctx.restore();

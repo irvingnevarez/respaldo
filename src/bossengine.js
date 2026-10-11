@@ -413,8 +413,13 @@ class Boss {
         drawCardProjectile(ctx, pr.rect.cx, pr.rect.cy, pr.rect.w / 2, pr.anim * 9);
       }
     }
-    if (this.kind === 'penguin') drawPenguinBoss(ctx, this.rect.x, this.rect.y, this.rect.w, this.rect.h, o);
-    else drawJokerBoss(ctx, this.rect.x, this.rect.y, this.rect.w, this.rect.h, o);
+    // Same key-side rim as the player and the enemies. A boss is the largest
+    // figure on screen and the one the camera is asking you to read, so it is
+    // the last thing that should be sitting flat against the skyline.
+    const bf = this.kind === 'penguin' ? drawPenguinBoss : drawJokerBoss;
+    FX_rimmed(ctx, this.rect.x, this.rect.y, this.rect.w, this.rect.h,
+      { colour: 'rgba(200,220,244,1)', alpha: 0.66, dx: 2.4, dy: -2.6, wrap: true },
+      (c, ox, oy) => bf(c, ox, oy, this.rect.w, this.rect.h, o));
 
     if (this.gasY < CH) drawGasCloud(ctx, 0, this.gasY, CW, CH - this.gasY + 10, t);
   }

@@ -854,19 +854,29 @@ class Game {
     p.time = this.time;
     // lightning washes the whole frame, exactly as it does in the 2D pass
     const fl = this.bolt.flash;
-    // Exposure went from 1.30 to 1.95 when the grade was reworked, and the
-    // lightning was never rescaled to match — a strike blew the whole frame to
-    // flat white. A strike should read as a hard, brief wash that still leaves
-    // the silhouettes readable, so every term that feeds it is now smaller.
-    p.flash = fl * 0.045;
+    // Rescaled a second time, for the same underlying reason: these terms are
+    // calibrated against the grade, and the grade has moved twice. Measured, a
+    // strike was supplying 32 of the frame's 80 points of mean brightness —
+    // which does not read as lightning, it reads as the haze getting worse,
+    // because a flat additive wash raises the blacks and flattens contrast.
+    //
+    // So the UNIFORM part of a strike is cut hard, and the DIRECTIONAL part
+    // (sunCol, sunDir, the rim terms below) is left alone. That is the half
+    // that actually looks like lightning: a hard raking light throwing fresh
+    // shadows, rather than someone turning up the brightness on the whole city.
+    p.flash = fl * 0.020;
     // and drives the directional light, so a strike genuinely rakes across the
     // geometry instead of just brightening the image
     // The moon is the key light, so it has to be bright enough to model the
     // geometry: at 0.13 it was barely above the ambient and every surface came
     // out the same value, which is why the playfield merged into the skyline.
-    p.sunCol[0] = 0.30 + fl * 0.17;
-    p.sunCol[1] = 0.33 + fl * 0.19;
-    p.sunCol[2] = 0.39 + fl * 0.23;
+    // ...and only slightly cool. At 0.30/0.33/0.39 the key was a third more
+    // blue than red, so every surface it touched picked up a navy cast on top
+    // of whatever colour it already had. Moonlight through cloud is close to
+    // neutral; the COLD comes from the grade, not from staining the key.
+    p.sunCol[0] = 0.42 + fl * 0.17;
+    p.sunCol[1] = 0.44 + fl * 0.19;
+    p.sunCol[2] = 0.50 + fl * 0.23;
 
     // A strike is a light source, not a colour wash. Each one picks its own
     // steep angle and, while it lasts, takes over the directional shadow with
@@ -1249,9 +1259,14 @@ class Game {
       if (e.rect.r < camX - 60 || e.rect.x > camX + CW + 60) continue;
       const x = e.rect.x - camX, y = e.rect.y;
       const o = { facingRight: e.vx > 0, animTime: e.anim, squashed: e.dying > 0, dying: e.dying > 0, shell: e.shell, shellSpinning: e.shellSpin };
-      if (e.kind === 'joker') drawJokerMinion(ctx, x, y, e.rect.w, e.rect.h, o);
-      else if (e.kind === 'penguin') drawPenguinHenchman(ctx, x, y, e.rect.w, e.rect.h, o);
-      else drawJokerDrone(ctx, x, y, e.rect.w, e.rect.h, o);
+      // Same rim as the player, a touch weaker — the enemies are smaller and
+      // lower in the frame, and matching his edge exactly flattens the read of
+      // who is the subject.
+      const fn = e.kind === 'joker' ? drawJokerMinion
+        : (e.kind === 'penguin' ? drawPenguinHenchman : drawJokerDrone);
+      FX_rimmed(ctx, x, y, e.rect.w, e.rect.h,
+        { colour: 'rgba(188,206,230,1)', alpha: 0.62, dx: 1.9, dy: -2.0 },
+        (c, ox, oy) => fn(c, ox, oy, e.rect.w, e.rect.h, o));
     }
     this.atmos.draw(ctx, camX);
 
@@ -1283,7 +1298,11 @@ class Game {
           ctx.restore();
           ctx.globalAlpha = 1;
         }
-        drawBatmanSprite(ctx, p.rect.x - camX, p.rect.y, p.rect.w, p.rect.h, o);
+        // The echoes stay un-rimmed: a trail is the memory of where the light
+        // WAS, so rimming each one draws four hard edges instead of one.
+        FX_rimmed(ctx, p.rect.x - camX, p.rect.y, p.rect.w, p.rect.h,
+          { colour: 'rgba(206,226,250,1)', alpha: 0.72, dx: 2.1, dy: -2.3, wrap: true },
+          (c, ox, oy) => drawBatmanSprite(c, ox, oy, p.rect.w, p.rect.h, o));
       }
     }
   }

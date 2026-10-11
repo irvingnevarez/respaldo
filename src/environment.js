@@ -101,27 +101,35 @@ function drawGothamSky(ctx, camX, t, lightning) {
   ctx.save();
 
   // --- base vertical gradient -----------------------------------------
+  // Neutral slate, not navy. PAL was moved to cold steel a while back but the
+  // sky kept its own hardcoded purples, so the palette change never reached the
+  // thing that occupies two thirds of every frame — the whole picture still
+  // graded blue. The ramp now runs near-black at the zenith to a desaturated
+  // slate at the cloud base, which is where the city's own glow lands.
   const sky = ENV_linear(ctx, 'sky', 0, 0, 0, CH, [
     [0.00, PAL.skyTop],
-    [0.24, '#080b1b'],
+    [0.24, '#1e252c'],
     [0.46, PAL.skyMid],
     [0.70, PAL.skyLow],
-    [0.86, '#241540'],
-    [1.00, '#2b1a3d']
+    [0.86, '#525c65'],
+    [1.00, '#5d666e']
   ]);
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, CW, CH);
 
   // --- stars (deterministic, twinkling) --------------------------------
+  // Few, and faint. A city throwing this much light into low cloud washes out
+  // all but the brightest handful; a full field of 150 twinkling points is the
+  // single most "illustrated" thing a night sky can do.
   const starPar = camX * 0.012;
   ctx.fillStyle = PAL.white;
-  for (let i = 0; i < 150; i++) {
+  for (let i = 0; i < 46; i++) {
     const sx = ((ENV_rnd(i) * 2400) - starPar) % 2400;
     const x = sx < 0 ? sx + 2400 : sx;
     if (x > CW + 4) continue;
     const y = ENV_rnd2(i, 7) * 300 + 4;
     const tw = 0.5 + 0.5 * Math.sin(t * (0.8 + ENV_rnd2(i, 3) * 2.4) + i * 1.7);
-    const a = (0.10 + 0.55 * tw) * (1 - y / 380);
+    const a = (0.06 + 0.30 * tw) * (1 - y / 380);
     if (a <= 0.01) continue;
     const r = 0.6 + ENV_rnd2(i, 11) * 1.1;
     ctx.globalAlpha = a;
@@ -143,12 +151,12 @@ function drawGothamSky(ctx, camX, t, lightning) {
 
   // wide atmospheric halo
   ENV_puff(ctx, 'moonHaloFar', mx, my, mr * 7.4, mr * 6.2, [
-    [0, 'rgba(150,168,216,0.30)'], [0.4, 'rgba(110,126,180,0.13)'],
-    [0.72, 'rgba(70,82,130,0.05)'], [1, 'rgba(60,70,120,0)']
+    [0, 'rgba(158,172,188,0.26)'], [0.4, 'rgba(118,130,146,0.11)'],
+    [0.72, 'rgba(80,90,104,0.04)'], [1, 'rgba(70,80,94,0)']
   ], 0.85);
   ENV_puff(ctx, 'moonHalo', mx, my, mr * 2.9, mr * 2.9, [
-    [0, 'rgba(232,234,240,0.55)'], [0.35, 'rgba(190,200,228,0.24)'],
-    [1, 'rgba(170,180,216,0)']
+    [0, 'rgba(228,234,240,0.50)'], [0.35, 'rgba(186,196,208,0.21)'],
+    [1, 'rgba(166,178,192,0)']
   ], 0.95);
 
   // disc with a shaded limb
@@ -181,12 +189,20 @@ function drawGothamSky(ctx, camX, t, lightning) {
   ctx.globalAlpha = 1;
   ctx.restore();
 
-  // --- drifting cloud bands (some cross the moon) ----------------------
+  // --- drifting cloud deck ---------------------------------------------
+  // Two-tone, and that is the whole point. A cloud lit from below by a city is
+  // DARK on top and PALE underneath, and a flat puff — one colour, symmetric
+  // falloff — is why the old sky read as a painted backdrop. Each band is now
+  // a dark mass with a separate, lower, brighter belly stacked under it, so the
+  // deck has a direction of light instead of just a shape.
   const cloudStops = [
-    [0, 'rgba(58,64,100,0.55)'], [0.45, 'rgba(44,50,84,0.30)'],
-    [0.8, 'rgba(32,36,64,0.08)'], [1, 'rgba(28,32,58,0)']
+    [0, 'rgba(50,58,68,0.60)'], [0.45, 'rgba(38,45,54,0.32)'],
+    [0.8, 'rgba(28,34,41,0.09)'], [1, 'rgba(24,29,36,0)']
   ];
-  for (let i = 0; i < 9; i++) {
+  const bellyStops = [
+    [0, 'rgba(126,140,154,0.34)'], [0.5, 'rgba(96,110,124,0.13)'], [1, 'rgba(80,92,106,0)']
+  ];
+  for (let i = 0; i < 11; i++) {
     const span = 1600;
     const speed = 5 + ENV_rnd(i) * 13;
     let cx = ((ENV_rnd2(i, 5) * span) + t * speed - camX * 0.03) % span;
@@ -197,6 +213,9 @@ function drawGothamSky(ctx, camX, t, lightning) {
     const rx = 110 + ENV_rnd2(i, 13) * 170;
     const ry = 9 + ENV_rnd2(i, 17) * 14;
     const a = 0.24 + ENV_rnd2(i, 19) * 0.30;
+    // underlit belly first, so the dark mass settles on top of it
+    ENV_puff(ctx, 'cloudBelly', cx + rx * 0.08, cy + ry * 0.85, rx * 0.88, ry * 0.72,
+      bellyStops, a * (0.5 + ENV_rnd2(i, 23) * 0.5));
     ENV_puff(ctx, 'cloud', cx, cy, rx, ry, cloudStops, a);
     ENV_puff(ctx, 'cloud', cx + rx * 0.45, cy + ry * 0.55, rx * 0.62, ry * 0.8, cloudStops, a * 0.7);
   }
@@ -254,12 +273,17 @@ function drawGothamSky(ctx, camX, t, lightning) {
   ctx.restore();
 
   // --- sodium-vapour city glow bleeding up from the horizon -------------
+  // The glow runs cold high up and WARMS as it nears the rooftops. That hue
+  // split is what sells an expensive night exterior: the sky is one
+  // temperature, the light the city makes is another, and the eye reads the
+  // difference as distance. A single blue-grey ramp — which is what this was —
+  // flattens the two together and the whole frame goes monochrome navy.
   const glow = ENV_linear(ctx, 'horizon', 0, CH * 0.42, 0, CH, [
-    [0, 'rgba(40,52,66,0)'],
-    [0.34, 'rgba(58,74,92,0.34)'],
-    [0.62, 'rgba(82,100,120,0.42)'],
-    [0.84, 'rgba(108,128,150,0.46)'],
-    [1, 'rgba(126,146,168,0.52)']
+    [0, 'rgba(44,56,68,0)'],
+    [0.34, 'rgba(66,80,94,0.32)'],
+    [0.62, 'rgba(100,112,118,0.40)'],
+    [0.84, 'rgba(140,142,132,0.44)'],
+    [1, 'rgba(172,164,140,0.50)']
   ]);
   ctx.fillStyle = glow;
   ctx.fillRect(0, CH * 0.42, CW, CH * 0.58);
@@ -270,7 +294,7 @@ function drawGothamSky(ctx, camX, t, lightning) {
     if (gx < -260) gx += 1380;
     if (gx > CW + 260) continue;
     ENV_puff(ctx, 'sodium', gx, 452, 250, 96, [
-      [0, 'rgba(150,172,196,0.24)'], [0.45, 'rgba(110,132,158,0.11)'], [1, 'rgba(90,110,134,0)']
+      [0, 'rgba(206,176,122,0.26)'], [0.45, 'rgba(158,132,92,0.12)'], [1, 'rgba(120,100,72,0)']
     ], 0.55 + 0.12 * Math.sin(t * 0.5 + i));
   }
 
@@ -278,10 +302,10 @@ function drawGothamSky(ctx, camX, t, lightning) {
   if (L > 0.001) {
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = 1;
-    ctx.fillStyle = 'rgba(112,134,190,' + (L * 0.085).toFixed(3) + ')';
+    ctx.fillStyle = 'rgba(112,134,190,' + (L * 0.042).toFixed(3) + ')';
     ctx.fillRect(0, 0, CW, CH);
     ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = 'rgba(214,228,255,' + (L * 0.025).toFixed(3) + ')';
+    ctx.fillStyle = 'rgba(214,228,255,' + (L * 0.012).toFixed(3) + ')';
     ctx.fillRect(0, 0, CW, CH);
   }
 
@@ -469,9 +493,11 @@ function ENV_layer(ctx, camX, t, L, tier) {
   const maxH = tier === 0 ? 190 : (tier === 1 ? 265 : 330);
   const seed = tier * 1000 + 17;
   const body = tier === 0 ? PAL.bldgFar : (tier === 1 ? PAL.bldgMid : PAL.bldgNear);
-  const bodyTop = tier === 0 ? '#171b35' : (tier === 1 ? '#232848' : '#2c3159');
-  const bodyBot = tier === 0 ? '#090b1a' : (tier === 1 ? '#0e1126' : '#121533');
-  const rimCol = tier === 0 ? 'rgba(120,140,200,' : (tier === 1 ? 'rgba(140,160,215,' : 'rgba(165,185,235,');
+  // Neutral, like PAL. These three pairs were the last of the old navy palette
+  // and they paint every building in the game, so they outvoted PAL outright.
+  const bodyTop = tier === 0 ? '#1b232c' : (tier === 1 ? '#1e2831' : '#232d38');
+  const bodyBot = tier === 0 ? '#0a0f14' : (tier === 1 ? '#0c1217' : '#10161c');
+  const rimCol = tier === 0 ? 'rgba(132,148,166,' : (tier === 1 ? 'rgba(150,168,186,' : 'rgba(174,192,210,');
 
   const off = camX * factor;
   const i0 = Math.floor(off / slot) - 2;
@@ -513,7 +539,7 @@ function ENV_layer(ctx, camX, t, L, tier) {
     let sg = c.lin[sk];
     if (!sg) {
       sg = ctx.createLinearGradient(0, 0, Math.round(w / 12) * 12 || 12, 0);
-      sg.addColorStop(0, 'rgba(120,140,200,0.10)');
+      sg.addColorStop(0, 'rgba(136,152,170,0.11)');
       sg.addColorStop(0.22, 'rgba(0,0,0,0)');
       sg.addColorStop(1, 'rgba(0,0,0,0.42)');
       c.lin[sk] = sg;
@@ -557,14 +583,19 @@ function ENV_layer(ctx, camX, t, L, tier) {
   // frame read as "deep" rather than "flat": each layer further back is washed
   // further toward the sky's value, so the near playfield reads dark against a
   // pale, misty city instead of every layer sharing one muddy blue.
-  const hz = tier === 0 ? 0.92 : (tier === 1 ? 0.66 : 0.34);
+  // Eased back from 0.92/0.66/0.34. Those were set while the grade was
+  // crushing the frame, so the haze had to shout to survive; at a correct
+  // exposure the same numbers turn the whole city into milk and the playfield
+  // loses its separation from the backdrop.
+  const hz = tier === 0 ? 0.78 : (tier === 1 ? 0.52 : 0.25);
   const hk2 = 'haze' + tier;
   let hg = ENV_cache(ctx).lin[hk2];
   if (!hg) {
     hg = ctx.createLinearGradient(0, baseY - maxH, 0, baseY + 20);
-    hg.addColorStop(0, 'rgba(78,92,108,0)');
-    hg.addColorStop(0.55, 'rgba(96,112,130,' + (hz * 0.66).toFixed(3) + ')');
-    hg.addColorStop(1, 'rgba(122,140,160,' + hz.toFixed(3) + ')');
+    hg.addColorStop(0, 'rgba(80,90,102,0)');
+    hg.addColorStop(0.55, 'rgba(100,110,120,' + (hz * 0.66).toFixed(3) + ')');
+    // the bottom of the haze sits in the sodium band, so it warms to match
+    hg.addColorStop(1, 'rgba(146,146,138,' + hz.toFixed(3) + ')');
     ENV_cache(ctx).lin[hk2] = hg;
   }
   ctx.fillStyle = hg;
@@ -593,12 +624,17 @@ function drawGothamSkyline(ctx, camX, t, lightning) {
 // =====================================================================
 function drawCityFog(ctx, camX, t) {
   ctx.save();
+  // Smog is grey. The old bands were frankly violet, which put a magenta cast
+  // over the entire lower third of the frame — the one place the player is
+  // actually looking. One band in three stays warm, because sodium light does
+  // tint the smoke it passes through, but it is now dirt-amber rather than
+  // traffic-cone orange.
   const stops = [
-    [0, 'rgba(132,110,150,0.42)'], [0.4, 'rgba(104,84,126,0.22)'],
-    [0.75, 'rgba(80,64,104,0.07)'], [1, 'rgba(70,56,96,0)']
+    [0, 'rgba(118,128,140,0.40)'], [0.4, 'rgba(92,101,112,0.21)'],
+    [0.75, 'rgba(70,78,88,0.07)'], [1, 'rgba(62,69,79,0)']
   ];
   const warm = [
-    [0, 'rgba(198,124,70,0.30)'], [0.45, 'rgba(160,96,58,0.14)'], [1, 'rgba(130,78,50,0)']
+    [0, 'rgba(178,142,94,0.28)'], [0.45, 'rgba(142,112,74,0.13)'], [1, 'rgba(112,88,58,0)']
   ];
   const span = 1500;
   for (let i = 0; i < 14; i++) {
@@ -618,7 +654,7 @@ function drawCityFog(ctx, camX, t) {
   }
   // a settled ground-level sheet
   const sheet = ENV_linear(ctx, 'fogSheet', 0, 400, 0, 520, [
-    [0, 'rgba(120,100,142,0)'], [0.45, 'rgba(118,96,140,0.15)'], [1, 'rgba(96,76,120,0.05)']
+    [0, 'rgba(112,120,132,0)'], [0.45, 'rgba(108,116,128,0.15)'], [1, 'rgba(88,96,108,0.05)']
   ]);
   ctx.fillStyle = sheet;
   ctx.fillRect(0, 400, CW, 120);
@@ -648,15 +684,15 @@ function drawForegroundVignette(ctx, lightning) {
   ctx.fillRect(0, 0, CW, CH);
 
   const wash = ENV_linear(ctx, 'wash', 0, 0, 0, CH, [
-    [0, 'rgba(126,147,201,0.13)'], [0.30, 'rgba(110,130,185,0.05)'],
-    [0.68, 'rgba(20,18,40,0.06)'], [1, 'rgba(8,6,20,0.26)']
+    [0, 'rgba(136,152,170,0.12)'], [0.30, 'rgba(118,132,148,0.05)'],
+    [0.68, 'rgba(18,22,27,0.06)'], [1, 'rgba(6,9,12,0.26)']
   ]);
   ctx.fillStyle = wash;
   ctx.fillRect(0, 0, CW, CH);
 
   if (L > 0.01) {
     ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = 'rgba(150,175,230,' + (L * 0.02).toFixed(3) + ')';
+    ctx.fillStyle = 'rgba(150,175,230,' + (L * 0.009).toFixed(3) + ')';
     ctx.fillRect(0, 0, CW, CH);
     ctx.globalCompositeOperation = 'source-over';
   }

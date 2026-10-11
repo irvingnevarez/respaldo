@@ -27,7 +27,7 @@ const REQUIRED = [
   'drawGroundTile', 'drawStoneBlock', 'drawBrickBlock', 'drawBatSignalBlock',
   'drawGargoyle', 'drawBeacon', 'drawBatarang', 'drawBatSuitPickup',
   'drawBatSignalStar', 'ParticleSystem', 'RainSystem', 'Lightning',
-  'ScreenShake', 'drawSpeedLines', 'drawHUD', 'drawTitleScreen',
+  'ScreenShake', 'drawSpeedLines', 'FX_rimmed', 'drawHUD', 'drawTitleScreen',
   'drawPauseOverlay', 'drawDeathOverlay', 'drawLevelCompleteOverlay',
   'drawGameOverOverlay', 'drawWinOverlay', 'LEVELS', 'PostFX', 'Boss',
   'BossProjectile', 'Shockwave', 'Atmosphere', 'Decor', 'Foreground', 'Game',

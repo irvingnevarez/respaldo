@@ -171,7 +171,13 @@ const PAL = {
   // sodium amber on top, which reads as arcade; the look we want is close to
   // monochrome, separated by VALUE rather than by hue, with colour used only
   // where something is actually emitting light.
-  skyTop:'#0a0e14', skyMid:'#18202b', skyLow:'#2b3641', skyGlow:'#3e4d5c',
+  // The sky ran near-black AND blue (B was twice R in skyTop), so the backdrop
+  // was simultaneously the darkest and the most saturated thing in the frame —
+  // measured, the whole picture averaged 9,11,22 out of 255. A night exterior
+  // reads expensive when the BACKGROUND is pale and hazy and the playfield is
+  // dark against it; crushing both to black just loses the picture. Lifted, and
+  // pulled most of the way to neutral.
+  skyTop:'#161b20', skyMid:'#2a333b', skyLow:'#424c55', skyGlow:'#5c6770',
   moon:'#e9eef4', moonGlow:'#9fb2c6',
   bldgFar:'#1e2833', bldgMid:'#1f2934', bldgNear:'#212b36', bldgWin:'#c9d8e8',
   bat:'#191c22', batHi:'#2e343e', batLo:'#0c0e13', cape:'#101216', capeHi:'#222831',
@@ -179,7 +185,7 @@ const PAL = {
   stone:'#2f3742', stoneD:'#1c222a', stoneL:'#48525f', mortar:'#141920',
   joker:'#5d4a75', jokerHi:'#7c6699', jokerGreen:'#4a8f3e', face:'#c4c3bb', smile:'#9a3d38',
   peng:'#14171c', pengHi:'#2a2f38', pengW:'#c2c7d0', orange:'#b87f45',
-  rain:'#8fa3bb', white:'#ffffff', danger:'#c2453f'
+  rain:'#9aa6b2', white:'#ffffff', danger:'#c2453f'
 };
 const TILE = 32, CW = 960, CH = 540;
 let DPR = 1;
@@ -2820,27 +2826,35 @@ function drawGothamSky(ctx, camX, t, lightning) {
   ctx.save();
 
   // --- base vertical gradient -----------------------------------------
+  // Neutral slate, not navy. PAL was moved to cold steel a while back but the
+  // sky kept its own hardcoded purples, so the palette change never reached the
+  // thing that occupies two thirds of every frame — the whole picture still
+  // graded blue. The ramp now runs near-black at the zenith to a desaturated
+  // slate at the cloud base, which is where the city's own glow lands.
   const sky = ENV_linear(ctx, 'sky', 0, 0, 0, CH, [
     [0.00, PAL.skyTop],
-    [0.24, '#080b1b'],
+    [0.24, '#1e252c'],
     [0.46, PAL.skyMid],
     [0.70, PAL.skyLow],
-    [0.86, '#241540'],
-    [1.00, '#2b1a3d']
+    [0.86, '#525c65'],
+    [1.00, '#5d666e']
   ]);
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, CW, CH);
 
   // --- stars (deterministic, twinkling) --------------------------------
+  // Few, and faint. A city throwing this much light into low cloud washes out
+  // all but the brightest handful; a full field of 150 twinkling points is the
+  // single most "illustrated" thing a night sky can do.
   const starPar = camX * 0.012;
   ctx.fillStyle = PAL.white;
-  for (let i = 0; i < 150; i++) {
+  for (let i = 0; i < 46; i++) {
     const sx = ((ENV_rnd(i) * 2400) - starPar) % 2400;
     const x = sx < 0 ? sx + 2400 : sx;
     if (x > CW + 4) continue;
     const y = ENV_rnd2(i, 7) * 300 + 4;
     const tw = 0.5 + 0.5 * Math.sin(t * (0.8 + ENV_rnd2(i, 3) * 2.4) + i * 1.7);
-    const a = (0.10 + 0.55 * tw) * (1 - y / 380);
+    const a = (0.06 + 0.30 * tw) * (1 - y / 380);
     if (a <= 0.01) continue;
     const r = 0.6 + ENV_rnd2(i, 11) * 1.1;
     ctx.globalAlpha = a;
@@ -2862,12 +2876,12 @@ function drawGothamSky(ctx, camX, t, lightning) {
 
   // wide atmospheric halo
   ENV_puff(ctx, 'moonHaloFar', mx, my, mr * 7.4, mr * 6.2, [
-    [0, 'rgba(150,168,216,0.30)'], [0.4, 'rgba(110,126,180,0.13)'],
-    [0.72, 'rgba(70,82,130,0.05)'], [1, 'rgba(60,70,120,0)']
+    [0, 'rgba(158,172,188,0.26)'], [0.4, 'rgba(118,130,146,0.11)'],
+    [0.72, 'rgba(80,90,104,0.04)'], [1, 'rgba(70,80,94,0)']
   ], 0.85);
   ENV_puff(ctx, 'moonHalo', mx, my, mr * 2.9, mr * 2.9, [
-    [0, 'rgba(232,234,240,0.55)'], [0.35, 'rgba(190,200,228,0.24)'],
-    [1, 'rgba(170,180,216,0)']
+    [0, 'rgba(228,234,240,0.50)'], [0.35, 'rgba(186,196,208,0.21)'],
+    [1, 'rgba(166,178,192,0)']
   ], 0.95);
 
   // disc with a shaded limb
@@ -2900,12 +2914,20 @@ function drawGothamSky(ctx, camX, t, lightning) {
   ctx.globalAlpha = 1;
   ctx.restore();
 
-  // --- drifting cloud bands (some cross the moon) ----------------------
+  // --- drifting cloud deck ---------------------------------------------
+  // Two-tone, and that is the whole point. A cloud lit from below by a city is
+  // DARK on top and PALE underneath, and a flat puff — one colour, symmetric
+  // falloff — is why the old sky read as a painted backdrop. Each band is now
+  // a dark mass with a separate, lower, brighter belly stacked under it, so the
+  // deck has a direction of light instead of just a shape.
   const cloudStops = [
-    [0, 'rgba(58,64,100,0.55)'], [0.45, 'rgba(44,50,84,0.30)'],
-    [0.8, 'rgba(32,36,64,0.08)'], [1, 'rgba(28,32,58,0)']
+    [0, 'rgba(50,58,68,0.60)'], [0.45, 'rgba(38,45,54,0.32)'],
+    [0.8, 'rgba(28,34,41,0.09)'], [1, 'rgba(24,29,36,0)']
   ];
-  for (let i = 0; i < 9; i++) {
+  const bellyStops = [
+    [0, 'rgba(126,140,154,0.34)'], [0.5, 'rgba(96,110,124,0.13)'], [1, 'rgba(80,92,106,0)']
+  ];
+  for (let i = 0; i < 11; i++) {
     const span = 1600;
     const speed = 5 + ENV_rnd(i) * 13;
     let cx = ((ENV_rnd2(i, 5) * span) + t * speed - camX * 0.03) % span;
@@ -2916,6 +2938,9 @@ function drawGothamSky(ctx, camX, t, lightning) {
     const rx = 110 + ENV_rnd2(i, 13) * 170;
     const ry = 9 + ENV_rnd2(i, 17) * 14;
     const a = 0.24 + ENV_rnd2(i, 19) * 0.30;
+    // underlit belly first, so the dark mass settles on top of it
+    ENV_puff(ctx, 'cloudBelly', cx + rx * 0.08, cy + ry * 0.85, rx * 0.88, ry * 0.72,
+      bellyStops, a * (0.5 + ENV_rnd2(i, 23) * 0.5));
     ENV_puff(ctx, 'cloud', cx, cy, rx, ry, cloudStops, a);
     ENV_puff(ctx, 'cloud', cx + rx * 0.45, cy + ry * 0.55, rx * 0.62, ry * 0.8, cloudStops, a * 0.7);
   }
@@ -2973,12 +2998,17 @@ function drawGothamSky(ctx, camX, t, lightning) {
   ctx.restore();
 
   // --- sodium-vapour city glow bleeding up from the horizon -------------
+  // The glow runs cold high up and WARMS as it nears the rooftops. That hue
+  // split is what sells an expensive night exterior: the sky is one
+  // temperature, the light the city makes is another, and the eye reads the
+  // difference as distance. A single blue-grey ramp — which is what this was —
+  // flattens the two together and the whole frame goes monochrome navy.
   const glow = ENV_linear(ctx, 'horizon', 0, CH * 0.42, 0, CH, [
-    [0, 'rgba(40,52,66,0)'],
-    [0.34, 'rgba(58,74,92,0.34)'],
-    [0.62, 'rgba(82,100,120,0.42)'],
-    [0.84, 'rgba(108,128,150,0.46)'],
-    [1, 'rgba(126,146,168,0.52)']
+    [0, 'rgba(44,56,68,0)'],
+    [0.34, 'rgba(66,80,94,0.32)'],
+    [0.62, 'rgba(100,112,118,0.40)'],
+    [0.84, 'rgba(140,142,132,0.44)'],
+    [1, 'rgba(172,164,140,0.50)']
   ]);
   ctx.fillStyle = glow;
   ctx.fillRect(0, CH * 0.42, CW, CH * 0.58);
@@ -2989,7 +3019,7 @@ function drawGothamSky(ctx, camX, t, lightning) {
     if (gx < -260) gx += 1380;
     if (gx > CW + 260) continue;
     ENV_puff(ctx, 'sodium', gx, 452, 250, 96, [
-      [0, 'rgba(150,172,196,0.24)'], [0.45, 'rgba(110,132,158,0.11)'], [1, 'rgba(90,110,134,0)']
+      [0, 'rgba(206,176,122,0.26)'], [0.45, 'rgba(158,132,92,0.12)'], [1, 'rgba(120,100,72,0)']
     ], 0.55 + 0.12 * Math.sin(t * 0.5 + i));
   }
 
@@ -2997,10 +3027,10 @@ function drawGothamSky(ctx, camX, t, lightning) {
   if (L > 0.001) {
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = 1;
-    ctx.fillStyle = 'rgba(112,134,190,' + (L * 0.085).toFixed(3) + ')';
+    ctx.fillStyle = 'rgba(112,134,190,' + (L * 0.042).toFixed(3) + ')';
     ctx.fillRect(0, 0, CW, CH);
     ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = 'rgba(214,228,255,' + (L * 0.025).toFixed(3) + ')';
+    ctx.fillStyle = 'rgba(214,228,255,' + (L * 0.012).toFixed(3) + ')';
     ctx.fillRect(0, 0, CW, CH);
   }
 
@@ -3188,9 +3218,11 @@ function ENV_layer(ctx, camX, t, L, tier) {
   const maxH = tier === 0 ? 190 : (tier === 1 ? 265 : 330);
   const seed = tier * 1000 + 17;
   const body = tier === 0 ? PAL.bldgFar : (tier === 1 ? PAL.bldgMid : PAL.bldgNear);
-  const bodyTop = tier === 0 ? '#171b35' : (tier === 1 ? '#232848' : '#2c3159');
-  const bodyBot = tier === 0 ? '#090b1a' : (tier === 1 ? '#0e1126' : '#121533');
-  const rimCol = tier === 0 ? 'rgba(120,140,200,' : (tier === 1 ? 'rgba(140,160,215,' : 'rgba(165,185,235,');
+  // Neutral, like PAL. These three pairs were the last of the old navy palette
+  // and they paint every building in the game, so they outvoted PAL outright.
+  const bodyTop = tier === 0 ? '#1b232c' : (tier === 1 ? '#1e2831' : '#232d38');
+  const bodyBot = tier === 0 ? '#0a0f14' : (tier === 1 ? '#0c1217' : '#10161c');
+  const rimCol = tier === 0 ? 'rgba(132,148,166,' : (tier === 1 ? 'rgba(150,168,186,' : 'rgba(174,192,210,');
 
   const off = camX * factor;
   const i0 = Math.floor(off / slot) - 2;
@@ -3232,7 +3264,7 @@ function ENV_layer(ctx, camX, t, L, tier) {
     let sg = c.lin[sk];
     if (!sg) {
       sg = ctx.createLinearGradient(0, 0, Math.round(w / 12) * 12 || 12, 0);
-      sg.addColorStop(0, 'rgba(120,140,200,0.10)');
+      sg.addColorStop(0, 'rgba(136,152,170,0.11)');
       sg.addColorStop(0.22, 'rgba(0,0,0,0)');
       sg.addColorStop(1, 'rgba(0,0,0,0.42)');
       c.lin[sk] = sg;
@@ -3276,14 +3308,19 @@ function ENV_layer(ctx, camX, t, L, tier) {
   // frame read as "deep" rather than "flat": each layer further back is washed
   // further toward the sky's value, so the near playfield reads dark against a
   // pale, misty city instead of every layer sharing one muddy blue.
-  const hz = tier === 0 ? 0.92 : (tier === 1 ? 0.66 : 0.34);
+  // Eased back from 0.92/0.66/0.34. Those were set while the grade was
+  // crushing the frame, so the haze had to shout to survive; at a correct
+  // exposure the same numbers turn the whole city into milk and the playfield
+  // loses its separation from the backdrop.
+  const hz = tier === 0 ? 0.78 : (tier === 1 ? 0.52 : 0.25);
   const hk2 = 'haze' + tier;
   let hg = ENV_cache(ctx).lin[hk2];
   if (!hg) {
     hg = ctx.createLinearGradient(0, baseY - maxH, 0, baseY + 20);
-    hg.addColorStop(0, 'rgba(78,92,108,0)');
-    hg.addColorStop(0.55, 'rgba(96,112,130,' + (hz * 0.66).toFixed(3) + ')');
-    hg.addColorStop(1, 'rgba(122,140,160,' + hz.toFixed(3) + ')');
+    hg.addColorStop(0, 'rgba(80,90,102,0)');
+    hg.addColorStop(0.55, 'rgba(100,110,120,' + (hz * 0.66).toFixed(3) + ')');
+    // the bottom of the haze sits in the sodium band, so it warms to match
+    hg.addColorStop(1, 'rgba(146,146,138,' + hz.toFixed(3) + ')');
     ENV_cache(ctx).lin[hk2] = hg;
   }
   ctx.fillStyle = hg;
@@ -3312,12 +3349,17 @@ function drawGothamSkyline(ctx, camX, t, lightning) {
 // =====================================================================
 function drawCityFog(ctx, camX, t) {
   ctx.save();
+  // Smog is grey. The old bands were frankly violet, which put a magenta cast
+  // over the entire lower third of the frame — the one place the player is
+  // actually looking. One band in three stays warm, because sodium light does
+  // tint the smoke it passes through, but it is now dirt-amber rather than
+  // traffic-cone orange.
   const stops = [
-    [0, 'rgba(132,110,150,0.42)'], [0.4, 'rgba(104,84,126,0.22)'],
-    [0.75, 'rgba(80,64,104,0.07)'], [1, 'rgba(70,56,96,0)']
+    [0, 'rgba(118,128,140,0.40)'], [0.4, 'rgba(92,101,112,0.21)'],
+    [0.75, 'rgba(70,78,88,0.07)'], [1, 'rgba(62,69,79,0)']
   ];
   const warm = [
-    [0, 'rgba(198,124,70,0.30)'], [0.45, 'rgba(160,96,58,0.14)'], [1, 'rgba(130,78,50,0)']
+    [0, 'rgba(178,142,94,0.28)'], [0.45, 'rgba(142,112,74,0.13)'], [1, 'rgba(112,88,58,0)']
   ];
   const span = 1500;
   for (let i = 0; i < 14; i++) {
@@ -3337,7 +3379,7 @@ function drawCityFog(ctx, camX, t) {
   }
   // a settled ground-level sheet
   const sheet = ENV_linear(ctx, 'fogSheet', 0, 400, 0, 520, [
-    [0, 'rgba(120,100,142,0)'], [0.45, 'rgba(118,96,140,0.15)'], [1, 'rgba(96,76,120,0.05)']
+    [0, 'rgba(112,120,132,0)'], [0.45, 'rgba(108,116,128,0.15)'], [1, 'rgba(88,96,108,0.05)']
   ]);
   ctx.fillStyle = sheet;
   ctx.fillRect(0, 400, CW, 120);
@@ -3367,15 +3409,15 @@ function drawForegroundVignette(ctx, lightning) {
   ctx.fillRect(0, 0, CW, CH);
 
   const wash = ENV_linear(ctx, 'wash', 0, 0, 0, CH, [
-    [0, 'rgba(126,147,201,0.13)'], [0.30, 'rgba(110,130,185,0.05)'],
-    [0.68, 'rgba(20,18,40,0.06)'], [1, 'rgba(8,6,20,0.26)']
+    [0, 'rgba(136,152,170,0.12)'], [0.30, 'rgba(118,132,148,0.05)'],
+    [0.68, 'rgba(18,22,27,0.06)'], [1, 'rgba(6,9,12,0.26)']
   ]);
   ctx.fillStyle = wash;
   ctx.fillRect(0, 0, CW, CH);
 
   if (L > 0.01) {
     ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = 'rgba(150,175,230,' + (L * 0.02).toFixed(3) + ')';
+    ctx.fillStyle = 'rgba(150,175,230,' + (L * 0.009).toFixed(3) + ')';
     ctx.fillRect(0, 0, CW, CH);
     ctx.globalCompositeOperation = 'source-over';
   }
@@ -3440,17 +3482,20 @@ const TL_STONEPAL = (function () {
   for (let w = 0; w < 3; w++) {
     const wm = w - 1;
     for (let i = 0; i < 16; i++) {
-      // 70..165, arrived at by probe rather than by argument: painting the
-      // stone bright red showed the colour reaching the screen at roughly half
-      // strength after the grade, so a 20..74 ramp could only ever land the
-      // floor around 0.08 luminance however the lighting was tuned.
+      // 46..134. This ramp has been moved twice and it is worth saying why.
+      // It started at 20..74, which came out near-black; a probe (painting the
+      // stone red) showed colour reaching the screen at about half strength, so
+      // it was pushed to 70..165 to compensate. That halving was the contrast
+      // pivot crushing everything below 51/255, not a property of the lighting
+      // — with the pivot fixed, 70..165 renders as pale concrete and the street
+      // stops being the darkest plane in the picture, which is what gives a
+      // night exterior its weight. Back down, but not all the way: the original
+      // 20..74 was genuinely too dark even under a correct grade.
       //
-      // The "wet stone is dark, let the specular put it back" reasoning was
-      // right in principle and wrong here: ambient sits near 1.0, so for most
-      // of the frame the albedo IS the final value, and specular only fires
-      // where a light happens to strike at the right angle. The playfield has
-      // to carry itself.
-      const b = 70 + (i / 15) * 95;
+      // The underlying point still holds: ambient sits near 1.0, so for most of
+      // the frame the albedo IS the final value. The playfield has to carry
+      // itself; the deferred pass only adds highlights where a light strikes.
+      const b = 46 + (i / 15) * 88;
       a.push('rgb(' + ((b + wm * 4.0) | 0) + ',' +
         ((b + wm * 1.2) | 0) + ',' + ((b - wm * 3.0 + 5) | 0) + ')');
     }
@@ -5344,10 +5389,15 @@ class RainSystem {
     this.t = 0;
     this.wind = 0;
     // band: [count, speed, len, alpha, slant, parallax, width]
+    // Denser and much fainter than before. Rain reads as rain through DENSITY
+    // and through variation in opacity; it was reading as scratches on the lens
+    // because there were few streaks, each long, opaque and identical. The old
+    // near band drew 46 strokes at 52% — plus "heavy" drops at 72px long, pure
+    // white and glowing, which is what the eye was actually catching on.
     this.bands = [
-      { n: 90, speed: 620, len: 12, alpha: 0.17, slant: 0.16, par: 0.06, w: 0.8, heavy: 0.0 },
-      { n: 70, speed: 980, len: 22, alpha: 0.30, slant: 0.22, par: 0.16, w: 1.2, heavy: 0.06 },
-      { n: 46, speed: 1520, len: 40, alpha: 0.52, slant: 0.30, par: 0.34, w: 1.9, heavy: 0.16 }
+      { n: 170, speed: 620, len: 11, alpha: 0.10, slant: 0.16, par: 0.06, w: 0.8, heavy: 0.0 },
+      { n: 130, speed: 980, len: 20, alpha: 0.15, slant: 0.22, par: 0.16, w: 1.1, heavy: 0.05 },
+      { n: 78, speed: 1520, len: 32, alpha: 0.22, slant: 0.30, par: 0.34, w: 1.4, heavy: 0.12 }
     ];
     // pre-baked per-drop offsets so nothing is random per frame
     this.cache = [];
@@ -5387,30 +5437,41 @@ class RainSystem {
       const count = Math.max(0, Math.round(B.n * (0.35 + inten * 0.65)));
       const slant = B.slant + w * (0.35 + b * 0.25);
       const drift = -cx * B.par + w * 140 * t * (0.4 + b * 0.3);
+      // Three opacity buckets per band, batched. One flat alpha for every drop
+      // is the single thing that makes procedural rain look like a screen
+      // overlay rather than weather — real drops sit at every distance between
+      // the lens and the subject, so no two catch the light equally. Splitting
+      // the existing per-drop random into buckets buys that variation for two
+      // extra strokes per band instead of one path per drop.
       ctx.lineWidth = B.w;
-      ctx.strokeStyle = FX_rgba(PAL.rain, B.alpha * inten);
-      ctx.beginPath();
-      for (let i = 0; i < count; i++) {
-        const sp = B.speed * arr[i * 4 + 2];
-        let y = (arr[i * 4 + 1] + t * sp) % span;
-        if (y < 0) y += span;
-        y -= 140;
-        let x = (arr[i * 4 + 0] + drift + y * slant) % wrapX;
-        if (x < 0) x += wrapX;
-        x -= 210;
-        const L = B.len * (0.75 + arr[i * 4 + 2] * 0.5);
-        ctx.moveTo(x, y);
-        ctx.lineTo(x - slant * L, y + L);
+      for (let bucket = 0; bucket < 3; bucket++) {
+        const lo = bucket / 3, hi = (bucket + 1) / 3;
+        ctx.strokeStyle = FX_rgba(PAL.rain, B.alpha * inten * (0.45 + bucket * 0.42));
+        ctx.beginPath();
+        for (let i = 0; i < count; i++) {
+          const r = arr[i * 4 + 3];
+          if (r < lo || r >= hi) continue;
+          const sp = B.speed * arr[i * 4 + 2];
+          let y = (arr[i * 4 + 1] + t * sp) % span;
+          if (y < 0) y += span;
+          y -= 140;
+          let x = (arr[i * 4 + 0] + drift + y * slant) % wrapX;
+          if (x < 0) x += wrapX;
+          x -= 210;
+          const L = B.len * (0.75 + arr[i * 4 + 2] * 0.5);
+          ctx.moveTo(x, y);
+          ctx.lineTo(x - slant * L, y + L);
+        }
+        ctx.stroke();
       }
-      ctx.stroke();
 
-      // occasional brighter "heavy" drops in the nearer bands
+      // A few drops closer to the lens. Short and dim: these used to be 1.8x
+      // the band length, pure white and carrying a shadowBlur glow, which is
+      // exactly how you draw a scratch, not a raindrop.
       if (B.heavy > 0) {
         const hc = Math.max(1, Math.round(count * B.heavy * (0.4 + inten * 0.6)));
-        ctx.lineWidth = B.w * 1.9;
-        ctx.strokeStyle = FX_rgba(PAL.white, 0.30 * inten);
-        ctx.shadowBlur = 5;
-        ctx.shadowColor = FX_rgba(PAL.rain, 0.7 * inten);
+        ctx.lineWidth = B.w * 1.5;
+        ctx.strokeStyle = FX_rgba(PAL.rain, 0.30 * inten);
         ctx.beginPath();
         for (let i = 0; i < hc; i++) {
           const j = (i * 7 + 3) % count;
@@ -5421,19 +5482,18 @@ class RainSystem {
           let x = (arr[j * 4 + 0] * 1.31 + drift + y * slant) % wrapX;
           if (x < 0) x += wrapX;
           x -= 210;
-          const L = B.len * 1.8;
+          const L = B.len * 1.15;
           ctx.moveTo(x, y);
           ctx.lineTo(x - slant * L, y + L);
         }
         ctx.stroke();
-        ctx.shadowBlur = 0;
       }
     }
     // faint sheet of mist drifting across the lower screen
     ctx.globalAlpha = 0.08 * inten;
     const mist = FX_linear(ctx, 'rainMist', 0, CH * 0.55, 0, CH, [
-      [0, 'rgba(127,147,201,0)'],
-      [1, 'rgba(127,147,201,0.55)']
+      [0, 'rgba(134,144,156,0)'],
+      [1, 'rgba(134,144,156,0.55)']
     ]);
     ctx.fillStyle = mist;
     ctx.fillRect(0, CH * 0.55, CW, CH * 0.45);
@@ -5441,6 +5501,83 @@ class RainSystem {
     ctx.shadowBlur = 0;
     ctx.restore();
   }
+}
+
+// ============================================================================
+// Rim light -- the edge that separates a figure from the night behind it
+//
+// A dark character against a dark city is a hole in the picture. Every modern
+// game solves it the same way: a hard, cold light rakes the figure from the
+// key's side, catching the cowl, the shoulder and the leading edge of the
+// cape. Without it Batman reads as a black blob; with it he reads as a solid
+// object standing in weather, and nothing else in this pass comes close for
+// the money.
+//
+// Done generically rather than inside each sprite, because there are five
+// character renderers and they are all built from dozens of separate paths
+// with their own transform stacks — there is no single silhouette to stroke.
+// Instead the sprite is drawn once to a scratch canvas, flattened to a solid
+// colour through source-in, stamped offset toward the light, and then the real
+// sprite is drawn over it. What survives is a crescent along the lit edge.
+//
+// Two cached canvases, reused for every character, resized only when something
+// bigger comes along. Costs two drawImage calls per figure.
+// ============================================================================
+var FX_rimA = null, FX_rimB = null, FX_rimAC = null, FX_rimBC = null;
+
+function FX_rimmed(ctx, x, y, w, h, opt, fn) {
+  const pad = 6;
+  const cw = Math.ceil(w) + pad * 2, chh = Math.ceil(h) + pad * 2;
+  if (!FX_rimA) {
+    FX_rimA = document.createElement('canvas');
+    FX_rimB = document.createElement('canvas');
+    FX_rimA.width = FX_rimB.width = 8;
+    FX_rimA.height = FX_rimB.height = 8;
+  }
+  if (FX_rimA.width < cw || FX_rimA.height < chh) {
+    // grow to fit the largest figure seen; resizing also clears, and a boss is
+    // several times the size of a minion, so this settles after a few frames
+    FX_rimA.width = FX_rimB.width = Math.max(cw, FX_rimA.width);
+    FX_rimA.height = FX_rimB.height = Math.max(chh, FX_rimA.height);
+    FX_rimAC = FX_rimBC = null;
+  }
+  // getContext is cheap but not free, and this runs once per figure per frame
+  const a = FX_rimAC || (FX_rimAC = FX_rimA.getContext('2d'));
+  const b = FX_rimBC || (FX_rimBC = FX_rimB.getContext('2d'));
+  a.setTransform(1, 0, 0, 1, 0, 0);
+  // clear only the area this figure uses, not the whole boss-sized buffer
+  a.clearRect(0, 0, cw, chh);
+  a.save();
+  a.translate(pad, pad);
+  fn(a, 0, 0);
+  a.restore();
+
+  // flatten the sprite's alpha to a single colour
+  b.setTransform(1, 0, 0, 1, 0, 0);
+  b.clearRect(0, 0, cw, chh);
+  b.drawImage(FX_rimA, 0, 0, cw, chh, 0, 0, cw, chh);
+  b.globalCompositeOperation = 'source-in';
+  b.fillStyle = opt.colour || 'rgba(188,210,236,1)';
+  b.fillRect(0, 0, cw, chh);
+  b.globalCompositeOperation = 'source-over';
+
+  const dx = opt.dx === undefined ? 1.6 : opt.dx;
+  const dy = opt.dy === undefined ? -1.8 : opt.dy;
+  // Every blit takes the explicit source rect. The buffers are sized to the
+  // LARGEST figure ever drawn but only the current figure's corner is cleared,
+  // so a whole-canvas drawImage would drag in whatever the boss left behind.
+  const al = opt.alpha === undefined ? 0.5 : opt.alpha;
+  ctx.save();
+  ctx.globalAlpha = al;
+  ctx.drawImage(FX_rimB, 0, 0, cw, chh, x - pad + dx, y - pad + dy, cw, chh);
+  // a second, wider, fainter stamp reads as the light wrapping the form
+  if (opt.wrap) {
+    ctx.globalAlpha = al * 0.34;
+    ctx.drawImage(FX_rimB, 0, 0, cw, chh, x - pad + dx * 2.1, y - pad + dy * 2.1, cw, chh);
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+  ctx.drawImage(FX_rimA, 0, 0, cw, chh, x - pad, y - pad, cw, chh);
 }
 
 // ============================================================================
@@ -6806,8 +6943,8 @@ function drawPenguinBoss(ctx, x, y, w, h, o) {
 
   // shirt front
   const sg = ctx.createLinearGradient(0, bodyTop + bh * 0.15, 0, bodyTop + bh);
-  sg.addColorStop(0, '#c3c6cf');
-  sg.addColorStop(1, '#8d919e');
+  sg.addColorStop(0, '#9aa0ab');
+  sg.addColorStop(1, '#6c7280');
   ctx.fillStyle = sg;
   ctx.beginPath();
   ctx.ellipse(0, bodyTop + bh * 0.58 + bob, bw * 0.26, bh * 0.34, 0, 0, Math.PI * 2);
@@ -6837,7 +6974,7 @@ function drawPenguinBoss(ctx, x, y, w, h, o) {
   const hy = bodyTop + bh * 0.12 + bob;
   ctx.fillStyle = '#1a1a24';
   ctx.beginPath(); ctx.ellipse(0, hy, bw * 0.3, bh * 0.2, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#cdcbc1';
+  ctx.fillStyle = '#a5a399';
   ctx.beginPath(); ctx.ellipse(bw * 0.05, hy + 3, bw * 0.2, bh * 0.13, 0, 0, Math.PI * 2); ctx.fill();
 
   // beak + cigarette holder
@@ -6846,7 +6983,7 @@ function drawPenguinBoss(ctx, x, y, w, h, o) {
   ctx.moveTo(bw * 0.18, hy); ctx.lineTo(bw * 0.44, hy + 3); ctx.lineTo(bw * 0.18, hy + 8);
   ctx.closePath(); ctx.fill();
   if (!dead) {
-    ctx.strokeStyle = '#ded8c8'; ctx.lineWidth = 2;
+    ctx.strokeStyle = '#b0ab9d'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(bw * 0.4, hy + 4); ctx.lineTo(bw * 0.62, hy - 4); ctx.stroke();
     ctx.fillStyle = '#ff7a3a';
     ctx.beginPath(); ctx.arc(bw * 0.63, hy - 5, 1.8, 0, Math.PI * 2); ctx.fill();
@@ -6942,7 +7079,7 @@ function BS_jokerFace(ctx, cx, cy, r, t, phase, laughing) {
   // chalk-white face, modelled instead of flat: lit from upper left, with a
   // greenish bounce under the jaw
   const fg = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.45, r * 0.1, cx, cy, r * 1.25);
-  fg.addColorStop(0, '#d4d2c8');
+  fg.addColorStop(0, '#aaa89f');
   fg.addColorStop(0.55, PAL.face);
   fg.addColorStop(1, '#848b79');
   ctx.fillStyle = fg;
@@ -7181,7 +7318,7 @@ function drawJokerBoss(ctx, x, y, w, h, o) {
       ctx.save();
       ctx.translate(manW * 0.62, manH * 0.16);
       ctx.rotate(-0.5 + i * 0.24);
-      ctx.fillStyle = '#f5f2e6';
+      ctx.fillStyle = '#c0bdb2';
       ctx.fillRect(0, -7, 9, 13);
       ctx.strokeStyle = PAL.smile; ctx.lineWidth = 1; ctx.strokeRect(0, -7, 9, 13);
       ctx.restore();
@@ -8764,6 +8901,22 @@ var PFX_COMP = PFX_HEAD + [
   // midtones stay where the artist put them.
   '  col = mix(clamp(col, 0.0, 1.0), aces(col), uTonemap);',
   '',
+  '  col = pow(max(col, 0.0), vec3(1.0 / 2.2));',        // back to display space
+  '',
+  // GRADE IN DISPLAY SPACE. This block used to sit above the gamma encode,
+  // where every one of its constants meant something other than what it says.
+  // The worst was the contrast pivot: 0.5 is mid-grey on a SCREEN, but in
+  // linear light mid-grey is ~0.18, so pivoting at 0.5 drove everything below
+  // 0.0283 linear negative and clamped it to absolute black — i.e. every pixel
+  // darker than 51/255 on screen. In a night game that is nearly the whole
+  // frame. Measured, a "contrast" of 1.06 was costing 4.6x the brightness of
+  // the entire picture and doubling its blue ratio, because blue was the
+  // channel with the most headroom and so the one that survived the crush.
+  // Exposure 1.95 and the lifted stone albedo were both compensations for it.
+  //
+  // Tonemap in linear, grade in display-referred: now a lift of 0.02 is a
+  // 5/255 lift, a contrast of 1.06 is 6% more contrast, and the split-toning
+  // thresholds land where their numbers suggest.
   // lift / gain, then split toning by luminance
   '  col = clamp(col * uGain + uLift, 0.0, 1.0);',
   '  float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));',
@@ -8774,8 +8927,6 @@ var PFX_COMP = PFX_HEAD + [
   // Gotham is already near-black; a heavy vignette just eats the playfield.
   '  float vig = smoothstep(0.95, 0.18, r2 * uVignette);',
   '  col *= mix(0.82, 1.0, vig);',
-  '',
-  '  col = pow(max(col, 0.0), vec3(1.0 / 2.2));',        // back to display space
   '',
   '  float n = hash12(gl_FragCoord.xy + vec2(uTime * 311.7, uTime * 173.3));',
   '  col += (n - 0.5) * uGrain;',
@@ -9255,11 +9406,14 @@ PostFX.defaults = function () {
     // in the city painting the frame gold.
     threshold: 0.74, knee: 0.22, warm: 0.04, radius: 1.15,
     bloom: 0.24, aberration: 0.30, vignette: 0.72, grain: 0.018,
-    // Desaturating without raising exposure just produced a black screen. The
-    // reference frame is dark but READABLE: its mood comes from haze lifting
-    // the background away from a near-black figure, not from crushing
-    // everything equally. So exposure goes UP, and the tonemap backs off.
-    exposure: 1.95, contrast: 1.06, saturation: 0.44, distort: 0.008,
+    // Exposure was at 1.95 to claw brightness back from a contrast pivot that
+    // was crushing the frame to black (see the grade block in PFX_APPLY). With
+    // that fixed, 1.95 blows the midtones out, so it comes back down and the
+    // contrast goes up to where it was always meant to be. Measured across a
+    // sweep, this pair gives the brightest readable frame AND the most neutral
+    // channel balance — more contrast than this starts re-tinting the picture
+    // blue, because blue is the channel with the most headroom in the art.
+    exposure: 1.60, contrast: 1.12, saturation: 0.44, distort: 0.008,
     tonemap: 0.40, flash: 0.0, time: 0,
     // Ambient sits high on purpose: the art carries its own baked shading, so
     // the dynamic lights are a highlight layer, not the primary illumination.
@@ -9284,10 +9438,13 @@ PostFX.defaults = function () {
     // A real camera never reaches pure black, and crushed blacks are the
     // clearest tell of a hobby renderer. Lift them slightly and tint the lift
     // cold; keep the gain neutral so highlights stay white rather than gold.
-    lift: new Float32Array([0.012, 0.015, 0.020]),
-    gain: new Float32Array([0.98, 0.99, 1.02]),
-    shadowTint: new Float32Array([0.97, 0.99, 1.04]),
-    hiTint: new Float32Array([1.00, 1.00, 1.02]),
+    // These now act in display space, where 0.013 is a ~3/255 lift rather than
+    // the ~43/255 it silently amounted to in linear — the blacks were being
+    // lifted into grey AND tinted blue at the same time.
+    lift: new Float32Array([0.010, 0.011, 0.013]),
+    gain: new Float32Array([0.99, 0.99, 1.01]),
+    shadowTint: new Float32Array([0.98, 1.00, 1.03]),
+    hiTint: new Float32Array([1.00, 1.00, 1.01]),
   };
 };
 
@@ -9728,8 +9885,13 @@ class Boss {
         drawCardProjectile(ctx, pr.rect.cx, pr.rect.cy, pr.rect.w / 2, pr.anim * 9);
       }
     }
-    if (this.kind === 'penguin') drawPenguinBoss(ctx, this.rect.x, this.rect.y, this.rect.w, this.rect.h, o);
-    else drawJokerBoss(ctx, this.rect.x, this.rect.y, this.rect.w, this.rect.h, o);
+    // Same key-side rim as the player and the enemies. A boss is the largest
+    // figure on screen and the one the camera is asking you to read, so it is
+    // the last thing that should be sitting flat against the skyline.
+    const bf = this.kind === 'penguin' ? drawPenguinBoss : drawJokerBoss;
+    FX_rimmed(ctx, this.rect.x, this.rect.y, this.rect.w, this.rect.h,
+      { colour: 'rgba(200,220,244,1)', alpha: 0.66, dx: 2.4, dy: -2.6, wrap: true },
+      (c, ox, oy) => bf(c, ox, oy, this.rect.w, this.rect.h, o));
 
     if (this.gasY < CH) drawGasCloud(ctx, 0, this.gasY, CW, CH - this.gasY + 10, t);
   }
@@ -10612,19 +10774,29 @@ class Game {
     p.time = this.time;
     // lightning washes the whole frame, exactly as it does in the 2D pass
     const fl = this.bolt.flash;
-    // Exposure went from 1.30 to 1.95 when the grade was reworked, and the
-    // lightning was never rescaled to match — a strike blew the whole frame to
-    // flat white. A strike should read as a hard, brief wash that still leaves
-    // the silhouettes readable, so every term that feeds it is now smaller.
-    p.flash = fl * 0.045;
+    // Rescaled a second time, for the same underlying reason: these terms are
+    // calibrated against the grade, and the grade has moved twice. Measured, a
+    // strike was supplying 32 of the frame's 80 points of mean brightness —
+    // which does not read as lightning, it reads as the haze getting worse,
+    // because a flat additive wash raises the blacks and flattens contrast.
+    //
+    // So the UNIFORM part of a strike is cut hard, and the DIRECTIONAL part
+    // (sunCol, sunDir, the rim terms below) is left alone. That is the half
+    // that actually looks like lightning: a hard raking light throwing fresh
+    // shadows, rather than someone turning up the brightness on the whole city.
+    p.flash = fl * 0.020;
     // and drives the directional light, so a strike genuinely rakes across the
     // geometry instead of just brightening the image
     // The moon is the key light, so it has to be bright enough to model the
     // geometry: at 0.13 it was barely above the ambient and every surface came
     // out the same value, which is why the playfield merged into the skyline.
-    p.sunCol[0] = 0.30 + fl * 0.17;
-    p.sunCol[1] = 0.33 + fl * 0.19;
-    p.sunCol[2] = 0.39 + fl * 0.23;
+    // ...and only slightly cool. At 0.30/0.33/0.39 the key was a third more
+    // blue than red, so every surface it touched picked up a navy cast on top
+    // of whatever colour it already had. Moonlight through cloud is close to
+    // neutral; the COLD comes from the grade, not from staining the key.
+    p.sunCol[0] = 0.42 + fl * 0.17;
+    p.sunCol[1] = 0.44 + fl * 0.19;
+    p.sunCol[2] = 0.50 + fl * 0.23;
 
     // A strike is a light source, not a colour wash. Each one picks its own
     // steep angle and, while it lasts, takes over the directional shadow with
@@ -11007,9 +11179,14 @@ class Game {
       if (e.rect.r < camX - 60 || e.rect.x > camX + CW + 60) continue;
       const x = e.rect.x - camX, y = e.rect.y;
       const o = { facingRight: e.vx > 0, animTime: e.anim, squashed: e.dying > 0, dying: e.dying > 0, shell: e.shell, shellSpinning: e.shellSpin };
-      if (e.kind === 'joker') drawJokerMinion(ctx, x, y, e.rect.w, e.rect.h, o);
-      else if (e.kind === 'penguin') drawPenguinHenchman(ctx, x, y, e.rect.w, e.rect.h, o);
-      else drawJokerDrone(ctx, x, y, e.rect.w, e.rect.h, o);
+      // Same rim as the player, a touch weaker — the enemies are smaller and
+      // lower in the frame, and matching his edge exactly flattens the read of
+      // who is the subject.
+      const fn = e.kind === 'joker' ? drawJokerMinion
+        : (e.kind === 'penguin' ? drawPenguinHenchman : drawJokerDrone);
+      FX_rimmed(ctx, x, y, e.rect.w, e.rect.h,
+        { colour: 'rgba(188,206,230,1)', alpha: 0.62, dx: 1.9, dy: -2.0 },
+        (c, ox, oy) => fn(c, ox, oy, e.rect.w, e.rect.h, o));
     }
     this.atmos.draw(ctx, camX);
 
@@ -11041,7 +11218,11 @@ class Game {
           ctx.restore();
           ctx.globalAlpha = 1;
         }
-        drawBatmanSprite(ctx, p.rect.x - camX, p.rect.y, p.rect.w, p.rect.h, o);
+        // The echoes stay un-rimmed: a trail is the memory of where the light
+        // WAS, so rimming each one draws four hard edges instead of one.
+        FX_rimmed(ctx, p.rect.x - camX, p.rect.y, p.rect.w, p.rect.h,
+          { colour: 'rgba(206,226,250,1)', alpha: 0.72, dx: 2.1, dy: -2.3, wrap: true },
+          (c, ox, oy) => drawBatmanSprite(c, ox, oy, p.rect.w, p.rect.h, o));
       }
     }
   }

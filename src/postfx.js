@@ -530,6 +530,22 @@ var PFX_COMP = PFX_HEAD + [
   // midtones stay where the artist put them.
   '  col = mix(clamp(col, 0.0, 1.0), aces(col), uTonemap);',
   '',
+  '  col = pow(max(col, 0.0), vec3(1.0 / 2.2));',        // back to display space
+  '',
+  // GRADE IN DISPLAY SPACE. This block used to sit above the gamma encode,
+  // where every one of its constants meant something other than what it says.
+  // The worst was the contrast pivot: 0.5 is mid-grey on a SCREEN, but in
+  // linear light mid-grey is ~0.18, so pivoting at 0.5 drove everything below
+  // 0.0283 linear negative and clamped it to absolute black — i.e. every pixel
+  // darker than 51/255 on screen. In a night game that is nearly the whole
+  // frame. Measured, a "contrast" of 1.06 was costing 4.6x the brightness of
+  // the entire picture and doubling its blue ratio, because blue was the
+  // channel with the most headroom and so the one that survived the crush.
+  // Exposure 1.95 and the lifted stone albedo were both compensations for it.
+  //
+  // Tonemap in linear, grade in display-referred: now a lift of 0.02 is a
+  // 5/255 lift, a contrast of 1.06 is 6% more contrast, and the split-toning
+  // thresholds land where their numbers suggest.
   // lift / gain, then split toning by luminance
   '  col = clamp(col * uGain + uLift, 0.0, 1.0);',
   '  float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));',
@@ -540,8 +556,6 @@ var PFX_COMP = PFX_HEAD + [
   // Gotham is already near-black; a heavy vignette just eats the playfield.
   '  float vig = smoothstep(0.95, 0.18, r2 * uVignette);',
   '  col *= mix(0.82, 1.0, vig);',
-  '',
-  '  col = pow(max(col, 0.0), vec3(1.0 / 2.2));',        // back to display space
   '',
   '  float n = hash12(gl_FragCoord.xy + vec2(uTime * 311.7, uTime * 173.3));',
   '  col += (n - 0.5) * uGrain;',
@@ -1021,11 +1035,14 @@ PostFX.defaults = function () {
     // in the city painting the frame gold.
     threshold: 0.74, knee: 0.22, warm: 0.04, radius: 1.15,
     bloom: 0.24, aberration: 0.30, vignette: 0.72, grain: 0.018,
-    // Desaturating without raising exposure just produced a black screen. The
-    // reference frame is dark but READABLE: its mood comes from haze lifting
-    // the background away from a near-black figure, not from crushing
-    // everything equally. So exposure goes UP, and the tonemap backs off.
-    exposure: 1.95, contrast: 1.06, saturation: 0.44, distort: 0.008,
+    // Exposure was at 1.95 to claw brightness back from a contrast pivot that
+    // was crushing the frame to black (see the grade block in PFX_APPLY). With
+    // that fixed, 1.95 blows the midtones out, so it comes back down and the
+    // contrast goes up to where it was always meant to be. Measured across a
+    // sweep, this pair gives the brightest readable frame AND the most neutral
+    // channel balance — more contrast than this starts re-tinting the picture
+    // blue, because blue is the channel with the most headroom in the art.
+    exposure: 1.60, contrast: 1.12, saturation: 0.44, distort: 0.008,
     tonemap: 0.40, flash: 0.0, time: 0,
     // Ambient sits high on purpose: the art carries its own baked shading, so
     // the dynamic lights are a highlight layer, not the primary illumination.
@@ -1050,10 +1067,13 @@ PostFX.defaults = function () {
     // A real camera never reaches pure black, and crushed blacks are the
     // clearest tell of a hobby renderer. Lift them slightly and tint the lift
     // cold; keep the gain neutral so highlights stay white rather than gold.
-    lift: new Float32Array([0.012, 0.015, 0.020]),
-    gain: new Float32Array([0.98, 0.99, 1.02]),
-    shadowTint: new Float32Array([0.97, 0.99, 1.04]),
-    hiTint: new Float32Array([1.00, 1.00, 1.02]),
+    // These now act in display space, where 0.013 is a ~3/255 lift rather than
+    // the ~43/255 it silently amounted to in linear — the blacks were being
+    // lifted into grey AND tinted blue at the same time.
+    lift: new Float32Array([0.010, 0.011, 0.013]),
+    gain: new Float32Array([0.99, 0.99, 1.01]),
+    shadowTint: new Float32Array([0.98, 1.00, 1.03]),
+    hiTint: new Float32Array([1.00, 1.00, 1.01]),
   };
 };
 

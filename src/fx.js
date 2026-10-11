@@ -595,10 +595,15 @@ class RainSystem {
     this.t = 0;
     this.wind = 0;
     // band: [count, speed, len, alpha, slant, parallax, width]
+    // Denser and much fainter than before. Rain reads as rain through DENSITY
+    // and through variation in opacity; it was reading as scratches on the lens
+    // because there were few streaks, each long, opaque and identical. The old
+    // near band drew 46 strokes at 52% — plus "heavy" drops at 72px long, pure
+    // white and glowing, which is what the eye was actually catching on.
     this.bands = [
-      { n: 90, speed: 620, len: 12, alpha: 0.17, slant: 0.16, par: 0.06, w: 0.8, heavy: 0.0 },
-      { n: 70, speed: 980, len: 22, alpha: 0.30, slant: 0.22, par: 0.16, w: 1.2, heavy: 0.06 },
-      { n: 46, speed: 1520, len: 40, alpha: 0.52, slant: 0.30, par: 0.34, w: 1.9, heavy: 0.16 }
+      { n: 170, speed: 620, len: 11, alpha: 0.10, slant: 0.16, par: 0.06, w: 0.8, heavy: 0.0 },
+      { n: 130, speed: 980, len: 20, alpha: 0.15, slant: 0.22, par: 0.16, w: 1.1, heavy: 0.05 },
+      { n: 78, speed: 1520, len: 32, alpha: 0.22, slant: 0.30, par: 0.34, w: 1.4, heavy: 0.12 }
     ];
     // pre-baked per-drop offsets so nothing is random per frame
     this.cache = [];
@@ -638,30 +643,41 @@ class RainSystem {
       const count = Math.max(0, Math.round(B.n * (0.35 + inten * 0.65)));
       const slant = B.slant + w * (0.35 + b * 0.25);
       const drift = -cx * B.par + w * 140 * t * (0.4 + b * 0.3);
+      // Three opacity buckets per band, batched. One flat alpha for every drop
+      // is the single thing that makes procedural rain look like a screen
+      // overlay rather than weather — real drops sit at every distance between
+      // the lens and the subject, so no two catch the light equally. Splitting
+      // the existing per-drop random into buckets buys that variation for two
+      // extra strokes per band instead of one path per drop.
       ctx.lineWidth = B.w;
-      ctx.strokeStyle = FX_rgba(PAL.rain, B.alpha * inten);
-      ctx.beginPath();
-      for (let i = 0; i < count; i++) {
-        const sp = B.speed * arr[i * 4 + 2];
-        let y = (arr[i * 4 + 1] + t * sp) % span;
-        if (y < 0) y += span;
-        y -= 140;
-        let x = (arr[i * 4 + 0] + drift + y * slant) % wrapX;
-        if (x < 0) x += wrapX;
-        x -= 210;
-        const L = B.len * (0.75 + arr[i * 4 + 2] * 0.5);
-        ctx.moveTo(x, y);
-        ctx.lineTo(x - slant * L, y + L);
+      for (let bucket = 0; bucket < 3; bucket++) {
+        const lo = bucket / 3, hi = (bucket + 1) / 3;
+        ctx.strokeStyle = FX_rgba(PAL.rain, B.alpha * inten * (0.45 + bucket * 0.42));
+        ctx.beginPath();
+        for (let i = 0; i < count; i++) {
+          const r = arr[i * 4 + 3];
+          if (r < lo || r >= hi) continue;
+          const sp = B.speed * arr[i * 4 + 2];
+          let y = (arr[i * 4 + 1] + t * sp) % span;
+          if (y < 0) y += span;
+          y -= 140;
+          let x = (arr[i * 4 + 0] + drift + y * slant) % wrapX;
+          if (x < 0) x += wrapX;
+          x -= 210;
+          const L = B.len * (0.75 + arr[i * 4 + 2] * 0.5);
+          ctx.moveTo(x, y);
+          ctx.lineTo(x - slant * L, y + L);
+        }
+        ctx.stroke();
       }
-      ctx.stroke();
 
-      // occasional brighter "heavy" drops in the nearer bands
+      // A few drops closer to the lens. Short and dim: these used to be 1.8x
+      // the band length, pure white and carrying a shadowBlur glow, which is
+      // exactly how you draw a scratch, not a raindrop.
       if (B.heavy > 0) {
         const hc = Math.max(1, Math.round(count * B.heavy * (0.4 + inten * 0.6)));
-        ctx.lineWidth = B.w * 1.9;
-        ctx.strokeStyle = FX_rgba(PAL.white, 0.30 * inten);
-        ctx.shadowBlur = 5;
-        ctx.shadowColor = FX_rgba(PAL.rain, 0.7 * inten);
+        ctx.lineWidth = B.w * 1.5;
+        ctx.strokeStyle = FX_rgba(PAL.rain, 0.30 * inten);
         ctx.beginPath();
         for (let i = 0; i < hc; i++) {
           const j = (i * 7 + 3) % count;
@@ -672,19 +688,18 @@ class RainSystem {
           let x = (arr[j * 4 + 0] * 1.31 + drift + y * slant) % wrapX;
           if (x < 0) x += wrapX;
           x -= 210;
-          const L = B.len * 1.8;
+          const L = B.len * 1.15;
           ctx.moveTo(x, y);
           ctx.lineTo(x - slant * L, y + L);
         }
         ctx.stroke();
-        ctx.shadowBlur = 0;
       }
     }
     // faint sheet of mist drifting across the lower screen
     ctx.globalAlpha = 0.08 * inten;
     const mist = FX_linear(ctx, 'rainMist', 0, CH * 0.55, 0, CH, [
-      [0, 'rgba(127,147,201,0)'],
-      [1, 'rgba(127,147,201,0.55)']
+      [0, 'rgba(134,144,156,0)'],
+      [1, 'rgba(134,144,156,0.55)']
     ]);
     ctx.fillStyle = mist;
     ctx.fillRect(0, CH * 0.55, CW, CH * 0.45);
@@ -692,6 +707,83 @@ class RainSystem {
     ctx.shadowBlur = 0;
     ctx.restore();
   }
+}
+
+// ============================================================================
+// Rim light -- the edge that separates a figure from the night behind it
+//
+// A dark character against a dark city is a hole in the picture. Every modern
+// game solves it the same way: a hard, cold light rakes the figure from the
+// key's side, catching the cowl, the shoulder and the leading edge of the
+// cape. Without it Batman reads as a black blob; with it he reads as a solid
+// object standing in weather, and nothing else in this pass comes close for
+// the money.
+//
+// Done generically rather than inside each sprite, because there are five
+// character renderers and they are all built from dozens of separate paths
+// with their own transform stacks — there is no single silhouette to stroke.
+// Instead the sprite is drawn once to a scratch canvas, flattened to a solid
+// colour through source-in, stamped offset toward the light, and then the real
+// sprite is drawn over it. What survives is a crescent along the lit edge.
+//
+// Two cached canvases, reused for every character, resized only when something
+// bigger comes along. Costs two drawImage calls per figure.
+// ============================================================================
+var FX_rimA = null, FX_rimB = null, FX_rimAC = null, FX_rimBC = null;
+
+function FX_rimmed(ctx, x, y, w, h, opt, fn) {
+  const pad = 6;
+  const cw = Math.ceil(w) + pad * 2, chh = Math.ceil(h) + pad * 2;
+  if (!FX_rimA) {
+    FX_rimA = document.createElement('canvas');
+    FX_rimB = document.createElement('canvas');
+    FX_rimA.width = FX_rimB.width = 8;
+    FX_rimA.height = FX_rimB.height = 8;
+  }
+  if (FX_rimA.width < cw || FX_rimA.height < chh) {
+    // grow to fit the largest figure seen; resizing also clears, and a boss is
+    // several times the size of a minion, so this settles after a few frames
+    FX_rimA.width = FX_rimB.width = Math.max(cw, FX_rimA.width);
+    FX_rimA.height = FX_rimB.height = Math.max(chh, FX_rimA.height);
+    FX_rimAC = FX_rimBC = null;
+  }
+  // getContext is cheap but not free, and this runs once per figure per frame
+  const a = FX_rimAC || (FX_rimAC = FX_rimA.getContext('2d'));
+  const b = FX_rimBC || (FX_rimBC = FX_rimB.getContext('2d'));
+  a.setTransform(1, 0, 0, 1, 0, 0);
+  // clear only the area this figure uses, not the whole boss-sized buffer
+  a.clearRect(0, 0, cw, chh);
+  a.save();
+  a.translate(pad, pad);
+  fn(a, 0, 0);
+  a.restore();
+
+  // flatten the sprite's alpha to a single colour
+  b.setTransform(1, 0, 0, 1, 0, 0);
+  b.clearRect(0, 0, cw, chh);
+  b.drawImage(FX_rimA, 0, 0, cw, chh, 0, 0, cw, chh);
+  b.globalCompositeOperation = 'source-in';
+  b.fillStyle = opt.colour || 'rgba(188,210,236,1)';
+  b.fillRect(0, 0, cw, chh);
+  b.globalCompositeOperation = 'source-over';
+
+  const dx = opt.dx === undefined ? 1.6 : opt.dx;
+  const dy = opt.dy === undefined ? -1.8 : opt.dy;
+  // Every blit takes the explicit source rect. The buffers are sized to the
+  // LARGEST figure ever drawn but only the current figure's corner is cleared,
+  // so a whole-canvas drawImage would drag in whatever the boss left behind.
+  const al = opt.alpha === undefined ? 0.5 : opt.alpha;
+  ctx.save();
+  ctx.globalAlpha = al;
+  ctx.drawImage(FX_rimB, 0, 0, cw, chh, x - pad + dx, y - pad + dy, cw, chh);
+  // a second, wider, fainter stamp reads as the light wrapping the form
+  if (opt.wrap) {
+    ctx.globalAlpha = al * 0.34;
+    ctx.drawImage(FX_rimB, 0, 0, cw, chh, x - pad + dx * 2.1, y - pad + dy * 2.1, cw, chh);
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+  ctx.drawImage(FX_rimA, 0, 0, cw, chh, x - pad, y - pad, cw, chh);
 }
 
 // ============================================================================
