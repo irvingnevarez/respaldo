@@ -422,6 +422,7 @@ var PFX_RAYS = PFX_HEAD + [
   'uniform float uDensity;',
   'uniform float uWeight;',
   'uniform float uDecay;',
+  'uniform float uGain;',
   'void main(){',
   '  vec2 delta = (vUV - uCenter) * (uDensity / 28.0);',
   '  vec2 uv = vUV;',
@@ -432,7 +433,7 @@ var PFX_RAYS = PFX_HEAD + [
   '    acc += texture(uTex, uv).rgb * illum * uWeight;',
   '    illum *= uDecay;',
   '  }',
-  '  oColor = vec4(acc, 1.0);',
+  '  oColor = vec4(acc * uGain, 1.0);',
   '}'
 ].join('\n');
 
@@ -896,7 +897,14 @@ function PostFX(canvas) {
     }
     gl.disable(gl.BLEND);
 
-    // 3b. light shafts, marched from the bright-pass buffer
+    // 3b. light shafts, marched from the bright-pass buffer.
+    //
+    // Several sources now, not just the moon. A single radial scatter centred
+    // on the sky gave the frame one soft wash; the thing that actually reads as
+    // "light through rain" is a cone under every street lamp, and those are
+    // point lights scattered across the shot. The extra centres accumulate
+    // additively into the same quarter-resolution buffer, so three sources cost
+    // three quarter-res passes rather than anything structural.
     var mid = self.mips[Math.min(1, self.mips.length - 1)];
     if (prm.rays > 0.0001) {
       gl.activeTexture(gl.TEXTURE0);
@@ -904,11 +912,31 @@ function PostFX(canvas) {
       var rp = self.progRays;
       gl.useProgram(rp.p);
       gl.uniform1i(rp.u.uTex, 0);
-      gl.uniform2f(rp.u.uCenter, prm.rayX, prm.rayY);
       gl.uniform1f(rp.u.uDensity, prm.rayDensity);
       gl.uniform1f(rp.u.uWeight, prm.rayWeight);
       gl.uniform1f(rp.u.uDecay, prm.rayDecay);
-      blit(rp, self.rays);
+
+      gl.bindFramebuffer(gl.FRAMEBUFFER, self.rays.fbo);
+      gl.viewport(0, 0, self.rays.w, self.rays.h);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.uniform2f(rp.u.uCenter, prm.rayX, prm.rayY);
+      gl.uniform1f(rp.u.uGain, 1.0);
+      gl.bindVertexArray(self.vao);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+      var pts = prm.rayPts;
+      if (pts && pts.length) {
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.ONE, gl.ONE);
+        for (var rq = 0; rq + 2 < pts.length; rq += 3) {
+          gl.uniform2f(rp.u.uCenter, pts[rq], pts[rq + 1]);
+          gl.uniform1f(rp.u.uGain, pts[rq + 2]);
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+        }
+        gl.disable(gl.BLEND);
+      }
     }
 
     // 3c. anamorphic streak off the bright pass
@@ -1013,6 +1041,7 @@ PostFX.defaults = function () {
     wetTint: new Float32Array([0.78, 0.86, 1.05]),
     // moon shafts: centre tracks the moon, updated per frame by the game
     rays: 0.34, rayX: 0.70, rayY: 0.86, rayDensity: 0.62, rayWeight: 0.055, rayDecay: 0.93,
+    rayPts: [],   // extra scatter centres: x, y, gain triples, filled per frame
     // Near-neutral. A blue-tinted ambient was re-saturating everything the
     // grade had just taken out, so the picture stayed one flat blue.
     ambient: new Float32Array([0.94, 0.96, 1.00]),

@@ -899,6 +899,19 @@ class Game {
     p.rayX = (680 - camX * 0.04) / CW;
     p.rayY = 1 - 75 / CH;
     p.rays = 0.34 + fl * 0.55;
+    // Feed the two strongest on-screen lamps to the scatter pass as extra
+    // centres. They are already in screen-uv space with y flipped into GL
+    // convention, which is exactly what the shader wants.
+    const ls = this.lights;
+    if (ls && ls.length) {
+      const pts = p.rayPts;
+      pts.length = 0;
+      for (let i = 0; i < ls.length && pts.length < 6; i++) {
+        const L = ls[i];
+        if (L.x < -0.1 || L.x > 1.1 || L.i < 0.5) continue;
+        pts.push(L.x, L.y, Math.min(0.85, L.i * 0.38));
+      }
+    }
     const rainAmt = this.world && this.world.level ? (this.world.level.rain || 0.6) : 0.6;
     p.wet = 0.48 + 0.46 * rainAmt;
     p.ripple = rainAmt;              // no rain, no rings
@@ -1237,10 +1250,29 @@ class Game {
     if (p) {
       const blinking = p.iframes > 0 && Math.floor(p.iframes * 12) % 2 === 0;
       if (!blinking) {
-        drawBatmanSprite(ctx, p.rect.x - camX, p.rect.y, p.rect.w, p.rect.h, {
+        const o = {
           facingRight: p.face > 0, state: p.state, animTime: p.anim,
-          big: p.big, star: p.star > 0, speed: Math.abs(p.vx)
-        });
+          big: p.big, star: p.star > 0, speed: Math.abs(p.vx),
+        };
+        // Per-object motion blur. A camera integrates over the whole exposure,
+        // so anything moving fast smears — and its absence is one of the
+        // quieter reasons sprite animation reads as animation rather than as
+        // footage. Echoes are drawn BEHIND the figure, stepped back along the
+        // velocity, so the leading edge stays sharp and only the trail softens.
+        const sp = Math.hypot(p.vx, p.vy);
+        if (sp > 330) {
+          const k = Math.min(1, (sp - 330) / 420);
+          const stepX = -p.vx * 0.0042, stepY = -p.vy * 0.0042;
+          ctx.save();
+          for (let i = 3; i >= 1; i--) {
+            ctx.globalAlpha = 0.20 * k * (1 - (i - 1) / 3);
+            drawBatmanSprite(ctx, p.rect.x - camX + stepX * i, p.rect.y + stepY * i,
+              p.rect.w, p.rect.h, o);
+          }
+          ctx.restore();
+          ctx.globalAlpha = 1;
+        }
+        drawBatmanSprite(ctx, p.rect.x - camX, p.rect.y, p.rect.w, p.rect.h, o);
       }
     }
   }
