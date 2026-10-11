@@ -330,7 +330,7 @@ function EN_minionHead(ctx, cx, cy, hr, face, t, flat) {
 
   // --- face base ------------------------------------------------------------
   const fg = EN_radGrad(ctx, 'mfc', cx - hr * 0.35, cy - hr * 0.45, hr * 0.1, cx, cy, hr * 1.25, [
-    [0, '#d6d0c4'], [0.45, PAL.face], [0.85, '#bfb2a2'], [1, '#8d8274']
+    [0, '#a9a49b'], [0.45, PAL.face], [0.85, '#978d80'], [1, '#6f665c']
   ]);
   EN_ellipse(ctx, cx, cy, hr, hr * (flat ? 0.72 : 1.02), 0);
   ctx.fillStyle = fg;
@@ -438,7 +438,7 @@ function EN_minionGrin(ctx, cx, my, hr, t, flat) {
   ctx.fill();
   ctx.clip();
   // teeth
-  ctx.fillStyle = '#cfcabd';
+  ctx.fillStyle = '#a39f95';
   const n = 5;
   for (let i = 0; i < n; i++) {
     const tx = cx - hr * 0.56 + (i / n) * hr * 1.12;
@@ -518,7 +518,7 @@ function EN_minionSquashed(ctx, cx, baseY, w, h, t, face, dying) {
 
   // flattened face
   const fg = EN_radGrad(ctx, 'msqf', cx - w * 0.12, py + ph * 0.05, 1, cx, py + ph * 0.30, w * 0.5, [
-    [0, '#d6d0c4'], [0.5, PAL.face], [1, '#a2978a']
+    [0, '#a9a49b'], [0.5, PAL.face], [1, '#7f766d']
   ]);
   EN_ellipse(ctx, cx, py + ph * 0.30, w * 0.42, ph * 0.34, 0);
   ctx.fillStyle = fg;
@@ -659,7 +659,7 @@ function drawPenguinHenchman(ctx, x, y, w, h, o) {
   const shy = bTop + (bBot - bTop) * 0.52;
   EN_ellipse(ctx, shx, shy, w * 0.245, (bBot - bTop) * 0.40, 0);
   const wg = EN_radGrad(ctx, 'pws', shx - w * 0.08, shy - (bBot - bTop) * 0.20, 1, shx, shy, w * 0.34, [
-    [0, '#c3c7d1'], [0.55, PAL.pengW], [1, '#9fa3b8']
+    [0, '#9a9ea8'], [0.55, PAL.pengW], [1, '#7c8092']
   ]);
   ctx.fillStyle = wg;
   ctx.fill();
@@ -730,7 +730,7 @@ function drawPenguinHenchman(ctx, x, y, w, h, o) {
   ctx.clip();
   ctx.fillStyle = EN_radGrad(ctx, 'pfp', hcx + face * hrx * 0.25, hcy + hry * 0.20, 1,
     hcx + face * hrx * 0.25, hcy + hry * 0.20, hrx * 0.95, [
-      [0, '#c6ccd5'], [0.6, PAL.pengW], [1, 'rgba(200,203,220,0)']
+      [0, '#9ca2ab'], [0.6, PAL.pengW], [1, 'rgba(158,161,176,0)']
     ]);
   EN_ellipse(ctx, hcx + face * hrx * 0.28, hcy + hry * 0.25, hrx * 0.62, hry * 0.78, 0);
   ctx.fill();

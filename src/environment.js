@@ -391,6 +391,53 @@ function ENV_windows(ctx, i, x, y0, w, h, tier, t) {
   ctx.globalAlpha = 1;
 }
 
+// Facade structure, drawn clipped to the silhouette under the window field.
+//
+// A building is not a flat rectangle with lit windows scattered on it, but
+// that is exactly what this skyline was, and it is why the city read as a
+// backdrop painted on card. What the eye actually uses to identify masonry at
+// distance is the VERTICAL RHYTHM: the piers between window bays catch the sky
+// and the recesses between them fall into shadow, so a tower reads as a run of
+// narrow stripes long before any individual window is resolvable. Add a
+// cornice at the crown and a darker plinth at the street and the shape stops
+// being a rectangle and starts being a building.
+//
+// All of it is a handful of fillRects against a clip that is already set, so
+// it costs essentially nothing next to the window field it sits under.
+function ENV_facade(ctx, i, x, y0, w, h, tier, gx) {
+  const T = y0 - h;
+  // piers: one per window bay, lit edge on the left, recess on the right
+  const pitch = Math.max(6, gx);
+  const nb = Math.floor(w / pitch);
+  if (nb > 1 && tier > 0) {
+    const lit = tier === 2 ? 0.075 : 0.05;
+    for (let c = 0; c <= nb; c++) {
+      const px = x + (w * c) / nb;
+      ctx.fillStyle = 'rgba(176,192,210,' + lit.toFixed(3) + ')';
+      ctx.fillRect(px - 0.9, T, 1.1, h);
+      ctx.fillStyle = 'rgba(0,0,0,0.16)';
+      ctx.fillRect(px + 0.3, T, 1.3, h);
+    }
+  }
+  // cornice: a bright lip and the shadow it throws down the wall
+  const cb = tier === 2 ? 5 : (tier === 1 ? 3.5 : 2.4);
+  ctx.fillStyle = 'rgba(186,202,220,0.16)';
+  ctx.fillRect(x - 2, T + 1, w + 4, cb * 0.5);
+  ctx.fillStyle = 'rgba(0,0,0,0.26)';
+  ctx.fillRect(x - 2, T + 1 + cb * 0.5, w + 4, cb);
+  // a second setback band partway up on the taller forms
+  if (h > 150 && ENV_rnd2(i, 61) > 0.45) {
+    const sy = T + h * (0.22 + ENV_rnd2(i, 67) * 0.2);
+    ctx.fillStyle = 'rgba(176,192,210,0.10)';
+    ctx.fillRect(x, sy, w, 1.6);
+    ctx.fillStyle = 'rgba(0,0,0,0.20)';
+    ctx.fillRect(x, sy + 1.6, w, cb * 0.8);
+  }
+  // plinth: the first two storeys are always darker than the shaft
+  const pg = ENV_cache(ctx).lin['plinth' + tier];
+  if (pg) { ctx.fillStyle = pg; ctx.fillRect(x - 2, y0 - 46, w + 4, 48); }
+}
+
 function ENV_roofDetail(ctx, i, x, y0, w, h, st, tier, t, fill, edge, L) {
   const T = y0 - h;
   ctx.fillStyle = fill;
@@ -504,6 +551,15 @@ function ENV_layer(ctx, camX, t, L, tier) {
   const i1 = i0 + Math.ceil(CW / slot) + 4;
 
   ctx.save();
+  // the darker first-two-storeys band, built once per layer
+  const pc = ENV_cache(ctx);
+  if (!pc.lin['plinth' + tier]) {
+    const g2 = ctx.createLinearGradient(0, baseY - 46, 0, baseY + 2);
+    g2.addColorStop(0, 'rgba(0,0,0,0)');
+    g2.addColorStop(0.45, 'rgba(0,0,0,0.20)');
+    g2.addColorStop(1, 'rgba(0,0,0,0.42)');
+    pc.lin['plinth' + tier] = g2;
+  }
   for (let i = i0; i <= i1; i++) {
     const r0 = ENV_rnd(i + seed);
     const r1 = ENV_rnd2(i + seed, 3);
@@ -511,7 +567,11 @@ function ENV_layer(ctx, camX, t, L, tier) {
     const w = slot * (0.62 + r1 * 0.42);
     const x = Math.round(i * slot - off + (slot - w) * 0.5 + (r2 - 0.5) * slot * 0.12);
     if (x > CW + 60 || x + w < -60) continue;
-    const h = Math.round(minH + r0 * (maxH - minH));
+    // Every building drawn from one height band gives a picket fence. A real
+    // skyline is mostly even with a few towers well clear of it, and those
+    // outliers are what the eye uses to read the whole thing as a city.
+    let h = Math.round(minH + r0 * (maxH - minH));
+    if (ENV_rnd2(i + seed, 71) > 0.88) h = Math.round(h * (1.35 + ENV_rnd2(i + seed, 73) * 0.5));
     const st = Math.floor(ENV_rnd2(i + seed, 13) * 5) % 5;
     const pts = ENV_silhouette(x, baseY, w, h, st);
 
@@ -558,6 +618,9 @@ function ENV_layer(ctx, camX, t, L, tier) {
       for (let yy = baseY - 6; yy > baseY - h; yy -= step) ctx.fillRect(x - 4, yy, w + 8, 1);
       ctx.globalAlpha = 1;
     }
+    // structure first, lit windows on top of it
+    ENV_facade(ctx, i + seed, x, baseY, w, h, tier,
+      tier === 2 ? 13 : (tier === 1 ? 9.5 : 7));
     ENV_windows(ctx, i + seed, x, baseY, w, h, tier, t);
     ctx.restore();
 
@@ -588,10 +651,13 @@ function ENV_layer(ctx, camX, t, L, tier) {
   // exposure the same numbers turn the whole city into milk and the playfield
   // loses its separation from the backdrop.
   const hz = tier === 0 ? 0.78 : (tier === 1 ? 0.52 : 0.25);
+  // tall enough to cover the hero towers too: a spire poking out above the
+  // haze band keeps its full contrast and instantly breaks the depth read
+  const hTop = baseY - maxH * 1.9;
   const hk2 = 'haze' + tier;
   let hg = ENV_cache(ctx).lin[hk2];
   if (!hg) {
-    hg = ctx.createLinearGradient(0, baseY - maxH, 0, baseY + 20);
+    hg = ctx.createLinearGradient(0, hTop, 0, baseY + 20);
     hg.addColorStop(0, 'rgba(80,90,102,0)');
     hg.addColorStop(0.55, 'rgba(100,110,120,' + (hz * 0.66).toFixed(3) + ')');
     // the bottom of the haze sits in the sodium band, so it warms to match
@@ -599,7 +665,7 @@ function ENV_layer(ctx, camX, t, L, tier) {
     ENV_cache(ctx).lin[hk2] = hg;
   }
   ctx.fillStyle = hg;
-  ctx.fillRect(0, baseY - maxH, CW, maxH + 20);
+  ctx.fillRect(0, hTop, CW, baseY + 20 - hTop);
 
   ctx.globalAlpha = 1;
   ctx.shadowBlur = 0;
