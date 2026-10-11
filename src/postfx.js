@@ -69,6 +69,8 @@ var PFX_LIGHT = PFX_HEAD + [
   'uniform float uSunShadow;',
   'uniform float uSunLen;',
   'uniform float uAO;',
+  'uniform float uSpec;',       // global specular strength
+  'uniform float uSunSpec;',    // the moon throws a hard highlight of its own
   'uniform vec3  uAmbient;',
   'uniform float uAspect;',
   'uniform float uNrmStrength;',
@@ -104,6 +106,25 @@ var PFX_LIGHT = PFX_HEAD + [
   '  n.xy *= uNrmStrength;',
   '  n = normalize(n + vec3(0.0, 0.0, 1e-5));',
   '  vec3 lit = uAmbient;',
+  '',
+  // ── material ──────────────────────────────────────────────────────────
+  // Everything above this line was Lambertian: every surface in the game
+  // answered light the same way, which is exactly why it read as illustrated
+  // rather than rendered. The occluder buffer now carries roughness in green
+  // and specular mass in blue, so wet stone, lacquered metal, brick and the
+  // suit each answer differently.
+  '  vec4 mat = texture(uOcc, vUV);',
+  '  float rough = clamp(mat.g, 0.03, 1.0);',
+  '  float shin  = mix(240.0, 3.0, rough * rough);',
+  // Fresnel. Light grazing a surface reflects far more of it, which is why a
+  // wet road glares at you down its length and not underfoot, and why every
+  // edge in a modern frame carries a bright lip. n.z is 1 facing the camera
+  // and 0 at a silhouette edge, so this falls out of the normal buffer for
+  // free and lands exactly where the eye expects it.
+  '  float fres  = pow(1.0 - clamp(n.z, 0.0, 1.0), 4.0);',
+  '  float kspec = mat.b * uSpec * (0.22 + 1.25 * fres);',
+  '  vec3  V     = vec3(0.0, 0.0, 1.0);',
+  '  vec3  spec  = vec3(0.0);',
   // Contact occlusion. Only air pixels are darkened, and only by how much
   // geometry crowds them, so nooks where a wall meets the floor and the
   // undersides of ledges pick up a soft grounding shadow. Pixels inside
@@ -129,7 +150,11 @@ var PFX_LIGHT = PFX_HEAD + [
   '    }',
   '    sunSh = clamp(1.0 - (socc / 8.0) * uSunShadow, 0.0, 1.0);',
   '  }',
-  '  lit += uSunCol * max(dot(n, normalize(uSunDir)), 0.0) * sunSh;',
+  '  vec3 sdir = normalize(uSunDir);',
+  '  lit += uSunCol * max(dot(n, sdir), 0.0) * sunSh;',
+  // the moon is a small, hard source: a tight highlight, not a wash
+  '  vec3 sh2 = normalize(sdir + V);',
+  '  spec += uSunCol * (pow(max(dot(n, sh2), 0.0), shin) * kspec * uSunSpec * sunSh);',
   '  for (int i = 0; i < ' + PFX_MAXL + '; i++) {',
   '    if (i >= uCount) break;',
   '    vec4 lp = uLP[i];',
@@ -144,8 +169,19 @@ var PFX_LIGHT = PFX_HEAD + [
   // only the strongest few lights cast: shadow marching is the expensive part
   '    float sh = (i < uShadowCount && att > 0.001) ? PFX_shadow(vUV, lp.xy) : 1.0;',
   '    lit += uLC[i].rgb * (uLC[i].a * att * ndl * sh);',
+  // Specular from the same source. This is what puts a streak of the street
+  // lamp on the wet road, a glint on the signal blocks and a hard edge on the
+  // suit — the single largest step from "drawn" towards "lit".
+  '    vec3 hv = normalize(L + V);',
+  '    spec += uLC[i].rgb * (uLC[i].a * att * pow(max(dot(n, hv), 0.0), shin) * kspec * sh);',
   '  }',
-  '  oColor = vec4(lit, 1.0);',
+  // RGB carries diffuse AND specular summed, and alpha carries the specular's
+  // luminance, so the apply pass can separate them again without a second
+  // buffer. Keeping them apart matters: diffuse multiplies the surface colour,
+  // specular is light bounced off it and must be ADDED — folding the highlight
+  // into the albedo is what washed every stone block out to flat grey.
+  '  float slum = dot(spec, vec3(0.2126, 0.7152, 0.0722));',
+  '  oColor = vec4(lit + spec, slum);',
   '}'
 ].join('\n');
 
@@ -158,7 +194,17 @@ var PFX_APPLY = PFX_HEAD + [
   'uniform sampler2D uAlbedo;',
   'uniform sampler2D uLight;',
   'void main(){',
-  '  oColor = vec4(texture(uAlbedo, vUV).rgb * texture(uLight, vUV).rgb, 1.0);',
+  '  vec3 alb = texture(uAlbedo, vUV).rgb;',
+  '  vec4 L   = texture(uLight, vUV);',
+  // Split the sum back apart using the luminance the light pass stored in
+  // alpha. Doing it by ratio rather than by a flat tint keeps the highlight's
+  // COLOUR — which is the whole point of a sodium lamp streaking amber across
+  // a blue-grey wet road.
+  '  float lum   = max(dot(L.rgb, vec3(0.2126, 0.7152, 0.0722)), 1e-4);',
+  '  float sfrac = clamp(L.a / lum, 0.0, 1.0);',
+  '  vec3  specC = L.rgb * sfrac;',
+  '  vec3  diffC = max(L.rgb - specC, vec3(0.0));',
+  '  oColor = vec4(alb * diffC + specC, 1.0);',
   '}'
 ].join('\n');
 
@@ -737,6 +783,8 @@ function PostFX(canvas) {
       gl.uniform1f(lp.u.uSunShadow, castShadows ? prm.sunShadow : 0.0);
       gl.uniform1f(lp.u.uSunLen, prm.sunLen);
       gl.uniform1f(lp.u.uAO, prm.ao);
+      gl.uniform1f(lp.u.uSpec, prm.specular);
+      gl.uniform1f(lp.u.uSunSpec, prm.sunSpec);
       gl.uniform3fv(lp.u.uAmbient, prm.ambient);
       gl.uniform1f(lp.u.uAspect, self.w / Math.max(1, self.h));
       gl.uniform1f(lp.u.uNrmStrength, prm.normalStrength);
@@ -917,6 +965,7 @@ PostFX.defaults = function () {
     // Ambient sits high on purpose: the art carries its own baked shading, so
     // the dynamic lights are a highlight layer, not the primary illumination.
     lighting: true, normalStrength: 1.5,
+    specular: 0.72, sunSpec: 0.70,
     shadows: true, shadowLights: 3, shadowStrength: 0.92,
     sunShadow: 0.85, sunLen: 0.13,
     // rain-slicked stone: mirror strength, how fast it fades with depth,

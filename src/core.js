@@ -658,35 +658,68 @@ class Game {
   // ── occluder buffer ──────────────────────────────────────────────────
   // Solid silhouettes only. The shadow pass marches this toward each light,
   // so shape matters and shading does not.
+  // ── occluder + material buffer ───────────────────────────────────────
+  // Three channels, three jobs, one upload:
+  //   R  solid silhouette, marched by the shadow pass and sampled for AO
+  //   G  roughness      0 = mirror, 1 = fully diffuse
+  //   B  specular mass  how much light the surface throws back at the viewer
+  //
+  // Packing the material here rather than into a fourth canvas is deliberate:
+  // an extra full-screen upload per frame measured as a real cost, and
+  // roughness and specular mass are low-frequency properties — the NORMAL
+  // buffer supplies all the high-frequency detail the highlight needs, so a
+  // quarter-resolution material map is indistinguishable from a full one.
   drawOccluders(camX) {
     const o = this.octx;
     o.setTransform(0.25, 0, 0, 0.25, 0, 0);
     o.globalAlpha = 1;
-    o.fillStyle = '#000';
+    // air: not solid, fully rough, no specular
+    o.fillStyle = 'rgb(0,235,0)';
     o.fillRect(0, 0, CW, CH);
     if (!this.world) return;
     const w = this.world;
-    o.fillStyle = '#f00';
     const c0 = Math.max(0, Math.floor(camX / TILE) - 1);
     const c1 = Math.min(w.w - 1, Math.floor((camX + CW) / TILE) + 1);
+
+    // rough / spec per material, as 0-255 byte pairs
+    const M = {
+      '#': [184, 54],    // street stone: coarse, barely shiny
+      'X': [104, 150],   // dressed stone block: part polished
+      'B': [214, 28],    // brick: matte
+      '?': [58, 224],    // signal block: lacquered metal
+    };
+    const WETTOP = [26, 242];   // rain-slicked top face: near mirror
+
     for (let cy = 0; cy < w.h; cy++) {
       for (let cx = c0; cx <= c1; cx++) {
         const c = w.cells[cy * w.w + cx];
         if (!c || !c.alive || !c.solid) continue;
+        const m = M[c.t] || M['#'];
+        o.fillStyle = 'rgb(255,' + m[0] + ',' + m[1] + ')';
         o.fillRect(cx * TILE - camX, cy * TILE, TILE, TILE);
+        // the exposed, wet upper face is the shiniest thing in the frame and
+        // the reason street lamps streak across the ground
+        if (c.t === '#' && c.top) {
+          o.fillStyle = 'rgb(255,' + WETTOP[0] + ',' + WETTOP[1] + ')';
+          o.fillRect(cx * TILE - camX, cy * TILE, TILE, 7);
+        }
       }
     }
-    const ell = (r) => {
+
+    const ell = (r, rough, spec) => {
+      o.fillStyle = 'rgb(255,' + rough + ',' + spec + ')';
       o.beginPath();
       o.ellipse(r.cx - camX, r.cy, r.w * 0.42, r.h * 0.46, 0, 0, Math.PI * 2);
       o.fill();
     };
     for (const e of this.enemies) {
       if (e.rect.r < camX - 60 || e.rect.x > camX + CW + 60 || e.dying > 0) continue;
-      ell(e.rect);
+      ell(e.rect, 128, 96);
     }
+    if (this.boss && !this.boss.defeated) ell(this.boss.rect, 112, 120);
     const p = this.player;
-    if (p && !p.dead) ell(p.rect);
+    // the suit is the one genuinely hard, dark, lacquered surface on screen
+    if (p && !p.dead) ell(p.rect, 76, 186);
   }
 
   // ── wet surfaces ─────────────────────────────────────────────────────
