@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Caballero Oscuro de Gotham</title>
+<style>
+*{margin:0;padding:0}
+img{max-width:100%}
+
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap');
+
+:root{
+  --ink:#05060f;
+  --midnight:#0d1226;
+  --violet:#1a1033;
+  --gold:#f5c518;
+  --gold-dim:#8a7220;
+  --steel:#7f93c9;
+  --muted:#5a6486;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--ink);
+  background-image:
+    radial-gradient(ellipse 90% 60% at 50% 0%, #16112e 0%, transparent 70%),
+    radial-gradient(ellipse 70% 50% at 50% 100%, #0e0a1e 0%, transparent 70%);
+  color:var(--steel);
+  font-family:Oswald,"Helvetica Neue",system-ui,sans-serif;
+  min-height:100dvh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:14px;
+  padding-block:18px;
+  padding-left:16px;
+  padding-right:16px;
+  overscroll-behavior:none;
+}
+#stage{
+  position:relative;
+  width:min(100%,1120px);
+  aspect-ratio:16/9;
+  border-radius:10px;
+  overflow:hidden;
+  background:#05060f;
+  box-shadow:
+    0 0 0 1px rgba(245,197,24,.22),
+    0 0 44px rgba(245,197,24,.07),
+    0 26px 70px rgba(0,0,0,.85);
+}
+#stage canvas{position:absolute;inset:0;display:block;width:100%;height:100%;touch-action:none}
+
+/* ── legend rail ── */
+#rail{
+  width:min(100%,1120px);
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:center;
+  gap:6px 20px;
+  font-size:12px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--muted);
+}
+#rail b{
+  color:var(--gold);
+  font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-weight:700;
+  letter-spacing:.04em;
+  font-size:11px;
+  border:1px solid var(--gold-dim);
+  border-radius:4px;
+  padding:2px 6px;
+  margin-right:5px;
+}
+#rail span{white-space:nowrap}
+
+/* ── touch pad: its own row BELOW the stage, never over the canvas ── */
+#pad{
+  display:none;
+  width:min(100%,1120px);
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+}
+.pad-g{display:flex;gap:10px;align-items:center}
+.pbtn{
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;user-select:none;-webkit-user-select:none;
+  font-family:Oswald,sans-serif;font-weight:600;letter-spacing:.06em;
+  width:74px;height:74px;border-radius:50%;
+  border:1.5px solid rgba(245,197,24,.55);
+  background:rgba(14,14,30,.9);
+  color:var(--gold);font-size:20px;line-height:1;
+  display:grid;place-items:center;
+  flex:none;
+}
+.pbtn.big{width:104px;height:104px;font-size:15px;background:rgba(44,26,8,.95);border-color:var(--gold)}
+.pbtn.small{font-size:10px}
+.pbtn.tiny{width:42px;height:42px;font-size:14px;border-color:rgba(245,197,24,.35);color:var(--muted)}
+.pbtn:active{background:rgba(245,197,24,.3);transform:scale(.94)}
+
+@media (pointer:coarse),(max-width:720px){
+  #pad{display:flex;flex-wrap:wrap}
+  #rail{display:none}
+  body{padding-block:10px;gap:10px;
+       justify-content:flex-start;      /* fallback: never clips the top */
+       justify-content:safe center}     /* centers, but yields to flex-start on overflow */
+}
+
+/* narrow phones: shrink the controls so the row can never overflow */
+@media (max-width:470px){
+  body{padding-left:10px;padding-right:10px}
+  #pad{gap:6px}
+  .pad-g{gap:7px}
+  .pbtn{width:64px;height:64px;font-size:19px}
+  .pbtn.big{width:88px;height:88px;font-size:13px}
+  .pbtn.small{width:54px;font-size:9px}
+  .pbtn.tiny{width:36px;height:36px;font-size:12px}
+}
+
+/* short landscape: size the stage from the HEIGHT so the pad stays on screen */
+@media (max-height:560px) and (orientation:landscape){
+  body{padding-block:8px;gap:8px}
+  #stage{height:calc(100dvh - 116px);width:auto;max-width:100%}
+  #pad{width:auto}
+  /* the enlarged jump button does not fit a short landscape window at full size */
+  .pbtn{width:58px;height:58px;font-size:17px}
+  .pbtn.big{width:78px;height:78px;font-size:12px}
+  .pbtn.tiny{width:36px;height:36px;font-size:12px}
+}
+
+:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+@media (prefers-reduced-motion:reduce){.pbtn:active{transform:none}}
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="gc" width="960" height="540" aria-label="Juego de plataformas de Batman"></canvas>
+  <canvas id="fx" width="960" height="540" aria-hidden="true"></canvas>
+</div>
+<div id="pad">
+  <div class="pad-g">
+    <button id="bL" class="pbtn" type="button" aria-label="Izquierda">&#9664;</button>
+    <button id="bR" class="pbtn" type="button" aria-label="Derecha">&#9654;</button>
+  </div>
+  <div class="pad-g">
+    <button id="bP" class="pbtn tiny" type="button" aria-label="Pausa">II</button>
+    <button id="bM" class="pbtn tiny" type="button" aria-label="Sonido">&#9834;</button>
+  </div>
+  <div class="pad-g">
+    <button id="bA" class="pbtn big" type="button" aria-label="Saltar">SALTO</button>
+  </div>
+</div>
+<div id="rail">
+  <span><b>&#8592; &#8594;</b>Mover</span>
+  <span><b>Espacio</b>Saltar</span>
+  <span><b>Shift</b>Correr</span>
+  <span><b>P</b>Pausa</span>
+  <span><b>M</b>Sonido</span>
+</div>
+
+<script>
