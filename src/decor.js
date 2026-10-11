@@ -116,6 +116,11 @@ class Decor {
         ctx.lineTo(x + 7, topY + 1);
         ctx.lineTo(x - 7, topY + 1);
         ctx.closePath(); ctx.fill();
+        // the hood's own underside catches the bulb — without it the head is a
+        // flat dark wedge with a glow pasted under it
+        ctx.globalAlpha = 0.5 * flick;
+        ctx.fillStyle = rgb;
+        ctx.fillRect(x - 9, topY + 6.5, 18, 1.8);
         ctx.globalAlpha = flick;
         ctx.fillStyle = rgb;
         ctx.shadowColor = rgb;
@@ -136,6 +141,38 @@ class Decor {
         ctx.lineTo(x + 30, it.y);
         ctx.lineTo(x - 30, it.y);
         ctx.closePath(); ctx.fill();
+
+        // Rain lit inside the cone. This is the cheapest realism cue in the
+        // whole scene: you do not see rain falling at night, you see the slice
+        // of it that passes through a streetlight. Clipped to the cone the
+        // lamp already throws, so the two can never disagree, and seeded off
+        // the lamp's own column so it stays deterministic.
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(x - 7, topY + 10);
+        ctx.lineTo(x + 7, topY + 10);
+        ctx.lineTo(x + 30, it.y);
+        ctx.lineTo(x - 30, it.y);
+        ctx.closePath();
+        ctx.clip();
+        ctx.strokeStyle = rgb;
+        ctx.lineWidth = 1;
+        const span = it.y - topY - 10;
+        for (let k = 0; k < 14; k++) {
+          const ph = DC_hash(it.seed * 3.1 + k * 7.7);
+          const sp = 440 + ph * 420;
+          let ry = ((ph * span) + t * sp) % span;
+          const ry0 = topY + 10 + ry;
+          const rx = x - 34 + DC_hash(it.seed + k * 2.3) * 68;
+          // brightest in the middle of the beam, gone at its edges
+          ctx.globalAlpha = 0.30 * flick * (1 - Math.abs(rx - x) / 40) * (1 - ry / span * 0.5);
+          if (ctx.globalAlpha <= 0.01) continue;
+          ctx.beginPath();
+          ctx.moveTo(rx, ry0);
+          ctx.lineTo(rx - 4, ry0 + 15);
+          ctx.stroke();
+        }
+        ctx.restore();
       }
       ctx.restore();
       ctx.globalAlpha = 1;
