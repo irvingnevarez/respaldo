@@ -794,7 +794,7 @@ class Lightning {
     };
 
     // outer violet glow -> mid blue -> white core
-    strokeChain(pts, 16, FX_rgba(PAL.skyGlow, 0.35), 26);
+    strokeChain(pts, 16, FX_rgba(PAL.skyGlow, 0.22), 26);
     strokeChain(pts, 7, FX_rgba(PAL.moonGlow, 0.6), 18);
     strokeChain(pts, 2.6, 'rgba(255,255,255,0.95)', 12);
 
@@ -826,7 +826,7 @@ class Lightning {
 
     // --- glow bloom around the strike origin
     ctx.shadowBlur = 0;
-    ctx.globalAlpha = vis * 0.5;
+    ctx.globalAlpha = vis * 0.22;
     ctx.save();
     ctx.translate(this.boltX, 0);
     ctx.scale(190, 190);

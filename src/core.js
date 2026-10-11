@@ -848,15 +848,15 @@ class Game {
     // lightning was never rescaled to match — a strike blew the whole frame to
     // flat white. A strike should read as a hard, brief wash that still leaves
     // the silhouettes readable, so every term that feeds it is now smaller.
-    p.flash = fl * 0.10;
+    p.flash = fl * 0.045;
     // and drives the directional light, so a strike genuinely rakes across the
     // geometry instead of just brightening the image
     // The moon is the key light, so it has to be bright enough to model the
     // geometry: at 0.13 it was barely above the ambient and every surface came
     // out the same value, which is why the playfield merged into the skyline.
-    p.sunCol[0] = 0.30 + fl * 0.46;
-    p.sunCol[1] = 0.33 + fl * 0.50;
-    p.sunCol[2] = 0.39 + fl * 0.58;
+    p.sunCol[0] = 0.30 + fl * 0.17;
+    p.sunCol[1] = 0.33 + fl * 0.19;
+    p.sunCol[2] = 0.39 + fl * 0.23;
 
     // A strike is a light source, not a colour wash. Each one picks its own
     // steep angle and, while it lasts, takes over the directional shadow with

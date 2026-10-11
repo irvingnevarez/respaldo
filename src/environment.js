@@ -1,3 +1,7 @@
+// NOTE ON LIGHTNING: every term below that scales with L was authored when
+// the post chain ran at exposure 1.30. The grade rework took it to 1.95 and a
+// strike began blowing the entire frame to flat white — silhouettes and all.
+// They are scaled to match; if exposure moves again, these move with it.
 // =====================================================================
 //  environment.js  --  Gotham backdrop  (prefix: ENV_)
 //  Sky, moon, bat-signal, three parallax skyline layers, smog, vignette.
@@ -274,10 +278,10 @@ function drawGothamSky(ctx, camX, t, lightning) {
   if (L > 0.001) {
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = 1;
-    ctx.fillStyle = 'rgba(112,134,190,' + (L * 0.55).toFixed(3) + ')';
+    ctx.fillStyle = 'rgba(112,134,190,' + (L * 0.085).toFixed(3) + ')';
     ctx.fillRect(0, 0, CW, CH);
     ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = 'rgba(214,228,255,' + (L * 0.20).toFixed(3) + ')';
+    ctx.fillStyle = 'rgba(214,228,255,' + (L * 0.025).toFixed(3) + ')';
     ctx.fillRect(0, 0, CW, CH);
   }
 
@@ -533,13 +537,13 @@ function ENV_layer(ctx, camX, t, L, tier) {
 
     // ---- edge rim light ------------------------------------------------
     ENV_poly(ctx, pts);
-    ctx.strokeStyle = rimCol + (0.10 + L * 0.75).toFixed(3) + ')';
+    ctx.strokeStyle = rimCol + (0.10 + L * 0.22).toFixed(3) + ')';
     ctx.lineWidth = tier === 2 ? 1.6 : 1.1;
     ctx.stroke();
     if (L > 0.02) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = 'rgba(200,220,255,' + (L * 0.55).toFixed(3) + ')';
+      ctx.strokeStyle = 'rgba(200,220,255,' + (L * 0.28).toFixed(3) + ')';
       ctx.lineWidth = tier === 2 ? 2.6 : 1.8;
       ctx.stroke();
       ctx.restore();
@@ -652,7 +656,7 @@ function drawForegroundVignette(ctx, lightning) {
 
   if (L > 0.01) {
     ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = 'rgba(150,175,230,' + (L * 0.14).toFixed(3) + ')';
+    ctx.fillStyle = 'rgba(150,175,230,' + (L * 0.02).toFixed(3) + ')';
     ctx.fillRect(0, 0, CW, CH);
     ctx.globalCompositeOperation = 'source-over';
   }
