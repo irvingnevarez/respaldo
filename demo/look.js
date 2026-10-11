@@ -20,7 +20,7 @@ const SHOTS = [[0, 6.0, 'calle'], [0, 13.5, 'salto'], [1, 3.0, 'azotea'], [3, 9.
       window.cancelAnimationFrame = () => { };
       window.__flush = ts => { const q = window.__q; window.__q = []; for (const c of q) { try { c(ts); } catch (e) { } } };
     });
-    await p.goto('file://' + path.join(__dirname, 'game.html'), { waitUntil: 'load' });
+    await p.goto('file://' + path.join(__dirname, '..', 'game.html'), { waitUntil: 'load' });
     await p.waitForFunction(() => !!window.__game, null, { timeout: 20000 });
     await p.evaluate(a => {
       (0, eval)(a[0]);

@@ -27,7 +27,13 @@ const FPS = 60, TOTAL = Math.round(SECS * FPS);
 (async () => {
   let src = fs.readFileSync(path.join(__dirname, 'aprollout.js'), 'utf8') + '\n;\n' +
     fs.readFileSync(path.join(__dirname, BOT), 'utf8');
-  if (POLICY) src += '\n;\n' + fs.readFileSync(path.join(__dirname, POLICY), 'utf8');
+  // --policy takes a comma-separated list: AP_BOSS lives in policy-penguin.js
+  // and dispatches to the per-boss policies, so both have to be loaded.
+  if (POLICY) {
+    for (const f of POLICY.split(',')) {
+      src += '\n;\n' + fs.readFileSync(path.join(__dirname, f.trim()), 'utf8');
+    }
+  }
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1000, height: 640 } });
   const errs = [];
@@ -45,7 +51,7 @@ const FPS = 60, TOTAL = Math.round(SECS * FPS);
       }
     };
   });
-  await page.goto('file://' + path.join(__dirname, 'game.html'), { waitUntil: 'load' });
+  await page.goto('file://' + path.join(__dirname, '..', 'game.html'), { waitUntil: 'load' });
   await page.waitForFunction(() => !!window.__game, null, { timeout: 20000 });
 
   await page.evaluate(a => {

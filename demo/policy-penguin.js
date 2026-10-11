@@ -233,7 +233,18 @@ function BP_penguin(g, p, b) {
 
 function AP_BOSS(g, p, b, tick) {
   if (!b || b.defeated) return null;
-  if (b.state === 'intro') { BP_jf = 0; return BP_emit(false, false, false); }
+  if (b.state === 'intro') {
+    BP_jf = 0;
+    // The Joker's intro is 2.4 seconds during which he throws NOTHING, and
+    // standing through it is how the bot kept losing phase 1: the ride then
+    // starts with him 400px away and a volley already in the air, and from a
+    // standing start the player cannot cross the danger band before the cards
+    // come down. Walking into position during the intro turns an unwinnable
+    // opening into a free one. The penguin has no equivalent opening, so it
+    // keeps waiting.
+    if (b.kind === 'joker' && typeof BJ_joker === 'function') return BJ_joker(g, p, b);
+    return BP_emit(false, false, false);
+  }
   if (b.kind === 'penguin') return BP_penguin(g, p, b);
   if (typeof BJ_joker === 'function') return BJ_joker(g, p, b);
   return null;

@@ -72,7 +72,7 @@ const JPEG_Q = 0.95;
     };
   });
 
-  await page.goto('file://' + path.join(__dirname, 'game.html'), { waitUntil: 'load' });
+  await page.goto('file://' + path.join(__dirname, '..', 'game.html'), { waitUntil: 'load' });
   await page.waitForFunction(() => !!window.__game, null, { timeout: 20000 });
 
   await page.evaluate(a => {
