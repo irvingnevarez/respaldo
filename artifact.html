@@ -11224,10 +11224,19 @@ class Game {
     if (p && this.state === ST.PLAY && Math.abs(p.vx) > RUN * 0.9) drawSpeedLines(ctx, t, 0.5);
     if (p && p.star > 0) drawSpeedLines(ctx, t, 0.8);
 
+    // lvIdx is incremented BEFORE the state flips to WIN, so after the last level
+    // it points one past the end of LEVELS. The HUD is drawn in every state but
+    // the title, and reading LEVELS[8].id threw on the first frame of the
+    // victory screen. The exception escaped draw(), the frame loop never
+    // rescheduled itself, and beating the final boss froze the game on
+    // "NIVEL COMPLETADO" for good: no victory screen, no way to restart. It sat
+    // there unseen because nothing had ever finished the game, human or bot.
+    const lvInfo = LEVELS[Math.min(this.lvIdx, LEVELS.length - 1)];
+
     if (this.state !== ST.TITLE) {
       drawHUD(ctx, {
         lives: this.lives, score: this.score, batarangs: this.rangs,
-        levelId: LEVELS[this.lvIdx].id, levelName: LEVELS[this.lvIdx].name,
+        levelId: lvInfo.id, levelName: lvInfo.name,
         starActive: p ? p.star > 0 : false, starTimer: p ? p.star : 0,
         best: this.best, time: t
       });
@@ -11244,7 +11253,7 @@ class Game {
       case ST.TITLE: drawTitleScreen(ctx, t, this.blink); break;
       case ST.PAUSE: drawPauseOverlay(ctx, t); break;
       case ST.DEAD: drawDeathOverlay(ctx, t, this.lives); break;
-      case ST.CLEAR: drawLevelCompleteOverlay(ctx, t, this.score, LEVELS[this.lvIdx].name); break;
+      case ST.CLEAR: drawLevelCompleteOverlay(ctx, t, this.score, lvInfo.name); break;
       case ST.OVER: drawGameOverOverlay(ctx, t, this.score, this.best, this.blink); break;
       case ST.WIN: drawWinOverlay(ctx, t, this.score, this.best, this.blink); break;
     }

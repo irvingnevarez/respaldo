@@ -102,6 +102,32 @@ async function fresh(browser, opts) {
     await page.close();
   }
 
+  // ── pantallas finales ─────────────────────────────────────────────────
+  // Beating the last boss froze the game for good: the engine bumps lvIdx before
+  // switching to WIN, the HUD then read LEVELS[8].id, the exception escaped
+  // draw() and the frame loop never rescheduled. Nothing had ever finished the
+  // game, so nothing had ever drawn this screen. Reproduce the transition the way
+  // the engine does it -- lvIdx one past the end -- and require that the loop is
+  // still alive a moment later.
+  for (const [name, st, bump] of [['victoria', 'win', true], ['fin de juego', 'over', false]]) {
+    const { page, errs } = await fresh(browser, { viewport: { width: 1100, height: 700 } });
+    await page.goto(GAME, { waitUntil: 'load' });
+    await page.waitForFunction(() => !!window.__game, null, { timeout: 25000 });
+    const r = await page.evaluate(async a => {
+      const g = window.__game;
+      g.startRun(); g.lvIdx = 7; g.loadLevel(7);
+      if (a[1]) g.lvIdx = LEVELS.length;
+      g.state = a[0]; g.stateT = 0;
+      const t0 = g.stateT;
+      await new Promise(res => setTimeout(res, 1600));
+      return { advanced: g.stateT > t0 + 0.15, stateT: +g.stateT.toFixed(2) };
+    }, [st, bump]);
+    ok(name, errs.length === 0 && r.advanced,
+      'stateT=' + r.stateT + ' bucle=' + (r.advanced ? 'vivo' : 'MUERTO') + ' errores=' + errs.length);
+    if (errs.length) errs.slice(0, 2).forEach(e => console.log('         ' + e));
+    await page.close();
+  }
+
   // ── los dos jefes ─────────────────────────────────────────────────────
   for (const [name, idx] of [['pingüino', 3], ['joker', 7]]) {
     const { page, errs } = await fresh(browser, { viewport: { width: 1000, height: 640 } });
