@@ -195,8 +195,90 @@ function BJ_hopTo(p, from, to) {
   return BP_emit(!goRight, goRight, true);
 }
 
+// Velocity-aware go-to. Pressing toward a target until arrival overshoots,
+// because a runner at 310 px/s needs ~19px to stop on the ground and far more in
+// the air, and the spot this is used for has a 24px margin before a ledge.
+function BJ_arrive(p, tx) {
+  var d = tx - p.rect.cx, v = p.vx;
+  var a = p.onGround ? 2600 : 1200;
+  if (Math.abs(d) < 5 && Math.abs(v) < 30) return BP_emit(false, false, false);
+  // where we would come to rest relative to the target if we let go now
+  var rem = d - v * Math.abs(v) / (2 * a);
+  BJ_dir = d < 0 ? -1 : 1; BJ_run = false;
+  if (rem > 5) return BP_emit(false, true, Math.abs(d) > 90);
+  if (rem < -5) return BP_emit(true, false, Math.abs(d) > 90);
+  return BP_emit(false, false, false);
+}
+
+// ── PHASE 3 AMBUSH ───────────────────────────────────────────────────────
+//
+// Found by SEARCH, not by reasoning (demo/plan3.js): 8640 open-loop plans
+// replayed against the real engine from the exact state phase 3 begins in.
+// Three rounds of arc geometry had produced three wrong answers; the search
+// found a winning region in seconds.
+//
+// He has ONE point of health left, so a single stomp in his FIRST throw ends the
+// fight and the dense steady-state cycles never matter. And the first throw is
+// perfectly predictable: the fourth stomp always happens at his teleport spot 0
+// (cx=150), he is then dazed for 0.6s and walks right at 160 px/s for 1.0s, so
+// he opens at cx = 150 + 160 = 311 — right beside the end of the left deck.
+//
+// The deck ends at x=288 and his hitbox runs to x=347. A player standing at its
+// right end and stepping off the moment he opens falls straight onto his head:
+// from x=280 on the deck, 76 of 114 plans win, across every jump distance and a
+// window of more than a second. From x<=200 none do.
+//
+// Returns null when this does not apply (he is not on the left), so the
+// steady-state logic still runs for any later cycle.
+var BJ_SPOT = 280;
+
+// Still standing on the left deck. BJ_onPlat is NOT good enough here: it stops
+// at the platform edge plus a 6px margin (x=294), but a player is supported
+// until his LEFT edge passes the tile edge at 288, i.e. until his centre
+// reaches ~303. In that nine pixel strip BJ_onPlat said "not on the deck", the
+// ambush returned null on the one frame that mattered, and the old phase-3 code
+// fired a full jump that carried the bot clean over the boss (traced: pol flips
+// to 'punish3' for a single frame at px=295.9, then BP_jf=20 holds the jump).
+function BJ_onDeck0(p) {
+  return p.onGround && Math.abs(p.rect.b - 384) < 6 && p.rect.cx > 64 && p.rect.cx < 312;
+}
+
+function BJ_ambush(p, b) {
+  var bx = b.rect.cx;
+  if (bx > 360) return null;
+  // open now, or opening on the next frame or two: start the step-off early
+  // enough that the edge, 24px away, is reached after he turns vulnerable
+  // (0.155s from a standstill) rather than before it
+  var strike = (b.state === 'throw' && b.t < 0.9) || (b.state === 'ground' && b.t >= 0.93);
+  if (!p.onGround) {
+    BJ_why = strike ? 'golpe' : 'emboscada';
+    if (!strike) return BJ_arrive(p, BJ_SPOT);
+    // already falling toward him: just ease onto his column. Pressing run here
+    // would carry us over the far side of his hitbox.
+    var adx = bx - p.rect.cx;
+    if (Math.abs(adx) > 14) return BP_emit(adx < 0, adx > 0, false);
+    return BP_emit(false, false, false);
+  }
+  if (!BJ_onDeck0(p)) return null;              // not on the deck: generic logic
+  if (strike) {
+    // WALK off the end, do not run and do not jump. Falling from the edge puts
+    // the feet below his head the very next frame, and any momentum is paid for
+    // in distance: at walking pace the fall (0.134s) lands us ~25px past the
+    // edge, squarely on his 72px hitbox; at a full run it is 41px.
+    BJ_why = 'golpe'; BJ_dir = 1; BJ_run = false;
+    return BP_emit(false, true, false);
+  }
+  BJ_why = 'emboscada';
+  return BJ_arrive(p, BJ_SPOT);
+}
+
 function BJ_joker(g, p, b) {
   BP_lastP = p;
+
+  if (b.phase === 3 && b.state !== 'intro') {
+    var amb = BJ_ambush(p, b);
+    if (amb) return amb;
+  }
 
   // Airborne. Holding the take-off heading is right for a dodge and wrong for a
   // stomp: on a punish the bot arrived directly over his head at x=148 against

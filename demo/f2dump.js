@@ -19,7 +19,13 @@ const { chromium } = require(path.join(execSync('npm root -g').toString().trim()
       const pl=g.player, bo=g.boss;
       let act={L:0,R:0,run:0,jump:0};
       try{act=AUTOPILOT(g,i)||act}catch(e){if(!window.__ae)window.__ae=e.message;}
-      if(bo && bo.phase===3 && i%5===0){
+      if(bo && bo.phase===3 && bo.state!=='intro' && ((bo.state==='ground'&&bo.t>0.85)||(bo.state==='throw'&&bo.t<0.5))){
+        log.push('   [fino] t='+(i/60).toFixed(3)+' '+bo.state+' bt='+bo.t.toFixed(3)+' px='+pl.rect.cx.toFixed(1)+
+          ' vx='+Math.round(pl.vx)+' suelo='+(pl.onGround?1:0)+' pies='+Math.round(pl.rect.b)+
+          ' act='+(act.L?'L':act.R?'R':'-')+(act.run?'+':'')+(act.jump?'J':'')+
+          ' BP_jf='+BP_jf+' BP_stuck='+BP_stuck+' pol='+BJ_why);
+      }
+      if(false && bo && bo.phase===3 && i%5===0){
         log.push('t='+(i/60).toFixed(2)+' px='+Math.round(pl.rect.cx)+' pies='+Math.round(pl.rect.b)+
           ' plat='+BJ_onPlat(pl)+' tp='+bo.tpIndex+' '+bo.state.padEnd(8)+
           ' bx='+Math.round(bo.rect.cx)+' gas='+Math.round(bo.gasY)+
