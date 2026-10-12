@@ -81,7 +81,12 @@ const TOTAL = Math.round(SECS * FPS);
     window.__tick = function (ts, tick, freeze) {
       const g = window.__game;
       let act = { L: false, R: false, run: false, jump: false };
-      if (!freeze && g) { try { act = AUTOPILOT(g, tick) || act; } catch (e) { } }
+      // Hold the victory screen. In 'win' the autopilot pulses jump like it does
+      // in any menu, and the engine restarts the run 0.8s after the overlay
+      // appears -- which would cut away from "GOTHAM ESTÁ A SALVO" just as it
+      // fades in. No earlier segment ever reaches this state, so freezing here
+      // changes nothing already recorded.
+      if (!freeze && g && g.state !== 'win') { try { act = AUTOPILOT(g, tick) || act; } catch (e) { } }
       IN.L = !!act.L; IN.R = !!act.R; IN.run = !!act.run;
       if (act.jump && !window.__pj) { IN.jumpBuf = BUFFER; IN.anyPress = true; }
       IN.jumpHeld = !!act.jump; window.__pj = !!act.jump;

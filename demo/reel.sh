@@ -4,7 +4,8 @@
 #
 # Segment lengths come from measurement, not guesswork — runlevel.js reports how
 # long each level plays clean, and each cut stops about a second before the bot
-# would slip, so no death is ever on camera.
+# would slip, so no death is ever on camera. Both bosses are now beaten outright,
+# so their segments run to the end of the fight instead of stopping short.
 set -e
 cd "$(dirname "$0")"
 
@@ -25,18 +26,26 @@ mkdir -p seg
 #   0      27.0     title + MUELLES DE GOTHAM    clears at 21.4s, plus the card
 #   1      5.0      AZOTEAS                      clean to 5.5s
 #   2      15.0     TORRE DE ARKHAM              clean to 16.2s
-#   3      20.5     EL PINGÜINO                  two hits land at 6.5s and 16.3s
+#   3      20.8     EL PINGÜINO                  BEATEN: hits at 6.6, 11.1, 15.7s, no
+#                                                deaths; the clear screen runs 2.6s
+#                                                from 18.3s and the next level loads
+#                                                at 20.9s, so 20.8 is the last safe cut
 #   4      12.0     ALCANTARILLAS                clean to 12.9s
 #   5      25.0     FUNDICIÓN DE ACERO           never dies, 31.8s
 #   6      6.5      EL PUENTE                    clean to 6.9s
+#   7      37.5     EL JOKER                     BEATEN: five hits, last at 27.9s, no
+#                                                deaths; clear at 30.5s, victory screen
+#                                                at 33.1s and held (segment.js freezes
+#                                                the bot in 'win') for 4.4s
 SEGS=(
   "0 27.0 1"
   "1 5.0 0"
   "2 15.0 0"
-  "3 20.5 0"
+  "3 20.8 0"
   "4 12.0 0"
   "5 25.0 0"
   "6 6.5 0"
+  "7 37.5 0"
 )
 
 echo "== grabando segmentos =="
