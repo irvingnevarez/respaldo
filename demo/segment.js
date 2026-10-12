@@ -45,8 +45,13 @@ const TOTAL = Math.round(SECS * FPS);
 (async () => {
   const src = fs.readFileSync(path.join(__dirname, 'aprollout.js'), 'utf8') + '\n;\n' +
     fs.readFileSync(path.join(__dirname, 'autopilot.js'), 'utf8') + '\n;\n' +
-    (fs.existsSync(path.join(__dirname, 'policy-penguin.js'))
-      ? fs.readFileSync(path.join(__dirname, 'policy-penguin.js'), 'utf8') : '');
+    // policy-penguin.js defines AP_BOSS and the shared emit machinery, and
+    // dispatches to BJ_joker; the Joker's policy has to be loaded after it. Until
+    // this line existed the reel could not record the final boss at all.
+    ['policy-penguin.js', 'policy-joker.js']
+      .map(f => fs.existsSync(path.join(__dirname, f))
+        ? fs.readFileSync(path.join(__dirname, f), 'utf8') : '')
+      .join('\n;\n');
 
   const browser = await chromium.launch();
   const ctx = await browser.newContext({

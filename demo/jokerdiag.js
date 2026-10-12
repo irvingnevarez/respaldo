@@ -13,6 +13,8 @@ const path = require('path');
 const { chromium } = require(path.join(execSync('npm root -g').toString().trim(), 'playwright'));
 
 const SECS = parseFloat(process.argv[2] || '60');
+// node jokerdiag.js [seconds] [level]   level 7 = Joker (default), 3 = Penguin
+const LVL = parseInt(process.argv[3] || '7', 10);
 
 (async () => {
   const src = ['aprollout.js', 'autopilot.js', 'policy-penguin.js', 'policy-joker.js']
@@ -38,7 +40,7 @@ const SECS = parseFloat(process.argv[2] || '60');
     (0, eval)(a[0]);
     const g = window.__game;
     g.draw = function () { };
-    g.startRun(); g.lvIdx = 7; g.loadLevel(7); g.state = 'play';
+    g.startRun(); g.lvIdx = a[2]; g.loadLevel(a[2]); g.state = 'play';
     const p = g.player;
     g.lives = 99;
     let reloads = 0;
@@ -88,7 +90,7 @@ const SECS = parseFloat(process.argv[2] || '60');
         px: Math.round(p.rect.cx), pb: Math.round(p.rect.b),
         bx: b ? Math.round(b.rect.cx) : -1, by: b ? Math.round(b.rect.y) : -1,
         porque: why.length ? why.join(' | ') : '??? ninguna prueba dio positivo',
-        why: typeof BJ_why !== 'undefined' ? BJ_why : '-',
+        why: (a[2] === 7 ? (typeof BJ_why !== 'undefined' ? BJ_why : '-') : (typeof BP_why !== 'undefined' ? BP_why : '-')),
       });
       return realHurt(game);
     }
@@ -124,7 +126,7 @@ const SECS = parseFloat(process.argv[2] || '60');
       seg: +(frame / 60).toFixed(1),
       apErr: window.__ae || null, loopErr: window.__err || null,
     };
-  }, [src, Math.round(SECS * 60)]);
+  }, [src, Math.round(SECS * 60), LVL]);
 
   console.log('recargas(muertes): ' + out.recargas);
   console.log('golpes recibidos: ' + out.hits.length +

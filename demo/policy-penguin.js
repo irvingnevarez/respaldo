@@ -13,6 +13,8 @@
 // ═══════════════════════════════════════════════════════════════════════
 
 var BP_GROUND = 15 * 32;        // walkable floor surface, matches BE_GROUND
+var BP_AMB_D = 120;             // standoff for the slam stomp, centre of the 70-160 band
+var BP_AMB_TJ = 0.80;           // seconds into the warning: the instant the slam begins
 var BP_LEFT = 40, BP_RIGHT = 920;
 var BP_prevJump = false;
 var BP_jf = 0;                  // frames of jump still to hold
@@ -164,7 +166,20 @@ function BP_penguin(g, p, b) {
 
   // Airborne: hold the course chosen on take-off. Emitting no direction here is
   // the same bug that made the bot jump straight up in the starting notch.
-  if (!onG) return BP_emit(BP_dir < 0, BP_dir > 0, BP_run);
+  //
+  // The exception is a stomp in progress. Once he has slammed (or is face-down)
+  // the jump we are in was made FOR him, and it only lands on his head if it is
+  // steered there: demo/planpeng.js found that every winning plan steers, and
+  // none of the plans that hold the take-off heading win at all.
+  if (!onG) {
+    if (b.state === 'slam' || b.state === 'dazed') {
+      BP_why = 'aire';
+      var ad0 = b.rect.cx - p.rect.cx;
+      if (Math.abs(ad0) > 6) return BP_emit(ad0 < 0, ad0 > 0, false);
+      return BP_emit(false, false, false);
+    }
+    return BP_emit(BP_dir < 0, BP_dir > 0, BP_run);
+  }
 
   function go(dir, run) { BP_dir = dir; BP_run = run; return BP_emit(dir < 0, dir > 0, run); }
 
@@ -189,10 +204,42 @@ function BP_penguin(g, p, b) {
     return go(d2 > 6 ? 1 : (d2 < -6 ? -1 : BP_dir), true);
   }
 
-  // 3. He drops straight down onto his own column, so be anywhere else.
+  // 3. THE SLAM. He drops straight down onto his own column after a 0.8s
+  //    warning, and the impact throws shockwaves along the floor.
+  //
+  //    This used to flee to the mirror image of his position, which is safe and
+  //    wins nothing: it arrived at the impact ~180px away on the ground, too far
+  //    to reach his head inside the 1.6s window and in the path of the waves,
+  //    and every death in phase 3 was that same wave, against the same wall.
+  //
+  //    Found by search (demo/planpeng.js, 11400 open-loop plans per phase):
+  //    stand about 120px from him, jump the moment the slam begins, and steer
+  //    onto his column in the air. 1369 plans win and the region is wide — any
+  //    standoff from 70 to 160px, any jump time in the second half of the
+  //    warning — so it is not a tuned spike. The phases give IDENTICAL maps,
+  //    since the slam geometry does not change, so one rule serves all three.
   if (b.state === 'telegraph' || b.state === 'slam') {
     BP_why = 'slam';
-    var mirror = 40 + 920 - b.rect.cx;
+    var tTel = b.state === 'telegraph' ? b.t : 0.8 + b.t;
+    var bxs = b.rect.cx;
+    var sd = p.rect.cx < bxs ? -1 : 1;
+    var tgt = bxs + sd * BP_AMB_D;
+    if (tgt < 70 || tgt > 890) { sd = -sd; tgt = bxs + sd * BP_AMB_D; }
+    var dNow = Math.abs(bxs - p.rect.cx);
+    if (tTel >= BP_AMB_TJ && dNow > 70 && dNow < 165) {
+      // in the window: go. No horizontal input at take-off; the air branch above
+      // does the steering.
+      BP_jump(22);
+      BP_dir = bxs > p.rect.cx ? 1 : -1; BP_run = false;
+      return BP_emit(false, false, false);
+    }
+    if (tTel < BP_AMB_TJ) {
+      var ra = BP_goto(p, tgt, true, bands);
+      BP_dir = tgt > p.rect.cx ? 1 : -1; BP_run = true;
+      return ra;
+    }
+    // Late and out of the window: do not stand where he lands. Mirror away.
+    var mirror = 40 + 920 - bxs;
     if (mirror < 150) mirror = 150;
     if (mirror > 810) mirror = 810;
     var r3 = BP_goto(p, mirror, true, bands);
