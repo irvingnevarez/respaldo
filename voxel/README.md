@@ -51,3 +51,13 @@ en cualquier worker y en cualquier orden, y los vecinos coinciden en las costura
 - `vshot.js`, `vtour.js`, `vplay.js`, `vlive.js` — capturas deterministas: escenas libres, un recorrido por los lugares, escenarios de juego, y el bucle real con teclas reales.
 - `map.js` — mapa cenital de la ciudad sin navegador.
 - `loadcore.js` — carga los módulos en un solo ámbito: medir velocidad dentro de `vm` engaña (10–50× más lento).
+
+## El tráiler (`voxel/demo/trailer/`)
+
+`make.sh <carpeta> [ancho alto]` graba el tráiler del juego real, fotograma a fotograma:
+`director.js` (se inyecta en la página) monta cada toma, juega como un jugador y mueve una
+cámara de cine; `pilot.js` vuela el planeo esquivando torres (el plan sale de `plan-glide.js`,
+que prueba cientos de rutas en la simulación de Node); `capture.js` graba grupos de tomas en
+paralelo y registra cada sonido con su tiempo; `score.js` + `mkscore.js` sintetizan la banda
+sonora con el propio audio del juego en un `OfflineAudioContext`; `wavstat.js` mide su volumen.
+Con `capture.js … --stills N` se hace un guion gráfico rápido en lugar del vídeo.
