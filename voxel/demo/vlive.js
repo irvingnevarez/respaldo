@@ -1,0 +1,43 @@
+// The real frame loop (no capture mode): boot, title, start, move with real key events.
+//   node voxel/demo/vlive.js <out-prefix> [w h]
+const { execSync } = require('child_process');
+const path = require('path');
+const { chromium } = require(path.join(execSync('npm root -g').toString().trim(), 'playwright'));
+const PAGE = path.resolve(process.env.VX_PAGE || path.join(__dirname, '..', 'index.html'));
+const OUT = process.argv[2] || 'vl';
+const W = +(process.argv[3] || 1280), H = +(process.argv[4] || 720);
+(async () => {
+  const b = await chromium.launch();
+  const p = await b.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
+  const errs = [], logs = [];
+  p.on('pageerror', e => errs.push(e.message + (e.stack ? ' @ ' + e.stack.split('\n')[1] : '')));
+  p.on('console', m => { if (m.type() === 'error') logs.push(m.text()); });
+  await p.goto('file://' + PAGE, { waitUntil: 'load' });
+  await p.waitForFunction(() => window.__vx && __vx.vx().state !== 'boot', null, { timeout: 180000, polling: 300 });
+  await p.waitForTimeout(1500);
+  const shot = async n => { await p.locator('#stage').screenshot({ path: OUT + '-' + n + '.png' }); console.log('  ' + n); };
+  const st = () => p.evaluate(() => { const v = __vx.vx(), g = __vx.gs(), pl = g.player; return { state: v.state, x: +pl.b.x.toFixed(1), y: +pl.b.y.toFixed(1), z: +pl.b.z.toFixed(1), mode: pl.mode, hp: pl.hp, q: v.quality, frames: v.frame, e: g.enemies.length }; });
+  console.log(JSON.stringify(await st()));
+  await shot('title');
+  await p.keyboard.press('Space');
+  await p.waitForTimeout(2500);
+  console.log(JSON.stringify(await st()));
+  await shot('play0');
+  await p.keyboard.down('KeyW'); await p.keyboard.down('ShiftLeft');
+  await p.waitForTimeout(3000);
+  console.log(JSON.stringify(await st()));
+  await shot('run');
+  await p.keyboard.up('KeyW'); await p.keyboard.up('ShiftLeft');
+  await p.keyboard.press('Escape'); await p.waitForTimeout(600);
+  console.log(JSON.stringify(await st()));
+  await shot('pause');
+  await p.keyboard.press('Escape'); await p.waitForTimeout(400);
+  await p.keyboard.press('KeyM'); await p.waitForTimeout(800);
+  console.log(JSON.stringify(await st()));
+  await shot('map');
+  await p.keyboard.press('KeyM'); await p.waitForTimeout(400);
+  console.log(JSON.stringify(await st()));
+  if (errs.length) console.log('ERRORES DE PÁGINA:\n  ' + [...new Set(errs)].slice(0, 6).join('\n  '));
+  if (logs.length) console.log('CONSOLA(error): ' + [...new Set(logs)].slice(0, 5).join(' | '));
+  await b.close();
+})().catch(e => { console.error('VLIVE FALLÓ: ' + e.message); process.exit(9); });

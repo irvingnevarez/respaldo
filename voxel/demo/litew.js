@@ -5,14 +5,14 @@
 //   const { load, LiteWorld } = require('./litew');
 //   const C = load(['noise','blocks','worldgen','jobs','phys','world'], 'WG_genChunk, PH_move, ...');
 const loadcore = require('./loadcore');
-module.exports.load = function (names, expose) {
-  const C = loadcore(names, expose + ', VxWorld, JB_key, BK, BK_SOLID, WG_genChunk');
+module.exports.load = function (names, expose, extra) {
+  const C = loadcore(names, expose + ', VxWorld, JB_key, BK, BK_SOLID, WG_genChunk, WG_emitters', extra);
   class LiteWorld {
     constructor() { this.chunks = new Map(); }
     chunk(cx, cz) {
       const k = C.JB_key(cx, cz);
       let c = this.chunks.get(k);
-      if (!c) { c = C.WG_genChunk(cx, cz); c.cx = cx; c.cz = cz; this.chunks.set(k, c); }
+      if (!c) { c = C.WG_genChunk(cx, cz); c.cx = cx; c.cz = cz; c.emitters = C.WG_emitters(cx * 16, cz * 16, cx * 16 + 16, cz * 16 + 16); this.chunks.set(k, c); }
       return c;
     }
     getBlock(x, y, z) {

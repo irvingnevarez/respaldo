@@ -39,6 +39,7 @@ function IN_init(stage, canvas) {
       case 'KeyQ': case 'ControlLeft': IN.dodgeEdge = true; break;
       case 'KeyM': case 'Tab': IN.mapEdge = true; e.preventDefault(); break;
       case 'KeyP': case 'Escape': IN.pauseEdge = true; break;
+      case 'KeyN': if (typeof AU_toggle === 'function') AU_toggle(); break;
       case 'ArrowUp': case 'ArrowDown': case 'ArrowLeft': case 'ArrowRight': e.preventDefault(); break;
     }
   });

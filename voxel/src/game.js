@@ -21,6 +21,38 @@ var VX = {
 
 var VX_STEP = 1 / 120;
 
+// The quality ladder. The frame rate decides, not the player: if the picture cannot
+// keep up, resolution, view distance, rain and bloom come down a rung at a time, and
+// come back up if there is plenty of room. Nothing here changes how the game plays.
+var VX_Q = [
+  { name: 'MÍNIMA', scale: 0.55, radius: 5, rain: 1100, bloom: 0.0 },
+  { name: 'BAJA', scale: 0.70, radius: 6, rain: 2200, bloom: 0.25 },
+  { name: 'MEDIA', scale: 0.85, radius: 7, rain: 3600, bloom: 0.40 },
+  { name: 'ALTA', scale: 1.00, radius: 8, rain: 5600, bloom: 0.50 },
+];
+function VX_setQuality(q) {
+  q = Math.max(0, Math.min(VX_Q.length - 1, q));
+  const Q = VX_Q[q];
+  VX.quality = q; VX.scale = Q.scale; VX.radius = Q.radius;
+  if (VX.world) {
+    VX.world.radius = Q.radius; VX.world.dirty = true;
+    VX.rend.nearDist = (Q.radius - 1) * 16 + 6;
+    VX.rend.P.rainCount = Q.rain; VX.rend.P.bloom = Q.bloom;
+    VX_resize();
+  }
+}
+var VX_ft = { avg: 16.7, bad: 0, good: 0, cool: 3, n: 0 };
+function VX_adapt(dt) {
+  const f = VX_ft;
+  f.n++;
+  if (f.n < 90 || VX.state === 'boot') return;                // let the first seconds settle
+  f.avg += (dt * 1000 - f.avg) * 0.05;
+  f.cool -= dt;
+  if (f.avg > 25) { f.bad += dt; f.good = 0; } else if (f.avg < 14.5) { f.good += dt; f.bad = 0; } else { f.bad = Math.max(0, f.bad - dt); f.good = Math.max(0, f.good - dt); }
+  if (f.cool <= 0 && f.bad > 1.6 && VX.quality > 0) { VX_setQuality(VX.quality - 1); f.bad = 0; f.cool = 4; f.avg = 18; }
+  else if (f.cool <= 0 && f.good > 9 && VX.quality < 3) { VX_setQuality(VX.quality + 1); f.good = 0; f.cool = 8; }
+}
+
 function VX_size() {
   const stage = document.getElementById('stage');
   const r = stage.getBoundingClientRect();
@@ -47,6 +79,11 @@ function VX_buildModels(gl) {
 
 function VX_boot() {
   VX.capture = !!window.__capture;
+  // a first guess from the device; the ladder corrects it from real frame times
+  const coarse = window.matchMedia && window.matchMedia('(pointer:coarse)').matches;
+  const cores = navigator.hardwareConcurrency || 4;
+  VX.quality = coarse ? 1 : (cores <= 2 ? 1 : (cores <= 4 ? 2 : 3));
+  VX.scale = VX_Q[VX.quality].scale; VX.radius = VX_Q[VX.quality].radius;
   const canvas = document.getElementById('gl');
   VX.hud = document.getElementById('hud');
   VX.hudCtx = VX.hud.getContext('2d');
@@ -66,6 +103,7 @@ function VX_boot() {
   VX.world.startWorkers(document.getElementById('vx-worker-src').textContent, nw);
 
   GS.world = VX.world; GS.rend = VX.rend; GS.far = VX.far; GS.cam = VX.cam;
+  VX.rend.P.rainCount = VX_Q[VX.quality].rain; VX.rend.P.bloom = VX_Q[VX.quality].bloom;
   GS.fx = new VxFx(VX.rend);
   VX_buildModels(gl);
   GS.tcam = new ThirdCam();
@@ -80,6 +118,10 @@ function VX_boot() {
   if (typeof AU_init === 'function') AU_init();
   VX_resize();
   window.addEventListener('resize', VX_resize);
+  // a hidden tab or a window that lost focus must not leave the player under attack
+  document.addEventListener('visibilitychange', function () { if (document.hidden && VX.state === 'play') VX_setState('pause'); });
+  window.addEventListener('blur', function () { if (VX.state === 'play' && !IN.touch) VX_setState('pause'); });
+  canvas.addEventListener('webglcontextlost', function (e) { e.preventDefault(); VX.lost = true; const b = document.getElementById('boot'); if (b) { b.hidden = false; document.getElementById('bootmsg').textContent = 'Se perdió el contexto gráfico: recarga la página'; document.getElementById('bar').hidden = true; } });
   UI_init();
   WD_init();
 
@@ -89,7 +131,7 @@ function VX_boot() {
   VX_titleCam(0);
   if (VX.capture) {
     // tests render on demand; the world still has to stream, so keep it ticking
-    setInterval(function () { VX.world.update(GS.player.b.x, GS.player.b.z, 10); VX.far.update(GS.player.b.x, GS.player.b.z, 6); }, 16);
+    setInterval(function () { const f = VX.freeCam ? VX.cam : GS.player.b; VX.world.update(f.x, f.z, 10); VX.far.update(f.x, f.z, 6); }, 16);
   } else {
     VX.last = performance.now();
     requestAnimationFrame(VX_loop);
@@ -236,6 +278,8 @@ function VX_update(dtReal) {
   VX.rend.P.fade = 1 - VX.fade;
   VX.rend.P.hurt[3] = Math.max(0, VX.rend.P.hurt[3] - dtReal * 1.6);
   UI_update(dtReal);
+  if (typeof AU_update === 'function') AU_update(dtReal);
+  VX_adapt(dtReal);
   IN_clearEdges();
 }
 
@@ -305,7 +349,7 @@ function PL_ropes() {
 function VX_draw() {
   VX.rend.beams = WD_beams(); VX.rend.emblem = GS.emblem || null;
   VX.rend.render(VX.cam, VX.world, VX.far, VX_extra);
-  UI_draw(VX.hudCtx, VX.hud.width, VX.hud.height);
+  if (VX.hideHud) VX.hudCtx.clearRect(0, 0, VX.hud.width, VX.hud.height); else UI_draw(VX.hudCtx, VX.hud.width, VX.hud.height);
 }
 
 function VX_loop(ts) {
@@ -348,6 +392,16 @@ window.__vx = {
   input: function () { return IN; },
   start: function () { VX_setState('play'); VX.fade = 0; VX.fadeTo = 0; },
   mapAll: function () { UI_mapStep(99999); },
+  lm: function () { return LM; },
+  lookAt: function (x, y, z, tx, ty, tz) {
+    const c = VX.cam, dx = tx - x, dy = ty - y, dz = tz - z;
+    c.x = x; c.y = y; c.z = z; c.yaw = Math.atan2(dx, -dz); c.pitch = Math.atan2(dy, Math.hypot(dx, dz));
+    VX.world.dirty = true; VX.freeCam = true;
+    VX.world.update(x, z, 0); VX.far.update(x, z, 0);          // so the loaded fraction is about HERE, not where we were
+  },
+  hideHud: function (on) { VX.hideHud = on; },
+  bossStart: function (id) { const bi = GS.bossInfo.find(b => b.id === id); BS_start(id, bi.arena); },
+  arena: function (id) { return GS.bossInfo.find(b => b.id === id).arena; },
   place: function (x, y, z, a) { const p = GS.player; p.b.x = x; p.b.y = y; p.b.z = z; p.b.vx = p.b.vy = p.b.vz = 0; if (a !== undefined) p.a = a; GS.tcam.snap(p); VX.world.dirty = true; },
 };
 

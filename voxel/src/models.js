@@ -384,19 +384,24 @@ function MD_penguin() {
   const LL = M.part('footL', 'body', 3, 6, 0), LR = M.part('footR', 'body', -3, 6, 0);
   LL.box(1, 0, -4, 6, 6, 4, ORG); LL.box(1, 0, 4, 6, 2, 8, ORG);
   LR.box(-6, 0, -4, -1, 6, 4, ORG); LR.box(-6, 0, 4, -1, 2, 8, ORG);
-  // the umbrella: a long shaft and a canopy that is folded or open by pose
-  const U = M.part('umbrella', 'flipR', -8, 12, 3);
+  // the umbrella, shut: a cane in the right flipper
+  const U = M.part('cane', 'flipR', -8, 12, 3);
   U.box(-9, 2, 2, -8, 26, 3, '#2a2a30');
   U.box(-10, 26, 1, -7, 30, 4, '#c8322c');
-  const C = M.part('canopy', 'umbrella', -8.5, 26, 2.5);
-  const R = 9;
+  U.box(-9, 0, 2, -8, 2, 3, '#555a66');
+  // the umbrella, open: held up over the hat while he flies
+  const C = M.part('brolly', 'body', 0, 34, 0);
+  C.box(0, 34, 0, 1, 44, 1, '#2a2a30');
+  const R = 10;
   for (let x = -R; x <= R; x++) for (let z = -R; z <= R; z++) {
     const d = Math.hypot(x, z);
     if (d > R) continue;
     const h = Math.round((1 - (d / R) * (d / R)) * 4);
-    C.at(x - 9, 26 + h, z + 2, (Math.floor(Math.atan2(z, x) / (Math.PI / 4)) & 1) ? '#c8322c' : '#17181e');
-    if (d < R - 1.5 && h > 0) C.at(x - 9, 26 + h - 1, z + 2, '#17181e');
+    const col = (Math.floor((Math.atan2(z, x) + Math.PI) / (Math.PI / 4)) & 1) ? '#c8322c' : '#17181e';
+    C.at(x, 42 + h, z, col);
+    if (d > 3 && h <= 2) C.at(x, 42 + h - 1, z, '#101116');
   }
+  C.at(0, 47, 0, '#d9a233');
   M.radius = 5;
   return M;
 }

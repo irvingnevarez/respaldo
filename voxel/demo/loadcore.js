@@ -3,9 +3,9 @@
 // a proxy and run 10-20x slower than in a browser or worker, which made a healthy
 // generator look broken. Use this for anything that measures speed.
 const fs = require('fs'), path = require('path');
-module.exports = function (names, expose) {
+module.exports = function (names, expose, extra) {
   const root = path.join(__dirname, '..', 'src');
-  const src = names.map(n => fs.readFileSync(path.join(root, n + '.js'), 'utf8')).join('\n;\n');
+  const src = names.map(n => fs.readFileSync(path.join(root, n + '.js'), 'utf8')).join('\n;\n') + (extra ? '\n;\n' + extra : '');
   const fn = new Function('performance', src + '\n;return {' + expose + '};');
   return fn(performance);
 };

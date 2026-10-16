@@ -8,6 +8,22 @@ const PAGE = path.resolve(process.env.VX_PAGE || path.join(__dirname, '..', 'ind
 const OUT = process.argv[2] || 'vp';
 const WANT = process.argv.slice(3);
 
+async function bossShots(c, id) {
+  await c.p.evaluate(() => { __vx.start(); });
+  const A = await c.p.evaluate(id => __vx.arena(id), id);
+  await c.p.evaluate(a => { __vx.place(a.cx, 27.01, a.cz + 15, Math.PI); }, A);
+  await c.waitReady();
+  await c.p.evaluate(a => { __vx.place(a.cx, 27.01, a.cz + 14, Math.PI); const g = __vx.gs(); g.tcam.yaw = 0; g.tcam.pitch = -0.28; g.tcam.want = 7; __vx.step(5); }, A);
+  await c.shot(id + '-arena');
+  await c.p.evaluate(id => { __vx.bossStart(id); const g = __vx.gs(); g.player.hp = 99; }, id);
+  const seq = id === 'penguin' ? [[200, 'intro'], [300, 'walk'], [500, 'swing'], [800, 'bombs'], [900, 'dive'], [400, 'dazed']] : [[240, 'intro'], [200, 'cards'], [300, 'cards2'], [500, 'gas'], [500, 'fight']];
+  for (const [n, name] of seq) {
+    await c.p.evaluate(n => { const g = __vx.gs(); g.tcam.want = 9; g.tcam.pitch = -0.25; __vx.step(n); }, n);
+    const st = await c.p.evaluate(() => { const b = __vx.gs().boss; return b ? b.state + ' hp ' + b.hp.toFixed(0) + ' y ' + b.b.y.toFixed(1) : 'none'; });
+    console.log('  ' + name + ': ' + st);
+    await c.shot(id + '-' + name);
+  }
+}
 const SCEN = {
   async front(c) {
     await c.waitReady();
@@ -29,6 +45,8 @@ const SCEN = {
     await c.waitReady();
     await c.shot('sig-street');
   },
+  async penguin(c) { await bossShots(c, 'penguin'); },
+  async joker(c) { await bossShots(c, 'joker'); },
   async roof(c) {
     await c.waitReady();
     await c.p.evaluate(() => { __vx.start(); });
@@ -68,7 +86,9 @@ const SCEN = {
     async key(code, down) { await p.evaluate(a => { const I = __vx.input(); I.keys[a[0]] = a[1]; if (a[0].startsWith('Shift')) I.sprint = a[1]; if (a[0] === 'Space') { I.jump = a[1]; if (a[1]) I.jumpEdge = true; } }, [code, down]); },
     async shot(name) {
       await p.evaluate(() => __vx.render());
-      await p.waitForTimeout(200);
+      await p.waitForTimeout(150);
+      await p.evaluate(() => __vx.render());
+      await p.waitForTimeout(250);
       const f = OUT + '-' + name + '.png';
       await p.locator('#stage').screenshot({ path: f });
       console.log('  ' + name + ' -> ' + f);

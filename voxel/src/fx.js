@@ -226,6 +226,12 @@ function PJ_spawn(o) {
 
 function PJ_explode(p) {
   const K = p.K, R = K.explode || 0;
+  if (p.gas) {                                   // a gas canister: a lingering cloud instead of a blast
+    GS.zones.push({ x: p.x, y: Math.max(p.y - 0.4, WG_GY + 1.9), z: p.z, r: 4.2, life: 7, t: 0, hurt: 0.3 });
+    GS.fx.puff(p.x, p.y + 0.4, p.z, 12, 0.7, 0.3);
+    GS.events.push({ t: 'poof' });
+    return;
+  }
   GS.fx.burst(p.x, p.y, p.z, 26, [1, 0.6, 0.2], 1.6, 1.3);
   GS.fx.puff(p.x, p.y, p.z, 10, 0.55, 0.22);
   GS.fx.glow(p.x, p.y + 0.3, p.z, 7, 1.0, 0.55, 0.2, 5.0, 0.35);
@@ -233,7 +239,7 @@ function PJ_explode(p) {
   if (R > 0) {
     const pl = GS.player;
     const d = Math.hypot(pl.b.x - p.x, pl.b.y + 0.9 - p.y, pl.b.z - p.z);
-    if (d < R && p.own !== 'player') pl.hurt(p.dmg, pl.b.x - p.x, pl.b.z - p.z, true);
+    if (d < R && p.own !== 'player' && p.dmg > 0) pl.hurt(p.dmg, pl.b.x - p.x, pl.b.z - p.z, true);
   }
 }
 

@@ -225,11 +225,11 @@ function LM_floor(info, x, z, ux, uz) {
       return [BK.STONE, ((lx + lz) & 7) === 0 ? BK.FROZEN_WATER : BK.ICE];
     }
     // joker: a harlequin floor with a grin
-    const checker = (((lx >> 2) + (lz >> 2)) & 1) ? BK.CARN_RED : BK.CARN_WHITE;
+    const checker = (((lx >> 2) + (lz >> 2)) & 1) ? BK.CARN_RED : BK.BLACK;
     if (d < 3.4) return [BK.STONE, BK.CARN_PURPLE];
     const dm = Math.hypot(lx - 18.5, lz - 15);
-    if (lz > 20 && dm > 11 && dm < 13.2) return [BK.STONE, BK.NEON_RED];
-    if (Math.hypot(lx - 11.5, lz - 12) < 2.2 || Math.hypot(lx - 25.5, lz - 12) < 2.2) return [BK.STONE, BK.NEON_GREEN];
+    if (lz > 20 && dm > 11 && dm < 13.2) return [BK.STONE, BK.NEON_GREEN];
+    if (Math.hypot(lx - 11.5, lz - 12) < 2.2 || Math.hypot(lx - 25.5, lz - 12) < 2.2) return [BK.STONE, BK.NEON_YELLOW];
     return [BK.STONE, checker];
   }
   if (info.deco === 'beacon') {

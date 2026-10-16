@@ -149,7 +149,7 @@ function UI_draw(ctx, w, h) {
   if (GS.boss) UI_bossBar(ctx, w, h, u);
   UI_banners(ctx, w, h, u);
   if (st === 'dead') UI_dead(ctx, w, h, u);
-  if (st === 'pause') UI_pause(ctx, w, h, u);
+  if (st === 'pause') { UI_pause(ctx, w, h, u); UI_pauseFoot(ctx, w, h, u); }
   if (st === 'map') UI_bigMap(ctx, w, h, u);
 }
 
@@ -329,7 +329,7 @@ function UI_pause(ctx, w, h, u) {
   ctx.fillStyle = 'rgba(4,6,12,0.66)'; ctx.fillRect(0, 0, w, h);
   UI_spacedText(ctx, 'PAUSA', w / 2, h * 0.30, 52 * u, '#e8c34a', 12 * u, 'center', 600);
   const rows = [['WASD', 'Mover'], ['Ratón / arrastrar', 'Cámara'], ['Espacio', 'Saltar · en el aire: planear'], ['Shift', 'Correr'], ['E', 'Garfio: apunta a un muro'],
-    ['Clic / J', 'Golpear (combo de 3)'], ['F / clic der.', 'Batarang'], ['Q / Ctrl', 'Esquivar'], ['M', 'Mapa y viaje rápido'], ['P / Esc', 'Reanudar']];
+    ['Clic / J', 'Golpear (combo de 3)'], ['F / clic der.', 'Batarang'], ['Q / Ctrl', 'Esquivar'], ['M', 'Mapa y viaje rápido'], ['N', 'Sonido'], ['P / Esc', 'Reanudar']];
   const x0 = w / 2 - 230 * u;
   rows.forEach(function (r, i) {
     const y = h * 0.30 + 52 * u + i * 27 * u;
@@ -338,6 +338,9 @@ function UI_pause(ctx, w, h, u) {
   });
 }
 
+function UI_pauseFoot(ctx, w, h, u) {
+  UI_spacedText(ctx, 'CALIDAD GRÁFICA: ' + VX_Q[VX.quality].name + ' (AUTOMÁTICA)', w / 2, h - 28 * u, 11 * u, '#6c7a92', 3 * u, 'center', 500);
+}
 function UI_title(ctx, w, h, u, win) {
   const t = VX.stateT;
   ctx.fillStyle = 'rgba(2,3,8,' + (win ? 0.55 : 0.45) + ')';

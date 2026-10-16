@@ -169,7 +169,6 @@ function WD_draw(r, cam) {
     const lit = b.active;
     MD_drawModel(r, M, PK_m, M.poseNew(), { sky: 1, moon: 1, bl: [0, 0, 0], emit: lit ? 1.0 : 0.16, rim: [0, 0, 0], flash: lit ? null : [0.35, 0.4, 0.5, 0.65] });
   }
-  if (GS.boss) GS.boss.draw(r);
 }
 
 // Beams for the renderer: the big signal always, and a short column over each lit beacon.

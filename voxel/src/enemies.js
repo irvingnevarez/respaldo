@@ -553,7 +553,7 @@ function EN_manage(dt) {
       GS.camps.delete(key);
     }
   }
-  if (GS.enemies.length >= EN_MAX || GS.spawnOff) return;
+  if (GS.enemies.length >= EN_MAX || GS.spawnOff || GS.boss) return;
   for (let r = 0; r <= 2; r++) for (let i = -r; i <= r; i++) for (let j = -r; j <= r; j++) {
     if (Math.max(Math.abs(i), Math.abs(j)) !== r) continue;
     const bx = pbx + i, bz = pbz + j, key = bx + ',' + bz;
