@@ -8,9 +8,11 @@
 const fs = require('fs'), path = require('path');
 const SRC = path.join(__dirname, 'src'), ROOT = __dirname;
 
-const MAIN = ['math', 'noise', 'blocks', 'worldgen', 'bake', 'jobs', 'gl', 'shaders', 'world', 'far', 'render', 'game'];
-const WORKER = ['noise', 'blocks', 'worldgen', 'bake', 'jobs', 'workerboot'];
-const REQUIRED = ['VxFar', 'VxWorld', 'VxRenderer', 'VxCamera', 'BX_bake', 'WG_genChunk', 'SH_TERRAIN_FS', 'JB_package'];
+const MAIN = ['math', 'noise', 'blocks', 'worldgen', 'landmarks', 'bake', 'jobs', 'gl', 'shaders', 'world', 'far', 'render',
+  'phys', 'models', 'anim', 'fx', 'enemies', 'player', 'bosses', 'props', 'ui', 'input', 'game'];
+const WORKER = ['noise', 'blocks', 'worldgen', 'landmarks', 'bake', 'jobs', 'workerboot'];
+const REQUIRED = ['VxFar', 'VxWorld', 'VxRenderer', 'VxCamera', 'BX_bake', 'WG_genChunk', 'SH_TERRAIN_FS', 'JB_package',
+  'Player', 'ThirdCam', 'Enemy', 'VxFx', 'AN_humanoid', 'MD_batman', 'LM_init', 'UI_draw', 'IN_init', 'PH_move'];
 
 const read = n => fs.readFileSync(path.join(SRC, n + '.js'), 'utf8');
 

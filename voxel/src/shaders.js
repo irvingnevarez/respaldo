@@ -346,13 +346,44 @@ precision highp float;
 in vec2 vUV;
 uniform float uTime;
 uniform float uPulse;
+uniform vec3 uTint;
 layout(location = 0) out vec4 oColor;
 void main() {
   float across = 1.0 - abs(vUV.x);
   float edge = pow(across, 1.6);
   float along = pow(1.0 - vUV.y, 0.8) * smoothstep(0.0, 0.03, vUV.y);
   float a = edge * along * uPulse;
-  oColor = vec4(vec3(1.0, 0.93, 0.62) * a * 0.55, 1.0);
+  oColor = vec4(uTint * a * 0.55, 1.0);
+}`;
+
+// ── the bat emblem the signal throws on the clouds ─────────────────────────
+var SH_EMB_VS = `#version 300 es
+precision highp float;
+layout(location = 0) in vec2 aCorner;
+uniform mat4 uVP;
+uniform vec3 uCenter;
+uniform float uHalf;
+out vec2 vUV;
+void main() {
+  vec2 q = vec2(aCorner.x, aCorner.y * 2.0 - 1.0);
+  vUV = q;
+  // lies flat in the cloud deck; "up" on the emblem is north (-z)
+  gl_Position = uVP * vec4(uCenter + vec3(q.x * uHalf, 0.0, q.y * uHalf * 0.52), 1.0);
+}`;
+var SH_EMB_FS = `#version 300 es
+precision highp float;
+in vec2 vUV;
+uniform sampler2D uBat;
+uniform float uPulse;
+layout(location = 0) out vec4 oColor;
+void main() {
+  float r = length(vUV);
+  float disc = smoothstep(1.0, 0.72, r);
+  float bat = texture(uBat, vec2(vUV.x * 0.5 + 0.5, 0.5 - vUV.y * 0.5)).r;
+  float a = disc * (1.0 - bat * 0.97) * 0.55 * uPulse;
+  // a faint ring of halo outside the disc
+  a += smoothstep(1.0, 0.8, r) * smoothstep(0.55, 1.0, r) * 0.18 * uPulse;
+  oColor = vec4(vec3(1.0, 0.92, 0.6) * a, 1.0);
 }`;
 
 // ── entities: voxel models with their own light ───────────────────────────

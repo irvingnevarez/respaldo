@@ -49,6 +49,7 @@ class VxRenderer {
       glow: GL_prog(gl, SH_GLOW_VS, SH_GLOW_FS, 'glow'),
       rain: GL_prog(gl, SH_RAIN_VS, SH_RAIN_FS, 'rain'),
       beam: GL_prog(gl, SH_BEAM_VS, SH_BEAM_FS, 'beam'),
+      emblem: GL_prog(gl, SH_EMB_VS, SH_EMB_FS, 'emblem'),
       ent: GL_prog(gl, SH_ENT_VS, SH_ENT_FS, 'ent'),
       bright: GL_prog(gl, SH_FS_VS, SH_BRIGHT_FS, 'bright'),
       down: GL_prog(gl, SH_FS_VS, SH_DOWN_FS, 'down'),
@@ -84,6 +85,16 @@ class VxRenderer {
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0);
     gl.bindVertexArray(null);
 
+    // the bat symbol as a tiny nearest-filtered bitmap
+    const BAT = [".............#...#.............", "#...........##...##...........#", "####........##...##........####", "######......#######......######", "########....#######....########", "##########..#######..##########", "###############################", "###.#######################.###", ".##.###.###.#######.###.###.##.", ".#...#...#...#####...#...#...#.", ".........#....###....#.........", "..............###..............", "...............................", "...............................", "..............................."];
+    const bd = new Uint8Array(32 * 16);
+    BAT.forEach(function (row, j) { for (let i = 0; i < 31; i++) if (row[i] === '#') bd[j * 32 + i] = 255; });
+    this.batTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.batTex);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 32, 16, 0, gl.RED, gl.UNSIGNED_BYTE, bd);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     this.w = 0; this.h = 0; this.scale = 1;
     this.scene = null; this.ldr = null; this.bloom = [];
     this.time = 0;
@@ -201,7 +212,8 @@ class VxRenderer {
     // lamp and neon glow
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
     gl.depthMask(false); gl.disable(gl.CULL_FACE);
-    const n = world.collectGlow(cam.x, cam.y, cam.z, 150, this.glowData);
+    let n = world.collectGlow(cam.x, cam.y, cam.z, 150, this.glowData);
+    if (this.extraGlow) n = this.extraGlow(this.glowData, n);
     if (n > 0) {
       p = this.prog.glow;
       gl.useProgram(p.id);
@@ -228,18 +240,37 @@ class VxRenderer {
     gl.uniform1f(p.u('uCut'), 0);
     world.draw(p, cam.planes, cam.x, cam.z, 'w', this.nearDist);
 
-    // the bat-signal beam
-    if (this.beam.on) {
+    // light beams: the bat-signal and the columns over lit beacons
+    const beams = this.beams || (this.beam.on ? [{ p0: this.beam.p0, p1: this.beam.p1, tint: [1, 0.93, 0.62], w: 1.4, w1: 16 }] : []);
+    if (beams.length) {
       gl.blendFunc(gl.ONE, gl.ONE);
       p = this.prog.beam;
       gl.useProgram(p.id);
       gl.uniformMatrix4fv(p.u('uVP'), false, cam.vp);
       gl.uniform3f(p.u('uCam'), cam.x, cam.y, cam.z);
-      gl.uniform3f(p.u('uP0'), this.beam.p0[0], this.beam.p0[1], this.beam.p0[2]);
-      gl.uniform3f(p.u('uP1'), this.beam.p1[0], this.beam.p1[1], this.beam.p1[2]);
-      gl.uniform2f(p.u('uWidth'), 1.4, 16);
       gl.uniform1f(p.u('uTime'), this.time);
       gl.uniform1f(p.u('uPulse'), 0.85 + 0.15 * Math.sin(this.time * 1.7));
+      gl.bindVertexArray(this.stripVao);
+      for (const bm of beams) {
+        gl.uniform3f(p.u('uP0'), bm.p0[0], bm.p0[1], bm.p0[2]);
+        gl.uniform3f(p.u('uP1'), bm.p1[0], bm.p1[1], bm.p1[2]);
+        gl.uniform2f(p.u('uWidth'), bm.w, bm.w1);
+        gl.uniform3f(p.u('uTint'), bm.tint[0], bm.tint[1], bm.tint[2]);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      }
+    }
+
+    // the emblem on the clouds, when the signal is up
+    if (this.emblem) {
+      const e = this.emblem;
+      gl.blendFunc(gl.ONE, gl.ONE);
+      p = this.prog.emblem;
+      gl.useProgram(p.id);
+      gl.uniformMatrix4fv(p.u('uVP'), false, cam.vp);
+      gl.uniform3f(p.u('uCenter'), e.x, e.y, e.z);
+      gl.uniform1f(p.u('uHalf'), e.half);
+      gl.uniform1f(p.u('uPulse'), 0.85 + 0.15 * Math.sin(this.time * 1.7));
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.batTex); gl.uniform1i(p.u('uBat'), 0);
       gl.bindVertexArray(this.stripVao);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }

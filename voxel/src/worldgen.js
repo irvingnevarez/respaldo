@@ -116,7 +116,17 @@ function WG_blockInfo(bx, bz) {
   return b;
 }
 
+// Landmarks overwrite a handful of blocks; every other open lot gets district dressing.
 function WG_genBlock(bx, bz) {
+  const info = WG_genBlock0(bx, bz);
+  if (!info.full) return info;
+  const sp = LM_special(bx, bz);
+  if (sp) LM_block(sp, info, info.ox, info.oz, WG_PITCH - WG_ST);
+  LM_decoFor(info);
+  return info;
+}
+
+function WG_genBlock0(bx, bz) {
   const ox = bx * WG_PITCH + WG_ST, oz = bz * WG_PITCH + WG_ST;
   const L = WG_PITCH - WG_ST;   // 38
   const info = { bx: bx, bz: bz, ox: ox, oz: oz, d: 0, full: false, kind: 'water', bld: [] };
@@ -275,13 +285,16 @@ function WG_bTop(b, x, z) {
 }
 
 // ── column classification ─────────────────────────────────────────────────
-var WG_K = { WATER: 0, ROAD: 1, SIDEWALK: 2, LOT: 3, BUILDING: 4, PARK: 5, SHORE: 6, PLAZA: 7, YARD: 8 };
+var WG_K = { WATER: 0, ROAD: 1, SIDEWALK: 2, LOT: 3, BUILDING: 4, PARK: 5, SHORE: 6, PLAZA: 7, YARD: 8, BRIDGE: 9, ARENA: 10 };
 
 // Fills `o` with what stands in column (x, z): its kind, the solid top (the first
 // free y above the mass), and the building if there is one.
 function WG_colInfo(x, z, o) {
   o.b = null;
-  if (!WG_isLand(x, z)) { o.kind = WG_K.WATER; o.top = WG_FLOOR + 1; return o; }
+  if (!WG_isLand(x, z)) {
+    if (x >= 0 && x < WG_ST && LM_bridgeTop(x, z)) { o.kind = WG_K.BRIDGE; o.top = LM_massTop(x, z); return o; }
+    o.kind = WG_K.WATER; o.top = WG_FLOOR + 1; return o;
+  }
   const ux = NZ_mod(x, WG_PITCH), uz = NZ_mod(z, WG_PITCH);
   const sx = ux < WG_ST, sz = uz < WG_ST;
   if (sx || sz) {
@@ -299,7 +312,7 @@ function WG_colInfo(x, z, o) {
     const t = WG_bTop(info.bld[i], x, z);
     if (t) { o.kind = WG_K.BUILDING; o.b = info.bld[i]; o.top = t; return o; }
   }
-  o.kind = info.kind === 'park' ? WG_K.PARK : (info.kind === 'plaza' ? WG_K.PLAZA : (info.kind === 'yard' ? WG_K.YARD : WG_K.LOT));
+  o.kind = info.kind === 'park' ? WG_K.PARK : (info.kind === 'plaza' ? WG_K.PLAZA : (info.kind === 'yard' ? WG_K.YARD : (info.kind === 'arena' ? WG_K.ARENA : WG_K.LOT)));
   o.top = WG_GY + 2;
   return o;
 }
@@ -465,11 +478,12 @@ function WG_genChunk(cx, cz) {
       const col = (i * 16 + j) * H;
       const kd = kind[ci];
       vox[col] = BK.BEDROCK;
-      if (kd === WG_K.WATER) {
+      if (kd === WG_K.WATER || kd === WG_K.BRIDGE) {
         const bed = WG_FLOOR - (NZ_hash(x >> 2, z >> 2, 9) & 1);
         for (let y = 1; y <= bed; y++) vox[col + y] = y === bed ? BK.SAND : BK.STONE;
         for (let y = bed + 1; y <= WG_SEA; y++) vox[col + y] = BK.WATER;
         top[i * 16 + j] = bed + 1;
+        if (kd === WG_K.BRIDGE) LM_bridgeColumn(x, z, vox, col);
         continue;
       }
       for (let y = 1; y < WG_GY; y++) vox[col + y] = BK.STONE;
@@ -497,8 +511,13 @@ function WG_genChunk(cx, cz) {
         vox[col + WG_GY] = BK.DIRT; vox[col + WG_GY + 1] = BK.GRASS; t = WG_GY + 2;
       } else if (kd === WG_K.YARD) {
         vox[col + WG_GY] = BK.CONCRETE_DK; vox[col + WG_GY + 1] = BK.CONCRETE_DK; t = WG_GY + 2;
+        LM_lot(x, z, vox, col);
       } else if (kd === WG_K.PLAZA) {
         vox[col + WG_GY] = BK.CONCRETE; vox[col + WG_GY + 1] = ((ux + uz) & 7) === 0 ? BK.CONCRETE_DK : BK.CONCRETE_LT; t = WG_GY + 2;
+        LM_lot(x, z, vox, col);
+      } else if (kd === WG_K.ARENA) {
+        vox[col + WG_GY] = BK.STONE; vox[col + WG_GY + 1] = BK.CONCRETE_LT; t = WG_GY + 2;
+        LM_lot(x, z, vox, col);
       } else if (kd === WG_K.BUILDING) {
         vox[col + WG_GY] = BK.SIDEWALK; vox[col + WG_GY + 1] = BK.SIDEWALK;
         const b = bl[ci], T = tp[ci], st = WG_STY[b.st];
@@ -537,12 +556,14 @@ function WG_genChunk(cx, cz) {
             }
           }
         }
+        if (b.special === 'gcpd') LM_gcpdColumn(x, z, vox, col, T);
         t = T;
       } else {                                               // plain lot or shore paving
         vox[col + WG_GY] = BK.SIDEWALK; vox[col + WG_GY + 1] = BK.SIDEWALK; t = WG_GY + 2;
       }
       // furniture on streets
       if (kd === WG_K.SIDEWALK || kd === WG_K.ROAD) {
+        if (x >= 0 && x < WG_ST) LM_cableColumn(x, z, vox, col);
         const lamp = WG_lampAt(x, z);
         if (lamp) {
           const y0 = WG_GY + 2;
@@ -625,7 +646,7 @@ function WG_emitters(x0, z0, x1, z1) {
           const px = strip === 0 ? across : along, pz = strip === 0 ? along : across;
           // only if the lamp really stands on land and not inside a crossing street
           const lx = Math.floor(px), lz = Math.floor(pz);
-          if (!WG_isLand(lx, lz)) continue;
+          if (!WG_isLand(lx, lz) && !(lx >= 0 && lx < WG_ST && LM_bridgeTop(lx, lz))) continue;
           const other = strip === 0 ? NZ_mod(lz, WG_PITCH) : NZ_mod(lx, WG_PITCH);
           if (other < WG_ST + 1) continue;
           out.push([px, y, pz, r, g, b, 1.0, 17]);
