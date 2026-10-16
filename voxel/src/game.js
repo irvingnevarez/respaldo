@@ -16,8 +16,22 @@ var VX = {
   state: 'boot', stateT: 0,
   look: { x: 0, y: 0 },
   fade: 1, fadeTo: 0, fadeSpeed: 1.2,
-  msg: null, hint: '',
+  msg: null, hint: '', uw: 0,
 };
+var VX_BASE = VxRenderer.defaults();
+// Each district has a slightly different air: the same night, tinted. Enough to know
+// where you are with your eyes shut.
+var VX_AIR = {};
+VX_AIR[WG_D.AZOTEAS] = { fog: [0.082, 0.082, 0.092], hor: [0.046, 0.058, 0.076] };
+VX_AIR[WG_D.PUENTE] = { fog: [0.074, 0.084, 0.100], hor: [0.044, 0.060, 0.084] };
+VX_AIR[WG_D.MUELLES] = { fog: [0.078, 0.092, 0.102], hor: [0.044, 0.064, 0.078] };
+VX_AIR[WG_D.ARKHAM] = { fog: [0.070, 0.082, 0.098], hor: [0.040, 0.060, 0.080] };
+VX_AIR[WG_D.HIELO] = { fog: [0.074, 0.096, 0.128], hor: [0.050, 0.076, 0.108] };
+VX_AIR[WG_D.ALCANT] = { fog: [0.068, 0.102, 0.084], hor: [0.040, 0.072, 0.052] };
+VX_AIR[WG_D.FUNDI] = { fog: [0.128, 0.082, 0.064], hor: [0.088, 0.052, 0.034] };
+VX_AIR[WG_D.CARNAVAL] = { fog: [0.106, 0.074, 0.128], hor: [0.078, 0.046, 0.098] };
+VX_AIR[WG_D.SEA] = VX_AIR[WG_D.AZOTEAS];
+var VX_air = { fog: VX_AIR[WG_D.AZOTEAS].fog.slice(), hor: VX_AIR[WG_D.AZOTEAS].hor.slice(), want: VX_AIR[WG_D.AZOTEAS], t: 0 };
 
 var VX_STEP = 1 / 120;
 
@@ -114,6 +128,7 @@ function VX_boot() {
   GS.player.b.vy = 0;
   VX.rend.extraGlow = function (out, n) { return GS.fx.appendGlows(out, n); };
 
+  VX.saved = VX_saveLoad();
   IN_init(document.getElementById('stage'), canvas);
   if (typeof AU_init === 'function') AU_init();
   VX_resize();
@@ -150,12 +165,48 @@ function VX_titleCam(t) {
 // ── state changes ─────────────────────────────────────────────────────────
 function VX_setState(s) { VX.state = s; VX.stateT = 0; }
 
+// Progress survives a reload: which beacons are lit, which bosses are down, the
+// trophies, the score. Storage can be blocked or full, so every access is guarded.
+var VX_SAVE_KEY = 'gotham-voxel-v1';
+function VX_saveLoad() {
+  try { const t = localStorage.getItem(VX_SAVE_KEY); return t ? JSON.parse(t) : null; } catch (e) { return null; }
+}
+function VX_saveWrite() {
+  try {
+    localStorage.setItem(VX_SAVE_KEY, JSON.stringify({
+      beacons: GS.beacons.map(b => b.active ? 1 : 0), last: GS.lastBeacon, bosses: GS.bossDone, trophies: Array.from(GS.trophies),
+      score: GS.score, kills: GS.kills, best: GS.bestCombo, bats: GS.player.bats,
+    }));
+  } catch (e) { }
+}
+function VX_saveClear() { try { localStorage.removeItem(VX_SAVE_KEY); } catch (e) { } }
+function VX_saveApply(d) {
+  if (!d) return false;
+  try {
+    d.beacons.forEach((v, i) => { if (GS.beacons[i] && v) GS.beacons[i].active = true; });
+    GS.lastBeacon = Math.min(GS.beacons.length - 1, d.last | 0);
+    GS.bossDone.penguin = !!(d.bosses && d.bosses.penguin); GS.bossDone.joker = !!(d.bosses && d.bosses.joker);
+    GS.trophies = new Set(d.trophies || []); GS.score = d.score | 0; GS.kills = d.kills | 0; GS.bestCombo = d.best | 0;
+    GS.player.bats = Math.max(8, d.bats | 0);
+    return true;
+  } catch (e) { return false; }
+}
+
 function VX_start() {
   if (typeof AU_resume === 'function') AU_resume();
   VX_setState('play');
   VX.fade = 1; VX.fadeTo = 0; VX.fadeSpeed = 1.5;
-  UI_banner(WG_DNAME[WG_districtAt(GS.player.b.x, GS.player.b.z)], 'Gotham te necesita');
-  UI_hint('Planea con ESPACIO en el aire · Garfio con E', 7);
+  if (VX.saved) {                                         // a continued game starts at the last beacon
+    VX_saveApply(VX.saved);
+    const b = GS.beacons[GS.lastBeacon], pl = GS.player;
+    pl.b.x = b.x + (GS.lastBeacon === 0 ? 0 : 3.5); pl.b.y = b.y + 0.2; pl.b.z = b.z; pl.b.vx = pl.b.vy = pl.b.vz = 0;
+    GS.tcam.snap(pl); VX.world.dirty = true;
+    UI_banner(b.name, 'Partida continuada');
+  } else {
+    UI_banner(WG_DNAME[WG_districtAt(GS.player.b.x, GS.player.b.z)], 'Gotham te necesita');
+    UI_hint('Planea con ESPACIO en el aire · Garfio con E', 7);
+  }
+  VX.saveT = 8;
 }
 
 function VX_respawn() {
@@ -186,7 +237,10 @@ function VX_events() {
     if (k === 'hurt') { VX.rend.P.hurt[3] = 0.7; }
   }
   pl.events.length = 0;
-  for (const e of GS.events) { if (typeof AU_event === 'function') AU_event(e.t, e); }
+  for (const e of GS.events) {
+    if (typeof AU_event === 'function') AU_event(e.t, e);
+    if (e.t === 'alert') UI_tip('fight', 'Clic: golpear · F: batarang · Q: esquivar cuando veas el aviso naranja', 7);
+  }
   GS.events.length = 0;
 }
 
@@ -204,6 +258,8 @@ function VX_simStep(dt) {
     WD_update(dt);
   }
   if (GS.comboT > 0) { GS.comboT -= dt; if (GS.comboT <= 0) GS.combo = 0; }
+  VX.saveT -= dt;
+  if (VX.saveT <= 0 && VX.state === 'play') { VX.saveT = 10; VX_saveWrite(); }
 }
 
 function VX_update(dtReal) {
@@ -211,6 +267,7 @@ function VX_update(dtReal) {
   VX.rend.time = VX.time;
   const pl = GS.player;
   VX.stateT += dtReal;
+  IN_pollPad(dtReal);
 
   // world streaming follows the player (or the title camera)
   const fx = VX.state === 'title' || VX.state === 'boot' ? VX.cam : pl.b;
@@ -231,6 +288,7 @@ function VX_update(dtReal) {
     }
     case 'title': {
       VX_titleCam(VX.time);
+      if (VX.saved && IN.keys.KeyB) { VX_saveClear(); VX.saved = null; }
       if (VX.stateT > 0.6 && IN.anyEdge) VX_start();
       break;
     }
@@ -272,6 +330,21 @@ function VX_update(dtReal) {
       break;
     }
   }
+  // the air of the district the camera is in
+  VX_air.t -= dtReal;
+  if (VX_air.t <= 0) { VX_air.t = 0.4; VX_air.want = VX_AIR[WG_districtAt(VX.cam.x, VX.cam.z)] || VX_AIR[WG_D.AZOTEAS]; }
+  for (let i = 0; i < 3; i++) {
+    VX_air.fog[i] += (VX_air.want.fog[i] - VX_air.fog[i]) * Math.min(1, dtReal * 0.8);
+    VX_air.hor[i] += (VX_air.want.hor[i] - VX_air.hor[i]) * Math.min(1, dtReal * 0.8);
+  }
+  VX.rend.P.horizon = VX_air.hor;
+  // under the surface the city turns to murk
+  const cam = VX.cam, inWater = GS.world.getBlock(Math.floor(cam.x), Math.floor(cam.y), Math.floor(cam.z)) === BK.WATER;
+  VX.uw += ((inWater ? 1 : 0) - VX.uw) * Math.min(1, dtReal * 7);
+  const P = VX.rend.P, B = VX_BASE;
+  const F = VX_air.fog;
+  P.fog = [F[0] + (0.015 - F[0]) * VX.uw, F[1] + (0.085 - F[1]) * VX.uw, F[2] + (0.12 - F[2]) * VX.uw];
+  P.fogD = B.fogD + (0.15 - B.fogD) * VX.uw; P.fogK = B.fogK * (1 - VX.uw);
   // screen fade
   VX.fade += (VX.fadeTo - VX.fade) * Math.min(1, VX.fadeSpeed * dtReal * 3);
   if (Math.abs(VX.fade - VX.fadeTo) < 0.004) VX.fade = VX.fadeTo;
@@ -293,7 +366,8 @@ function VX_extra(r, cam) {
   gl.uniform1f(p.u('uSkyI'), P.skyI);
   gl.uniform1f(p.u('uBlockI'), P.blockI);
   gl.enable(gl.DEPTH_TEST); gl.depthMask(true); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
-  PL_draw(r, GS.player);
+  // a camera squeezed against a wall would fill the screen with the back of his head
+  if (GS.tcam.dist > 1.5 || VX.state !== 'play') PL_draw(r, GS.player);
   for (const e of GS.enemies) {
     const dx = e.b.x - cam.x, dz = e.b.z - cam.z;
     if (dx * dx + dz * dz > 170 * 170) continue;
@@ -352,11 +426,24 @@ function VX_draw() {
   if (VX.hideHud) VX.hudCtx.clearRect(0, 0, VX.hud.width, VX.hud.height); else UI_draw(VX.hudCtx, VX.hud.width, VX.hud.height);
 }
 
+// A bug in one frame must not freeze the whole game: the error is counted and the
+// loop carries on. Only a failure that repeats every frame stops it, with a message.
 function VX_loop(ts) {
   const dt = Math.min(0.1, (ts - VX.last) / 1000);
   VX.last = ts;
-  VX_update(dt);
-  VX_draw();
+  try {
+    VX_update(dt);
+    VX_draw();
+    VX.errRun = 0;
+  } catch (e) {
+    VX.errRun = (VX.errRun || 0) + 1; VX.errTotal = (VX.errTotal || 0) + 1;
+    if (VX.errTotal <= 3 && window.console) console.error(e);
+    if (VX.errRun > 90) {
+      const b = document.getElementById('boot');
+      if (b) { b.hidden = false; document.getElementById('bootmsg').textContent = 'Algo falló en el juego: recarga la página'; document.getElementById('bar').hidden = true; }
+      return;
+    }
+  }
   VX.frame++;
   requestAnimationFrame(VX_loop);
 }
@@ -367,7 +454,7 @@ window.__vx = {
   fraction: function () { return VX.world.loadedFraction(); },
   mode: function () { return VX.world.mode; },
   stats: function () { return Object.assign({ chunks: VX.world.chunks.size, mode: VX.world.mode, hdr: VX.rend.hdr, farTiles: VX.far.tiles.size, farMs: Math.round(VX.far.stats.ms) }, VX.world.stats); },
-  setCam: function (x, y, z, yaw, pitch) { const c = VX.cam; c.x = x; c.y = y; c.z = z; c.yaw = yaw; c.pitch = pitch; VX.world.dirty = true; VX.freeCam = true; },
+  setCam: function (x, y, z, yaw, pitch) { const c = VX.cam; c.x = x; c.y = y; c.z = z; c.yaw = yaw; c.pitch = pitch; VX.world.dirty = true; VX.freeCam = true; VX.world.update(x, z, 0); VX.far.update(x, z, 0); },
   set: function (k, v) { VX.rend.P[k] = v; },
   setBeam: function (a, b) { VX.rend.beam.p0 = a; VX.rend.beam.p1 = b; },
   render: function (t) {
@@ -392,6 +479,22 @@ window.__vx = {
   input: function () { return IN; },
   start: function () { VX_setState('play'); VX.fade = 0; VX.fadeTo = 0; },
   mapAll: function () { UI_mapStep(99999); },
+  audioSmoke: function () {
+    // every sound once, plus a few seconds of the score, to see that nothing throws
+    AU_resume();
+    const bad = [];
+    const kinds = ['jump', 'land', 'landHard', 'glide', 'dodge', 'grapple', 'grappleMiss', 'grappleHit', 'vault', 'swing', 'whoosh', 'hit', 'throw', 'batHit', 'clink', 'hurt', 'die', 'kill', 'gun', 'enemySwing', 'tell', 'alert', 'boom', 'slamLand', 'poof', 'pickup', 'beacon', 'cleared', 'bossStart', 'bossHit', 'bossDown', 'thunder', 'burn'];
+    for (const k of kinds) { try { AU.lastEvt = {}; AU_event(k, { t: k, kind: 3, x: GS.player.b.x, z: GS.player.b.z }); } catch (e) { bad.push(k + ': ' + e.message); } }
+    try { for (let i = 0; i < 400; i++) AU_update(0.016); } catch (e) { bad.push('update: ' + e.message); }
+    return { ctx: !!AU.ctx, state: AU.ctx && AU.ctx.state, bad: bad };
+  },
+  hurt: function (n) { const p = GS.player; p.inv = 0; p.hurt(n, 1, 0, false); },
+  setState: function (s) { VX_setState(s); },
+  glError: function () { return VX.rend.gl.getError(); },
+  killBoss: function () { const b = GS.boss; if (b) { b.hp = 0.1; b.set && 0; b.state = b.id === 'penguin' ? 'dazed' : 'hunt'; b.damage(5, 1, 0, 3); } },
+  travel: function (i) { WD_travel(i); },
+  tips: function () { return UI.tipsSeen ? Object.keys(UI.tipsSeen) : []; },
+  spawn: function (kind, x, y, z, alert) { const e = new Enemy(kind, x, y, z, null); if (alert) { e.alert = true; e.state = 'chase'; } GS.enemies.push(e); return e; },
   lm: function () { return LM; },
   lookAt: function (x, y, z, tx, ty, tz) {
     const c = VX.cam, dx = tx - x, dy = ty - y, dz = tz - z;

@@ -12,6 +12,9 @@ const OUT = process.argv[2] || 'vx';
 // name -> [x, y, z, yaw, pitch, extra params]
 const SCENES = {
   spawn:   [20, 104, 34, 2.52, -0.16, {}],
+  alto2:   [10, 175, 150, 2.8, -0.42, {}],
+  alto3:   [200, 130, -100, 0.9, -0.25, {}],
+  ras:     [30, 60, 40, 3.14, 0.02, {}],
   calle:   [5, 28.6, 70, 0.0, -0.02, {}],
   calle2:  [3, 28.4, 58, 3.3, 0.0, {}],
   azotea:  [30, 92, -30, 0.5, -0.22, {}],
@@ -29,6 +32,7 @@ const WANT = process.argv.slice(3).length ? process.argv.slice(3) : ['spawn', 'c
   await p.addInitScript(() => { window.__capture = true; });
   await p.goto('file://' + PAGE, { waitUntil: 'load' });
   await p.waitForFunction(() => window.__vx, null, { timeout: 20000 });
+  await p.evaluate(() => { __vx.start(); __vx.hideHud(true); });
   for (const name of WANT) {
     const sc = SCENES[name];
     if (!sc) { console.log('  escena desconocida: ' + name); continue; }
@@ -37,6 +41,8 @@ const WANT = process.argv.slice(3).length ? process.argv.slice(3) : ['spawn', 'c
     try { await p.waitForFunction(() => __vx.ready(), null, { timeout: 90000, polling: 200 }); }
     catch (e) { console.log('  (aviso) el mundo no terminó de cargar: ' + await p.evaluate(() => __vx.fraction().toFixed(2))); }
     const ms = Date.now() - t0;
+    await p.evaluate(() => __vx.render(3.0));
+    await p.waitForTimeout(150);
     await p.evaluate(() => __vx.render(3.0));
     await p.waitForTimeout(250);
     const file = OUT + '-' + name + '.png';

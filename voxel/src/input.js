@@ -102,7 +102,7 @@ function IN_init(stage, canvas) {
     IN.sprint = Math.hypot(IN.stickX, IN.stickY) > 0.93;
   }
   if (stick) {
-    stick.addEventListener('pointerdown', e => { IN.touch = true; IN.anyEdge = true; stickId = e.pointerId; stick.setPointerCapture(e.pointerId); stickMove(e); e.preventDefault(); });
+    stick.addEventListener('pointerdown', e => { IN.touch = true; IN.anyEdge = true; stickId = e.pointerId; try { stick.setPointerCapture(e.pointerId); } catch (err) { } stickMove(e); e.preventDefault(); });
     stick.addEventListener('pointermove', e => { if (e.pointerId === stickId) stickMove(e); });
     const end = e => { if (e.pointerId === stickId) { stickId = null; IN.stickX = IN.stickY = 0; IN.sprint = false; nub.style.transform = ''; } };
     stick.addEventListener('pointerup', end); stick.addEventListener('pointercancel', end);
@@ -132,7 +132,7 @@ function IN_init(stage, canvas) {
   function bindBtn(id, onDown, onUp) {
     const el = document.getElementById(id);
     if (!el) return;
-    el.addEventListener('pointerdown', e => { IN.touch = true; IN.anyEdge = true; el.setPointerCapture(e.pointerId); el.classList.add('on'); onDown(); e.preventDefault(); });
+    el.addEventListener('pointerdown', e => { IN.touch = true; IN.anyEdge = true; try { el.setPointerCapture(e.pointerId); } catch (err) { } el.classList.add('on'); onDown(); e.preventDefault(); });
     const up = () => { el.classList.remove('on'); if (onUp) onUp(); };
     el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
   }
@@ -142,6 +142,36 @@ function IN_init(stage, canvas) {
   bindBtn('tbP', () => { IN.attackEdge = true; });
   bindBtn('tbM', () => { IN.mapEdge = true; });
   bindBtn('tbS', () => { if (typeof AU_toggle === 'function') AU_toggle(); });
+}
+
+// A gamepad, if one is plugged in: the left stick walks, the right stick looks,
+// A jumps and glides, X punches, B throws a batarang, the right bumper is the
+// grapple, the left bumper dodges, Start pauses and Back opens the map.
+var IN_pad = { prev: [], active: false };
+function IN_pollPad(dt) {
+  let pads;
+  try { pads = navigator.getGamepads ? navigator.getGamepads() : null; } catch (e) { return; }
+  if (!pads) return;
+  let g = null;
+  for (const p of pads) if (p && p.connected && p.buttons && p.buttons.length >= 8) { g = p; break; }
+  if (!g) { if (IN_pad.active) { IN.stickX = IN.stickY = 0; IN_pad.active = false; } return; }
+  const dz = v => (Math.abs(v) < 0.16 ? 0 : (v - Math.sign(v) * 0.16) / 0.84);
+  const lx = dz(g.axes[0] || 0), ly = dz(g.axes[1] || 0), rx = dz(g.axes[2] || 0), ry = dz(g.axes[3] || 0);
+  const down = i => !!(g.buttons[i] && g.buttons[i].pressed);
+  const edge = i => { const d = down(i), was = !!IN_pad.prev[i]; IN_pad.prev[i] = d; return d && !was; };
+  const moving = lx !== 0 || ly !== 0 || rx !== 0 || ry !== 0;
+  if (moving || down(0)) IN_pad.active = true;
+  if (IN_pad.active) { IN.stickX = lx; IN.stickY = -ly; IN.sprint = Math.hypot(lx, ly) > 0.92 || down(10) || !!(IN.keys.ShiftLeft || IN.keys.ShiftRight); }
+  IN.lookX += rx * 2.6 * dt; IN.lookY += ry * 2.1 * dt;
+  if (edge(0)) { IN.jump = true; IN.jumpEdge = true; IN.anyEdge = true; } else if (!down(0) && IN_pad.prevJump) IN.jump = false;
+  IN_pad.prevJump = down(0);
+  if (edge(2)) { IN.attackEdge = true; IN.anyEdge = true; }
+  if (edge(1)) { IN.batEdge = true; IN.anyEdge = true; }
+  if (edge(5)) { IN.grappleEdge = true; IN.anyEdge = true; }
+  if (edge(4)) { IN.dodgeEdge = true; IN.anyEdge = true; }
+  if (edge(9)) { IN.pauseEdge = true; IN.anyEdge = true; }
+  if (edge(8)) { IN.mapEdge = true; IN.anyEdge = true; }
+  IN.grappleHeld = IN.grappleHeld || down(5);
 }
 
 // The movement the player is asking for, in the camera's frame: x right, z forward.

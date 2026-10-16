@@ -152,6 +152,13 @@ class Player {
       PH_stick(world, b, 1.06);
     }
     if (b.onGround && !wasGround) this.land(world);
+    // lava: stand on it and it burns; the hurt throws you clear
+    this.burnT = Math.max(0, (this.burnT || 0) - dt);
+    if (b.groundBlock === BK.LAVA && b.onGround && this.burnT <= 0 && !this.dead) {
+      this.burnT = 0.35;
+      if (this.hurt(1, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, false)) { b.vy = 10; b.onGround = false; this.events.push('burn'); }
+      else b.vy = Math.max(b.vy, 6);
+    }
     this.speedH = Math.hypot(b.x - px, b.z - pz) / Math.max(dt, 1e-4);
     if (b.onGround && this.mode !== 'ground' && this.mode !== 'swim' && !this.grap) { this.mode = 'ground'; this.glideCd = 0; }
     if (!b.onGround && this.mode === 'ground') this.mode = 'air';
@@ -517,12 +524,13 @@ class ThirdCam {
       const ux = rx * offs[i][0], uz = rz * offs[i][0], uy = offs[i][1];
       const sx = ox + ux, sy = oy + uy, sz = oz + uz;
       const h = world.raycast(sx, sy, sz, -fx, -fy, -fz, this.want + 0.4);
-      if (h) dmax = Math.min(dmax, Math.max(0.5, h.t - 0.45));
+      if (h) dmax = Math.min(dmax, Math.max(0.7, h.t - 0.45));
     }
     // a collision pulls in at once, a clear path lets it ease back out
     if (dmax < this.dist) this.dist = dmax; else this.dist += (dmax - this.dist) * (1 - Math.exp(-3.2 * dt));
     cam.x = ox - fx * this.dist; cam.y = oy - fy * this.dist; cam.z = oz - fz * this.dist;
     cam.yaw = this.yaw; cam.pitch = this.pitch;
+    cam.fx = fx; cam.fy = fy; cam.fz = fz;               // aiming reads these before the next render would refresh them
     // shake
     if (p.shake > 0) {
       const s = p.shake * 0.22;

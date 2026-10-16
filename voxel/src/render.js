@@ -285,7 +285,8 @@ class VxRenderer {
       gl.uniform1f(p.u('uTime'), this.time);
       gl.uniform1f(p.u('uCount'), P.rainCount);
       gl.uniform1f(p.u('uWind'), P.wind);
-      gl.uniform1f(p.u('uAlpha'), P.rainAlpha);
+      // no rain above the cloud deck: it has nowhere to fall from
+      gl.uniform1f(p.u('uAlpha'), P.rainAlpha * Math.max(0, Math.min(1, (P.cloudH + 4 - cam.y) / 45)));
       gl.bindVertexArray(this.stripVao);
       gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, P.rainCount | 0);
     }

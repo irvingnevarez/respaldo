@@ -46,6 +46,15 @@ function WD_init() {
     const top = WG_bTop(best, Math.floor(x), Math.floor(z));
     LM.trophies.push({ id: bx + ',' + bz, x: x, y: top + 1.1, z: z });
   }
+  // and a few that only a real climb reaches: the bridge towers, the Ferris wheel, a chimney, the crane
+  const B = LM.bridge;
+  LM.trophies.push({ id: 'tw0', x: 1.0, y: B.ty + 3.2, z: B.cz - B.tz }, { id: 'tw1', x: 9.0, y: B.ty + 3.2, z: B.cz + B.tz });
+  for (const sp of LM.special.values()) {
+    const cx = sp.bx * WG_PITCH + WG_ST + 19, cz = sp.bz * WG_PITCH + WG_ST + 19;
+    if (sp.type === 'ferris') LM.trophies.push({ id: 'fe', x: cx - 2 + 0.5, y: WG_GY + 2 + 22 + 17 + 3.2, z: cz + 0.5 });
+    if (sp.type === 'foundry') LM.trophies.push({ id: 'fo' + sp.bx, x: cx - 12 + 0.5, y: WG_GY + 2 + 46 + 2.4, z: cz - 12 + 0.5 });
+    if (sp.type === 'crane') LM.trophies.push({ id: 'cr' + sp.bx, x: cx - 13 + 0.5, y: WG_GY + 2 + 31 + 2.2, z: cz - 13 + 0.5 });
+  }
   GS.trophyTotal = LM.trophies.length;
   GS.bossInfo = [
     { id: 'penguin', name: 'EL PINGÜINO', arena: LM.arenas.find(a => a.style === 'penguin'), label: 'PINGÜINO' },
@@ -89,8 +98,21 @@ function WD_travel(i) {
   VX.fadeTo = 1; VX.fadeSpeed = 1.6;
 }
 
+// Contextual advice, each shown once, when the situation first calls for it.
+function WD_tips(dt) {
+  const pl = GS.player;
+  WD.play = (WD.play || 0) + dt;
+  if (pl.mode === 'swim') UI_tip('water', 'Apunta a la orilla y pulsa E: el garfio te saca del agua', 7);
+  if (pl.hp <= 2 && !pl.dead) UI_tip('hurt', 'Poca vida: recoge corazones o pisa una baliza para curarte', 7);
+  if (WD.play > 14 && !GS.glided && !pl.dead) UI_tip('glide', 'Salta desde un borde y pulsa ESPACIO otra vez: Batman planea', 7);
+  if (WD.play > 45) UI_tip('goal', 'Activa balizas, busca trofeos y derrota al Pingüino y al Joker', 8);
+  if (WD.play > 80) UI_tip('map', 'Pulsa M para ver el mapa y viajar entre balizas', 6);
+  if (pl.mode === 'glide') GS.glided = true;
+}
+
 function WD_update(dt) {
   const pl = GS.player, w = GS.world;
+  WD_tips(dt);
   // fast travel: fade out, move, fade in
   if (WD.travelTo >= 0) {
     WD.travelT += dt;

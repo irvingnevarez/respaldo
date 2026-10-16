@@ -62,6 +62,13 @@ function UI_mapStep(rows) {
   if (UI.mapRow >= M.h) { UI.mapCtx.putImageData(UI.mapImg, 0, 0); UI.mapReady = true; }
 }
 
+// One-time advice, shown the first time it becomes relevant.
+function UI_tip(id, text, secs) {
+  UI.tipsSeen = UI.tipsSeen || {};
+  if (UI.tipsSeen[id]) return;
+  UI.tipsSeen[id] = true;
+  UI_hint(text, secs || 6);
+}
 function UI_banner(title, sub) { UI.banner = { t: title, s: sub || '' }; UI.bannerT = 4.2; }
 function UI_hint(text, secs) { UI.hint = text; UI.hintT = secs || 4; }
 function UI_mapOpen() { UI.mapOpenT = 0; UI.mapSel = -1; }
@@ -184,7 +191,8 @@ function UI_crosshair(ctx, w, h, u) {
 
 function UI_score(ctx, w, h, u) {
   const touch = IN.touch;
-  const x = w - 22 * u, y = (touch ? 78 : 40) * u;
+  const top = touch ? 56 * (VX.hudDpr || 1) : 0;
+  const x = w - 22 * u, y = top + 40 * u;
   UI_text(ctx, String(Math.round(UI.scoreShown)).replace(/\B(?=(\d{3})+(?!\d))/g, '.'), x, y, 30 * u, '#e8c34a', 'right', 600, true);
   UI_text(ctx, 'PUNTOS', x, y - 28 * u, 11 * u, 'rgba(157,176,200,0.8)', 'right', 500);
   if (GS.combo >= 2) {
@@ -201,7 +209,7 @@ function UI_score(ctx, w, h, u) {
 var UI_CARD = ['N', 'E', 'S', 'O'];
 function UI_compass(ctx, w, h, u) {
   const pl = GS.player, cam = VX.cam;
-  const cx = w / 2, y = 24 * u, half = 190 * u;
+  const cx = w / 2, y = 24 * u, half = Math.min(190 * u, w * 0.17);
   ctx.fillStyle = 'rgba(6,9,16,0.38)'; ctx.fillRect(cx - half, y - 14 * u, half * 2, 22 * u);
   ctx.fillStyle = 'rgba(232,195,74,0.7)'; ctx.fillRect(cx - 1 * u, y - 15 * u, 2 * u, 5 * u);
   // heading in the same convention as the camera: yaw 0 looks at -z (north)
@@ -359,6 +367,7 @@ function UI_title(ctx, w, h, u, win) {
     UI_spacedText(ctx, 'MUNDO ABIERTO DE VÓXELES', w / 2, h * 0.40 + 36 * u, 17 * u, '#cfd9e8', 9 * u, 'center', 500);
     if (t > 0.6 && ((t * 1.6) | 0) % 2 === 0) UI_spacedText(ctx, IN.touch ? 'TOCA LA PANTALLA PARA EMPEZAR' : 'PULSA CUALQUIER TECLA PARA EMPEZAR', w / 2, h * 0.76, 15 * u, '#e8c34a', 6 * u, 'center', 500);
     UI_spacedText(ctx, 'WASD · RATÓN · ESPACIO PLANEA · E GARFIO', w / 2, h * 0.76 + 30 * u, 11 * u, '#7a8aa2', 4 * u, 'center', 500);
+    if (VX.saved) UI_spacedText(ctx, 'PARTIDA GUARDADA · PULSA B ANTES DE EMPEZAR PARA BORRARLA', w / 2, h * 0.76 + 54 * u, 10 * u, '#6ff08a', 3 * u, 'center', 500);
   }
   ctx.globalAlpha = 1;
 }

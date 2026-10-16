@@ -47,6 +47,34 @@ const SCEN = {
   },
   async penguin(c) { await bossShots(c, 'penguin'); },
   async joker(c) { await bossShots(c, 'joker'); },
+  async foes(c) {
+    await c.waitReady();
+    await c.p.evaluate(() => { __vx.start(); __vx.mapAll(); __vx.place(5.5, 26.01, 60.5, 0); });
+    await c.waitReady();
+    await c.p.evaluate(() => {
+      const g = __vx.gs(); g.player.b.x = 5.5; g.player.b.z = 60.5; g.player.a = 0;
+      __vx.spawn('clown', 3, 26.01, 52); __vx.spawn('goon', 5.5, 26.01, 52); __vx.spawn('heavy', 8, 26.01, 52); __vx.spawn('drone', 5.5, 30, 49);
+      g.spawnOff = true;
+      g.tcam.yaw = 0.5; g.tcam.pitch = -0.12; g.tcam.want = 6.5; __vx.step(30);
+    });
+    await c.shot('foes-front');
+    await c.p.evaluate(() => { const g = __vx.gs(); g.tcam.yaw = 0; g.tcam.pitch = -0.18; g.tcam.want = 5; __vx.step(10); });
+    await c.shot('foes-behind');
+  },
+  async swim(c) {
+    await c.waitReady();
+    await c.p.evaluate(() => { __vx.start(); __vx.mapAll(); __vx.place(70, 30, 178, 1.2); __vx.gs().spawnOff = true; });
+    await c.waitReady();
+    await c.p.evaluate(() => { __vx.step(240); const g = __vx.gs(); g.tcam.yaw = 1.0 + Math.PI; g.tcam.pitch = -0.2; g.tcam.want = 5; __vx.step(10); });
+    const s = await c.p.evaluate(() => { const p = __vx.gs().player; return p.mode + ' y=' + p.b.y.toFixed(2) + ' inWater=' + p.b.inWater; });
+    console.log('  ' + s);
+    await c.shot('swim');
+    // aim at the bank and grapple out
+    await c.p.evaluate(() => { const g = __vx.gs(); g.tcam.yaw = 0; g.tcam.pitch = 0.45; __vx.step(5); __vx.input().grappleEdge = true; __vx.step(300); });
+    const s2 = await c.p.evaluate(() => { const p = __vx.gs().player; return p.mode + ' y=' + p.b.y.toFixed(2) + ' z=' + p.b.z.toFixed(1) + ' onGround=' + p.b.onGround; });
+    console.log('  tras el garfio: ' + s2);
+    await c.shot('swim-out');
+  },
   async roof(c) {
     await c.waitReady();
     await c.p.evaluate(() => { __vx.start(); });

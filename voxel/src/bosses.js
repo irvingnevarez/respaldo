@@ -29,7 +29,7 @@ function BS_end(reset) {
   B.gone = true;
   for (const e of GS.enemies) if (e.bossMinion) e.gone = true;
   GS.boss = null; GS.zones = []; GS.waves = [];
-  WD.bossCool = reset ? 6 : 1e9;
+  WD.bossCool = reset ? 6 : 3;           // a beaten boss stays beaten (bossDone), the other one can start at once
 }
 
 function BS_update(dt) {

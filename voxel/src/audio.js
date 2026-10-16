@@ -116,6 +116,7 @@ function AU_event(k, e) {
   const near = (e && e.x !== undefined) ? AU_pos(e.x, e.z) : 1;
   if (near <= 0.02) return;
   switch (k) {
+    case 'burn': AU_noiseBurst(0.4, 'bandpass', 1800, 600, 0.9, 0.18); AU_tone('sawtooth', 160, 70, 0.3, 0.12); break;
     case 'jump': AU_noiseBurst(0.22, 'bandpass', 500, 1400, 0.9, 0.06); break;
     case 'land': AU_tone('sine', 120, 50, 0.16, 0.22); AU_noiseBurst(0.12, 'lowpass', 900, 200, 0.8, 0.12); break;
     case 'landHard': AU_tone('sine', 90, 36, 0.34, 0.4); AU_noiseBurst(0.3, 'lowpass', 1200, 120, 0.8, 0.26); break;

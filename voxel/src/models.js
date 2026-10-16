@@ -263,8 +263,8 @@ function MD_batman() {
   H.box(-2, 0, 2, 2, 2, 3, SKIN); H.box(-3, 2, 2, 3, 3, 3, SKIN);
   H.box(-1, 1, 2, 1, 2, 3, SKIN2);                           // mouth line
   H.box(-1, 3, 2, 1, 4, 3, SKIN);                            // nose
-  H.at(-2, 4, 2, '#f4f7ff', 0.55); H.at(-2, 5, 2, '#f4f7ff', 0.55);
-  H.at(1, 4, 2, '#f4f7ff', 0.55); H.at(1, 5, 2, '#f4f7ff', 0.55);
+  H.at(-2, 4, 2, '#f4f7ff', 0.42); H.at(-2, 5, 2, '#f4f7ff', 0.42);
+  H.at(1, 4, 2, '#f4f7ff', 0.42); H.at(1, 5, 2, '#f4f7ff', 0.42);
   H.at(-3, 5, 2, '#f4f7ff', 0.28); H.at(2, 5, 2, '#f4f7ff', 0.28);
   H.box(-3, 7, -1, -1, 9, 1, BLACK); H.box(1, 7, -1, 3, 9, 1, BLACK);
   H.at(-3, 9, 0, BLACK); H.at(2, 9, 0, BLACK);
