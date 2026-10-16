@@ -1,0 +1,4267 @@
+<title>Gotham Voxel</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* One deliberate visual world: a night city. Single theme, every colour explicit. */
+:root{
+  color-scheme:dark;
+  --ink:#04060b;
+  --night:#0a0e17;
+  --gold:#e8c34a;
+  --gold-dim:#8a7220;
+  --steel:#9db0c8;
+  --muted:#5d6b82;
+  --alarm:#d94a3f;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{background:var(--ink)}
+body{
+  background:var(--ink);
+  color:var(--steel);
+  font-family:Oswald,"Helvetica Neue",system-ui,sans-serif;
+  min-height:100dvh;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;
+  padding-block:14px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+  overscroll-behavior:none;
+  -webkit-user-select:none;user-select:none;
+}
+#stage{
+  position:relative;
+  width:min(100%,1280px);
+  aspect-ratio:16/9;
+  border-radius:10px;
+  overflow:hidden;
+  background:var(--ink);
+  box-shadow:0 0 0 1px rgba(232,195,74,.20),0 0 40px rgba(232,195,74,.06),0 24px 64px rgba(0,0,0,.85);
+  touch-action:none;
+}
+#stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+#hud{pointer-events:none}
+
+#boot{
+  position:absolute;inset:0;display:grid;place-content:center;justify-items:center;gap:14px;
+  background:radial-gradient(ellipse 70% 60% at 50% 45%,#10182a 0%,#04060b 78%);
+  color:var(--steel);letter-spacing:.32em;font-size:13px;text-transform:uppercase;text-align:center;
+}
+#boot b{font-size:26px;letter-spacing:.42em;color:var(--gold);font-weight:700}
+#bar{width:min(260px,60vw);height:3px;background:rgba(157,176,200,.18);border-radius:2px;overflow:hidden}
+#bar i{display:block;height:100%;width:0;background:var(--gold);transition:width .25s}
+
+#rail{
+  width:min(100%,1280px);display:flex;flex-wrap:wrap;align-items:center;justify-content:center;
+  gap:6px 20px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+}
+#rail b{
+  color:var(--gold);font-family:"JetBrains Mono",ui-monospace,monospace;font-weight:700;
+  letter-spacing:.04em;font-size:11px;border:1px solid var(--gold-dim);border-radius:4px;padding:2px 6px;margin-right:5px;
+}
+#rail span{white-space:nowrap}
+
+/* ── touch controls: floating over the picture, sized for thumbs ── */
+#touch{position:absolute;inset:0;pointer-events:none;display:none}
+#stick{position:absolute;left:max(14px,env(safe-area-inset-left,0px));bottom:14px;width:132px;height:132px;pointer-events:auto;touch-action:none}
+#stick .ring{position:absolute;inset:0;border-radius:50%;border:1.5px solid rgba(232,195,74,.40);background:rgba(8,10,18,.38)}
+#stick .nub{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;background:rgba(232,195,74,.34);border:1.5px solid rgba(232,195,74,.7)}
+#acts{position:absolute;right:max(14px,env(safe-area-inset-right,0px));bottom:14px;display:grid;grid-template-columns:repeat(2,64px);gap:10px;pointer-events:auto}
+.tb{
+  -webkit-tap-highlight-color:transparent;touch-action:none;user-select:none;-webkit-user-select:none;
+  width:64px;height:64px;border-radius:50%;border:1.5px solid rgba(232,195,74,.55);
+  background:rgba(8,10,18,.5);color:var(--gold);font:600 11px/1 Oswald,sans-serif;letter-spacing:.06em;
+  display:grid;place-items:center;
+}
+.tb.big{width:76px;height:76px;grid-column:2}
+.tb.on,.tb:active{background:rgba(232,195,74,.34)}
+#sys{position:absolute;right:max(10px,env(safe-area-inset-right,0px));top:10px;display:flex;gap:8px;pointer-events:auto}
+#sys .tb{width:38px;height:38px;font-size:13px}
+
+@media (pointer:coarse),(max-width:720px){
+  #touch{display:block}
+  #rail{display:none}
+  body{justify-content:flex-start;justify-content:safe center;padding-block:8px;gap:8px}
+}
+@media (max-width:560px) and (orientation:portrait){
+  #stage{aspect-ratio:4/5;width:100%}
+  #stick{width:112px;height:112px}
+  .tb{width:56px;height:56px}.tb.big{width:68px;height:68px}
+  #acts{grid-template-columns:repeat(2,56px);gap:8px}
+}
+@media (max-height:560px) and (orientation:landscape){
+  body{padding-block:6px}
+  #stage{height:calc(100dvh - 12px);width:auto;max-width:100%}
+}
+:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+</style>
+<div id="stage">
+  <canvas id="gl" aria-label="Mundo abierto de Gotham en vóxeles"></canvas>
+  <canvas id="hud" aria-hidden="true"></canvas>
+  <div id="boot"><b>GOTHAM</b><span id="bootmsg">Generando la ciudad</span><div id="bar"><i id="barfill"></i></div></div>
+  <div id="touch">
+    <div id="stick"><div class="ring"></div><div class="nub" id="nub"></div></div>
+    <div id="acts">
+      <button class="tb" id="tbG" type="button" aria-label="Garfio">GARFIO</button>
+      <button class="tb" id="tbB" type="button" aria-label="Batarang">BATARANG</button>
+      <button class="tb" id="tbP" type="button" aria-label="Golpear">GOLPE</button>
+      <button class="tb big" id="tbJ" type="button" aria-label="Saltar y planear">SALTO</button>
+    </div>
+    <div id="sys"><button class="tb" id="tbM" type="button" aria-label="Mapa">MAPA</button><button class="tb" id="tbS" type="button" aria-label="Sonido">&#9834;</button></div>
+  </div>
+</div>
+<div id="rail">
+  <span><b>WASD</b>Mover</span>
+  <span><b>Ratón</b>Cámara</span>
+  <span><b>Espacio</b>Saltar / planear</span>
+  <span><b>Shift</b>Correr</span>
+  <span><b>E</b>Garfio</span>
+  <span><b>Clic</b>Golpear</span>
+  <span><b>F</b>Batarang</span>
+  <span><b>M</b>Mapa</span>
+</div>
+<script type="text/plain" id="vx-worker-src">
+// noise
+// ═══════════════════════════════════════════════════════════════════════
+//  NOISE — deterministic hashing and value noise. Shared: the same source runs
+//  on the main thread and inside the chunk worker, so it must stay free of any
+//  window/document reference. Everything is a pure function of its arguments.
+// ═══════════════════════════════════════════════════════════════════════
+
+// Three integers in, one well-mixed uint32 out. Used everywhere a "random"
+// value is needed, because a world that has to be rebuilt identically in any
+// order — chunk by chunk, on any worker — cannot use a stateful generator.
+function NZ_hash(a, b, c) {
+  let h = Math.imul(a | 0, 0x85ebca6b) ^ Math.imul(b | 0, 0xc2b2ae35) ^ Math.imul(c | 0, 0x27d4eb2f);
+  h ^= h >>> 16; h = Math.imul(h, 0x7feb352d);
+  h ^= h >>> 15; h = Math.imul(h, 0x846ca68b);
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+function NZ_f(a, b, c) { return NZ_hash(a, b, c) / 4294967296; }
+
+// Smooth 2D value noise in [0,1).
+function NZ_noise2(x, z, s) {
+  const xi = Math.floor(x), zi = Math.floor(z);
+  const fx = x - xi, fz = z - zi;
+  const u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
+  const a = NZ_f(xi, zi, s), b = NZ_f(xi + 1, zi, s);
+  const c = NZ_f(xi, zi + 1, s), d = NZ_f(xi + 1, zi + 1, s);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+
+// Fractal sum, normalised back into [0,1).
+function NZ_fbm2(x, z, s, oct) {
+  let amp = 0.5, f = 1, sum = 0, norm = 0;
+  for (let i = 0; i < oct; i++) {
+    sum += amp * NZ_noise2(x * f, z * f, s + i * 31);
+    norm += amp; amp *= 0.5; f *= 2;
+  }
+  return sum / norm;
+}
+
+function NZ_clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+function NZ_smooth(a, b, x) { const t = NZ_clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); }
+// positive modulo: the world has negative coordinates, and JS % keeps the sign
+function NZ_mod(a, n) { const r = a % n; return r < 0 ? r + n : r; }
+
+
+// blocks
+// ═══════════════════════════════════════════════════════════════════════
+//  BLOCKS — the palette. Shared with the worker.
+//
+//  Colours are sRGB bytes and deliberately dark and cold: a night city reads
+//  through VALUE and a few hot accents (sodium lamps, lit windows, neon), not
+//  through saturated albedo. The mesher bakes light into vertices, so these are
+//  albedos, and a mid-grey here lands near black on screen under moonlight.
+// ═══════════════════════════════════════════════════════════════════════
+
+var BK_FL_WET = 1;     // rain-slicked: picks up fresnel sheen and light streaks
+var BK_FL_EMIT = 2;    // self-lit: ignores baked light, feeds the bloom
+var BK_FL_TRANS = 4;   // translucent (water): meshed separately
+var BK_FL_GLOSS = 8;   // hard glossy surface (glass, ice, metal)
+var BK_FL_ANIM = 16;   // shimmers (lava, slime)
+var BK_FL_NEON = 32;   // flickers
+
+var BK = {};
+var BK_NAMES = [];
+var BK_SOLID = new Uint8Array(256);    // stops movement
+var BK_OPAQUE = new Uint8Array(256);   // stops light, casts AO
+var BK_RGB = new Uint8Array(256 * 3);
+var BK_EMIT = new Float32Array(256);   // emissive strength (HDR multiplier)
+var BK_FLAGS = new Uint8Array(256);
+
+(function () {
+  let next = 0;
+  function def(name, r, g, b, flags, emit) {
+    const id = next++;
+    BK[name] = id; BK_NAMES[id] = name;
+    BK_RGB[id * 3] = r; BK_RGB[id * 3 + 1] = g; BK_RGB[id * 3 + 2] = b;
+    BK_FLAGS[id] = flags | 0;
+    BK_EMIT[id] = emit || 0;
+    const trans = (flags & BK_FL_TRANS) !== 0;
+    BK_SOLID[id] = (id === 0 || trans) ? 0 : 1;
+    BK_OPAQUE[id] = (id === 0 || trans) ? 0 : 1;
+    if (emit) BK_FLAGS[id] |= BK_FL_EMIT;
+    return id;
+  }
+  const W = BK_FL_WET, G = BK_FL_GLOSS, T = BK_FL_TRANS, A = BK_FL_ANIM, N = BK_FL_NEON;
+
+  def('AIR', 0, 0, 0, 0);
+  // ground and structure
+  def('BEDROCK', 18, 20, 26, 0);
+  def('STONE', 56, 60, 70, 0);
+  def('DIRT', 62, 50, 42, 0);
+  def('ASPHALT', 32, 34, 40, W);
+  def('ROADLINE', 176, 168, 122, W);
+  def('SIDEWALK', 88, 92, 100, W);
+  def('CURB', 114, 117, 125, W);
+  def('CONCRETE', 104, 108, 116, 0);
+  def('CONCRETE_DK', 62, 66, 74, 0);
+  def('CONCRETE_LT', 142, 146, 154, 0);
+  def('BRICK', 106, 54, 44, 0);
+  def('BRICK_DK', 72, 40, 36, 0);
+  def('GOTHIC', 68, 72, 84, 0);
+  def('GOTHIC_DK', 42, 46, 56, 0);
+  def('STEEL', 82, 90, 106, G);
+  def('STEEL_DK', 46, 52, 64, G);
+  def('RUST', 110, 66, 42, 0);
+  def('GLASS', 22, 32, 48, G);
+  def('GLASS_BLUE', 36, 58, 86, G);
+  def('WIN_WARM', 255, 190, 104, 0, 1.55);
+  def('WIN_COOL', 150, 200, 255, 0, 1.45);
+  def('WIN_WHITE', 240, 236, 214, 0, 1.5);
+  def('ROOF_TAR', 30, 32, 38, 0);
+  def('ROOF_GRAVEL', 56, 56, 60, 0);
+  def('WATER', 16, 42, 62, T);
+  def('SAND', 118, 104, 82, 0);
+  def('WOOD', 90, 62, 40, 0);
+  def('WOOD_DK', 56, 38, 28, 0);
+  def('GRASS', 28, 56, 36, 0);
+  def('ICE', 146, 198, 226, G | W);
+  def('SNOW', 204, 218, 232, 0);
+  def('LAMP_POLE', 28, 32, 40, G);
+  def('LAMP_LIGHT', 255, 168, 78, 0, 2.2);
+  def('NEON_PINK', 255, 56, 150, N, 2.0);
+  def('NEON_CYAN', 56, 220, 255, N, 2.0);
+  def('NEON_GREEN', 90, 255, 120, N, 1.9);
+  def('NEON_YELLOW', 255, 220, 60, N, 1.9);
+  def('NEON_RED', 255, 48, 48, N, 1.9);
+  def('NEON_PURPLE', 170, 80, 255, N, 1.9);
+  def('LAVA', 255, 96, 24, A, 2.4);
+  def('HOT_METAL', 255, 140, 54, A, 1.5);
+  def('COPPER', 64, 124, 108, G);
+  def('CARN_RED', 188, 30, 40, 0);
+  def('CARN_WHITE', 222, 222, 226, 0);
+  def('CARN_YELLOW', 232, 188, 40, 0);
+  def('CARN_PURPLE', 108, 48, 148, 0);
+  def('CARN_TEAL', 36, 150, 150, 0);
+  def('CONT_RED', 146, 38, 34, 0);
+  def('CONT_BLUE', 38, 66, 128, 0);
+  def('CONT_GREEN', 38, 98, 68, 0);
+  def('CONT_ORANGE', 186, 98, 38, 0);
+  def('CONT_GREY', 98, 104, 112, 0);
+  def('HAZ_Y', 232, 198, 30, 0);
+  def('HAZ_K', 28, 28, 32, 0);
+  def('SEWER_BRICK', 38, 56, 50, W);
+  def('SEWER_SLIME', 60, 200, 90, A, 0.9);
+  def('SEWER_WATER', 36, 96, 66, T | A);
+  def('BRIDGE_DECK', 56, 60, 68, W);
+  def('CABLE', 38, 42, 50, G);
+  def('SIGNAL', 255, 238, 160, 0, 2.6);
+  def('WHITE', 228, 230, 236, 0);
+  def('BLACK', 14, 14, 18, 0);
+  def('RED', 176, 28, 32, 0);
+  def('PURPLE', 86, 46, 118, 0);
+  def('GREEN', 58, 146, 68, 0);
+  def('GARGOYLE', 52, 56, 66, 0);
+  def('SKYLIGHT', 120, 170, 210, G, 0.6);
+  def('BEACON_RED', 255, 40, 40, 0, 2.2);
+  def('CAR_RED', 150, 28, 30, G);
+  def('CAR_BLUE', 34, 60, 120, G);
+  def('CAR_WHITE', 190, 192, 198, G);
+  def('CAR_BLACK', 22, 24, 28, G);
+  def('CAR_YELLOW', 196, 156, 30, G);
+  def('HEADLIGHT', 255, 244, 200, 0, 1.6);
+  def('TAILLIGHT', 255, 40, 36, 0, 1.4);
+  def('HYDRANT', 170, 32, 30, 0);
+  def('FROZEN_WATER', 120, 170, 204, G | W);
+  def('FURNACE', 70, 40, 34, 0);
+  def('GAS', 120, 220, 90, T | A);
+  def('LEAVES', 24, 50, 32, 0);
+  def('TRUNK', 52, 38, 30, 0);
+  def('BENCH', 74, 52, 36, 0);
+  def('CRANE', 170, 120, 30, 0);
+  def('SNOW_ICE', 170, 196, 218, G);
+  def('BOLT', 255, 255, 255, 0, 2.0);
+})();
+
+// Convenience predicates for the mesher.
+function BK_isSolid(id) { return BK_SOLID[id] === 1; }
+
+
+// worldgen
+// ═══════════════════════════════════════════════════════════════════════
+//  WORLDGEN — the whole of Gotham as a pure function of (x, y, z).
+//
+//  Shared with the chunk worker. Nothing here keeps state that depends on the
+//  ORDER chunks are requested in: any chunk can be built alone, on any worker,
+//  in any order, and neighbouring chunks agree at their seams. That property is
+//  what makes an infinite streamed world possible, and every design choice below
+//  serves it:
+//
+//   - the city is a regular street grid; each block's contents are a hash of its
+//     (bx, bz), so a block can be recomputed from nothing;
+//   - buildings are described analytically (footprint, tiers, roof) and a column
+//     asks "what is my height" instead of being stamped into the world;
+//   - whether a facade voxel is a window, a pier or a ledge is decided from the
+//     voxel's own coordinates and its building's seed, not from a neighbour.
+// ═══════════════════════════════════════════════════════════════════════
+
+var WG_H = 128;            // world height
+var WG_GY = 25;            // y of the top road voxel; feet stand at GY + 1
+var WG_SEA = 21;           // y of the top water voxel; the surface sits at 22.0
+var WG_FLOOR = 8;          // sea floor
+var WG_PITCH = 48;         // one city block plus its street
+var WG_ST = 10;            // street width: 2 sidewalk + 6 road + 2 sidewalk
+var WG_BASE = WG_GY + 2;   // y of the first building voxel (above the raised pavement)
+var WG_SEED = 1939;
+
+var WG_D = { SEA: 0, AZOTEAS: 1, MUELLES: 2, ARKHAM: 3, HIELO: 4, ALCANT: 5, FUNDI: 6, PUENTE: 7, CARNAVAL: 8 };
+var WG_DNAME = ['MAR ABIERTO', 'AZOTEAS DE GOTHAM', 'MUELLES DE GOTHAM', 'TORRE DE ARKHAM', 'MUELLE HELADO',
+  'ALCANTARILLAS', 'FUNDICIÓN DE ACERO', 'EL PUENTE DE GOTHAM', 'CARNAVAL DE ARKHAM'];
+
+// ── land, channel, districts ──────────────────────────────────────────────
+
+// A channel runs east-west through the whole island. Its centre wanders, so it
+// reads as a river rather than a ruled line, and it is wide enough that the only
+// ways across are the bridge, a long glide or the grapple.
+function WG_channelZ(x) { return 170 + 22 * Math.sin(x / 160) + 9 * Math.sin(x / 53 + 1.3); }
+function WG_channelHW(x) { return 50 + 7 * Math.sin(x / 97 + 0.6); }
+function WG_inChannel(x, z) { return Math.abs(z - WG_channelZ(x)) < WG_channelHW(x); }
+
+function WG_landRaw(x, z) {
+  const r = Math.hypot(x / 770, z / 720);
+  const n = NZ_fbm2(x / 120, z / 120, 7, 3) - 0.5;
+  return r + n * 0.24 < 1.0;
+}
+function WG_isLand(x, z) { return WG_landRaw(x, z) && !WG_inChannel(x, z); }
+
+// Voronoi-ish regions, warped so borders wander. Centres are in blocks and the
+// radius is only a weight: a district with a bigger radius wins more ground.
+var WG_CENTERS = [
+  [WG_D.AZOTEAS, 0, -40, 300],
+  [WG_D.ARKHAM, -20, -540, 240],
+  [WG_D.CARNAVAL, -480, -330, 260],
+  [WG_D.HIELO, 480, -360, 260],
+  [WG_D.MUELLES, -460, 420, 290],
+  [WG_D.ALCANT, 40, 420, 250],
+  [WG_D.FUNDI, 480, 420, 260],
+];
+function WG_districtAt(x, z) {
+  const wx = x + (NZ_fbm2(x / 150, z / 150, 3, 2) - 0.5) * 90;
+  const wz = z + (NZ_fbm2(x / 150 + 40, z / 150 + 40, 5, 2) - 0.5) * 90;
+  let best = 1, bd = 1e9;
+  for (let i = 0; i < WG_CENTERS.length; i++) {
+    const c = WG_CENTERS[i];
+    const d = Math.hypot(wx - c[1], wz - c[2]) / c[3];
+    if (d < bd) { bd = d; best = c[0]; }
+  }
+  // the bridge approaches belong to the bridge, whatever bank they are on
+  if (Math.abs(x - 5) < 70 && Math.abs(z - WG_channelZ(5)) < 130) return WG_D.PUENTE;
+  return best;
+}
+
+// ── building styles ───────────────────────────────────────────────────────
+// A style says how a facade is dressed. Resolved to block ids once, below.
+var WG_STY = [];
+(function () {
+  function S(o) {
+    const r = {};
+    for (const k in o) r[k] = (typeof o[k] === 'string' && BK[o[k]] !== undefined) ? BK[o[k]] : o[k];
+    WG_STY.push(r);
+  }
+  // 0 office block: dark concrete, blue glass, steel piers
+  S({ wall: 'CONCRETE_DK', pier: 'STEEL_DK', ledge: 'CONCRETE', win: 'GLASS_BLUE', roof: 'ROOF_TAR', WP: 3, FH: 4, lit: 0.34, wr: 2, wy: 1, store: 1 });
+  // 1 glass tower: curtain wall, thin mullions
+  S({ wall: 'STEEL_DK', pier: 'STEEL', ledge: 'STEEL', win: 'GLASS_BLUE', roof: 'ROOF_TAR', WP: 2, FH: 4, lit: 0.27, wr: 3, wy: 1, store: 1 });
+  // 2 art deco: pale stone, tall dark window strips
+  S({ wall: 'CONCRETE_LT', pier: 'CONCRETE', ledge: 'CONCRETE_LT', win: 'GLASS', roof: 'ROOF_GRAVEL', WP: 4, FH: 4, lit: 0.40, wr: 2, wy: 1, store: 1 });
+  // 3 brick: small windows, red walls
+  S({ wall: 'BRICK', pier: 'BRICK_DK', ledge: 'CONCRETE', win: 'GLASS', roof: 'ROOF_TAR', WP: 4, FH: 4, lit: 0.30, wr: 2, wy: 1, store: 1 });
+  // 4 gothic: narrow tall windows, stone
+  S({ wall: 'GOTHIC', pier: 'GOTHIC_DK', ledge: 'GOTHIC_DK', win: 'GLASS', roof: 'COPPER', WP: 4, FH: 5, lit: 0.22, wr: 3, wy: 1, store: 0 });
+  // 5 warehouse: rust and concrete, few windows
+  S({ wall: 'CONCRETE', pier: 'RUST', ledge: 'CONCRETE_DK', win: 'GLASS', roof: 'ROOF_GRAVEL', WP: 6, FH: 6, lit: 0.10, wr: 1, wy: 4, store: 0 });
+  // 6 industrial: rust and steel
+  S({ wall: 'RUST', pier: 'STEEL_DK', ledge: 'STEEL_DK', win: 'GLASS', roof: 'STEEL_DK', WP: 5, FH: 5, lit: 0.16, wr: 1, wy: 3, store: 0 });
+  // 7 carnival: bright stripes
+  S({ wall: 'CARN_RED', pier: 'CARN_WHITE', ledge: 'CARN_PURPLE', win: 'GLASS', roof: 'CARN_PURPLE', WP: 4, FH: 4, lit: 0.45, wr: 2, wy: 1, store: 1 });
+  // 8 ice: pale blue and snow
+  S({ wall: 'CONCRETE_LT', pier: 'ICE', ledge: 'SNOW', win: 'GLASS_BLUE', roof: 'SNOW', WP: 4, FH: 4, lit: 0.35, wr: 2, wy: 1, store: 1 });
+})();
+
+// ── blocks ────────────────────────────────────────────────────────────────
+
+var WG_blockCache = new Map();
+
+function WG_mk(x0, z0, x1, z1, h, st, seed, o) {
+  const b = { x0: x0, z0: z0, x1: x1, z1: z1, h: h, st: st, seed: seed, base: WG_BASE,
+    tiers: null, roof: 0, rh: 0, wo: NZ_hash(seed, 3, 5) % 7, props: null, lit: -1 };
+  if (o) for (const k in o) b[k] = o[k];
+  return b;
+}
+
+function WG_blockInfo(bx, bz) {
+  const key = (bx + 512) * 1024 + (bz + 512);
+  let b = WG_blockCache.get(key);
+  if (!b) { b = WG_genBlock(bx, bz); WG_blockCache.set(key, b); }
+  return b;
+}
+
+function WG_genBlock(bx, bz) {
+  const ox = bx * WG_PITCH + WG_ST, oz = bz * WG_PITCH + WG_ST;
+  const L = WG_PITCH - WG_ST;   // 38
+  const info = { bx: bx, bz: bz, ox: ox, oz: oz, d: 0, full: false, kind: 'water', bld: [] };
+  let land = 0;
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+    if (WG_isLand(ox + i * (L / 2), oz + j * (L / 2))) land++;
+  }
+  if (land === 0) return info;
+  info.d = WG_districtAt(ox + L / 2, oz + L / 2);
+  if (land < 9) { info.kind = 'shore'; return info; }
+  info.full = true;
+  info.kind = 'bld';
+
+  const s = NZ_hash(bx, bz, WG_SEED);
+  const r = NZ_f(bx, bz, 11), r2 = NZ_f(bx, bz, 12), r3 = NZ_f(bx, bz, 13), r4 = NZ_f(bx, bz, 14);
+  const cxm = ox + L / 2, czm = oz + L / 2;
+  const d = info.d;
+
+  if (d === WG_D.AZOTEAS || d === WG_D.PUENTE) {
+    const cd = Math.min(1, Math.hypot(cxm, czm + 40) / 300);
+    if (r < 0.10) { info.kind = 'park'; return info; }
+    if (r < 0.52) {
+      // one big tower, often stepped like the old art-deco skyscrapers
+      const ins = Math.floor(r2 * 4);
+      const hmax = 92 - 62 * cd;
+      const h = Math.floor(24 + r3 * (hmax - 24));
+      const st = r4 < 0.34 ? 0 : (r4 < 0.62 ? 1 : 2);
+      const tiers = [];
+      if (h > 44 && (st === 2 || r2 > 0.55)) {
+        tiers.push([4 + ins, Math.floor(h * 0.78)]);
+        if (h > 62) tiers.push([9 + ins, Math.floor(h * 0.92)]);
+        if (h > 76) tiers.push([14 + ins, h]);
+      }
+      const hh = tiers.length ? Math.floor(h * 0.62) : h;
+      const b = WG_mk(ox + ins, oz + ins, ox + L - ins, oz + L - ins, hh, st, s, { tiers: tiers.length ? tiers : null });
+      info.bld.push(b);
+    } else {
+      // four mid-rises, with a gap so the alleys between them are walkable
+      const q = [[0, 0], [20, 0], [0, 20], [20, 20]];
+      for (let i = 0; i < 4; i++) {
+        const rr = NZ_f(bx * 4 + i, bz, 21);
+        const hh = Math.floor(12 + rr * (46 - 26 * cd));
+        const st = NZ_f(bx * 4 + i, bz, 22) < 0.5 ? 0 : 3;
+        info.bld.push(WG_mk(ox + q[i][0], oz + q[i][1], ox + q[i][0] + 18, oz + q[i][1] + 18, hh, st, NZ_hash(s, i, 7)));
+      }
+    }
+    return info;
+  }
+
+  if (d === WG_D.ARKHAM) {
+    if (r < 0.14) { info.kind = 'park'; return info; }
+    // gothic masses with pitched roofs and the odd spire
+    if (r < 0.5) {
+      const h = Math.floor(14 + r2 * 22);
+      info.bld.push(WG_mk(ox + 2, oz + 2, ox + L - 2, oz + L - 2, h, 4, s, { roof: r3 < 0.5 ? 1 : 2, rh: 9 }));
+    } else {
+      const q = [[0, 0], [20, 0], [0, 20], [20, 20]];
+      for (let i = 0; i < 4; i++) {
+        const rr = NZ_f(bx * 4 + i, bz, 31);
+        const h = Math.floor(10 + rr * 22);
+        info.bld.push(WG_mk(ox + q[i][0], oz + q[i][1], ox + q[i][0] + 18, oz + q[i][1] + 18, h, 4, NZ_hash(s, i, 9),
+          { roof: rr < 0.3 ? 3 : (rr < 0.65 ? 1 : 2), rh: rr < 0.3 ? 16 : 7 }));
+      }
+    }
+    return info;
+  }
+
+  if (d === WG_D.MUELLES) {
+    if (r < 0.30) { info.kind = 'yard'; return info; }       // container yard
+    // long low warehouses
+    if (r2 < 0.5) {
+      info.bld.push(WG_mk(ox + 1, oz + 2, ox + L - 1, oz + 17, Math.floor(8 + r3 * 7), 5, s));
+      info.bld.push(WG_mk(ox + 1, oz + 21, ox + L - 1, oz + L - 2, Math.floor(8 + r4 * 8), 5, NZ_hash(s, 1, 1)));
+    } else {
+      info.bld.push(WG_mk(ox + 2, oz + 2, ox + L - 2, oz + L - 2, Math.floor(10 + r3 * 14), 5, s));
+    }
+    return info;
+  }
+
+  if (d === WG_D.ALCANT) {
+    if (r < 0.08) { info.kind = 'park'; return info; }
+    // dense little brick houses with pitched roofs: four to six lots per block
+    const q = [[0, 0], [13, 0], [26, 0], [0, 20], [13, 20], [26, 20]];
+    for (let i = 0; i < 6; i++) {
+      const rr = NZ_f(bx * 8 + i, bz, 41);
+      if (rr < 0.12) continue;
+      const w = i % 3 === 2 ? 12 : 12;
+      info.bld.push(WG_mk(ox + q[i][0], oz + q[i][1], ox + q[i][0] + w, oz + q[i][1] + 17,
+        Math.floor(9 + rr * 16), 3, NZ_hash(s, i, 13), { roof: rr < 0.5 ? 1 : 2, rh: 6 }));
+    }
+    return info;
+  }
+
+  if (d === WG_D.FUNDI) {
+    if (r < 0.2) { info.kind = 'yard'; return info; }
+    info.bld.push(WG_mk(ox + 2, oz + 2, ox + L - 2, oz + L - 2, Math.floor(14 + r2 * 26), 6, s));
+    return info;
+  }
+
+  if (d === WG_D.CARNAVAL) {
+    if (r < 0.34) { info.kind = 'plaza'; return info; }
+    const q = [[0, 0], [20, 0], [0, 20], [20, 20]];
+    for (let i = 0; i < 4; i++) {
+      const rr = NZ_f(bx * 4 + i, bz, 51);
+      if (rr < 0.2) continue;
+      info.bld.push(WG_mk(ox + q[i][0], oz + q[i][1], ox + q[i][0] + 18, oz + q[i][1] + 18,
+        Math.floor(8 + rr * 18), 7, NZ_hash(s, i, 17), { roof: rr < 0.6 ? 3 : 0, rh: 10 }));
+    }
+    return info;
+  }
+
+  if (d === WG_D.HIELO) {
+    if (r < 0.28) { info.kind = 'plaza'; return info; }
+    const q = [[0, 0], [20, 0], [0, 20], [20, 20]];
+    for (let i = 0; i < 4; i++) {
+      const rr = NZ_f(bx * 4 + i, bz, 61);
+      if (rr < 0.25) continue;
+      info.bld.push(WG_mk(ox + q[i][0], oz + q[i][1], ox + q[i][0] + 18, oz + q[i][1] + 18,
+        Math.floor(8 + rr * 16), 8, NZ_hash(s, i, 19)));
+    }
+    return info;
+  }
+
+  info.kind = 'plaza';
+  return info;
+}
+
+// ── a building's height at one column ─────────────────────────────────────
+// 0 means "this column is not inside the building". Includes the parapet and the
+// roof profile, so it is the true solid top; props above it are not counted.
+function WG_bTop(b, x, z) {
+  if (x < b.x0 || x >= b.x1 || z < b.z0 || z >= b.z1) return 0;
+  let h = b.h, ins = 0;
+  const T = b.tiers;
+  if (T) {
+    for (let i = 0; i < T.length; i++) {
+      const t = T[i], k = t[0];
+      if (t[1] > h && x >= b.x0 + k && x < b.x1 - k && z >= b.z0 + k && z < b.z1 - k) { h = t[1]; ins = k; }
+    }
+  }
+  let top = b.base + h;
+  if (b.roof === 0) {
+    if (x === b.x0 + ins || x === b.x1 - 1 - ins || z === b.z0 + ins || z === b.z1 - 1 - ins) top += 1;   // parapet
+  } else if (b.roof === 1) {                                  // gable, ridge along x
+    const mid = (b.z0 + b.z1 - 1) / 2, half = (b.z1 - b.z0) / 2;
+    top += Math.max(0, Math.min(b.rh, Math.floor((half - Math.abs(z - mid)) * 0.62)));
+  } else if (b.roof === 2) {                                  // gable, ridge along z
+    const mid = (b.x0 + b.x1 - 1) / 2, half = (b.x1 - b.x0) / 2;
+    top += Math.max(0, Math.min(b.rh, Math.floor((half - Math.abs(x - mid)) * 0.62)));
+  } else if (b.roof === 3) {                                  // pyramid / spire
+    const cx = (b.x0 + b.x1 - 1) / 2, cz = (b.z0 + b.z1 - 1) / 2;
+    const dd = Math.max(Math.abs(x - cx), Math.abs(z - cz));
+    top += Math.max(0, b.rh - Math.floor(dd * (b.rh / ((b.x1 - b.x0) / 2 + 0.5))));
+  }
+  return top < WG_H - 1 ? top : WG_H - 1;
+}
+
+// ── column classification ─────────────────────────────────────────────────
+var WG_K = { WATER: 0, ROAD: 1, SIDEWALK: 2, LOT: 3, BUILDING: 4, PARK: 5, SHORE: 6, PLAZA: 7, YARD: 8 };
+
+// Fills `o` with what stands in column (x, z): its kind, the solid top (the first
+// free y above the mass), and the building if there is one.
+function WG_colInfo(x, z, o) {
+  o.b = null;
+  if (!WG_isLand(x, z)) { o.kind = WG_K.WATER; o.top = WG_FLOOR + 1; return o; }
+  const ux = NZ_mod(x, WG_PITCH), uz = NZ_mod(z, WG_PITCH);
+  const sx = ux < WG_ST, sz = uz < WG_ST;
+  if (sx || sz) {
+    // a street. The outer two voxels each side are raised pavement.
+    const a = sx ? ux : 99, c = sz ? uz : 99;
+    if ((sx && (ux < 2 || ux > 7)) && (!sz || (uz < 2 || uz > 7))) { o.kind = WG_K.SIDEWALK; o.top = WG_GY + 2; return o; }
+    if ((sz && (uz < 2 || uz > 7)) && (!sx || (ux < 2 || ux > 7))) { o.kind = WG_K.SIDEWALK; o.top = WG_GY + 2; return o; }
+    o.kind = WG_K.ROAD; o.top = WG_GY + 1; return o;
+  }
+  const bx = Math.floor(x / WG_PITCH), bz = Math.floor(z / WG_PITCH);
+  const info = WG_blockInfo(bx, bz);
+  if (info.kind === 'water') { o.kind = WG_K.WATER; o.top = WG_FLOOR + 1; return o; }
+  if (info.kind === 'shore') { o.kind = WG_K.SHORE; o.top = WG_GY + 2; return o; }
+  for (let i = 0; i < info.bld.length; i++) {
+    const t = WG_bTop(info.bld[i], x, z);
+    if (t) { o.kind = WG_K.BUILDING; o.b = info.bld[i]; o.top = t; return o; }
+  }
+  o.kind = info.kind === 'park' ? WG_K.PARK : (info.kind === 'plaza' ? WG_K.PLAZA : (info.kind === 'yard' ? WG_K.YARD : WG_K.LOT));
+  o.top = WG_GY + 2;
+  return o;
+}
+
+var WG_tmpCol = { kind: 0, top: 0, b: null };
+// The solid mass at a column, ignoring small props. The light baker uses it for
+// moon shadows and horizon occlusion, so it has to be cheap and consistent.
+function WG_topMass(x, z) { return WG_colInfo(x, z, WG_tmpCol).top; }
+
+function WG_massChunk(cx, cz) {
+  const m = new Uint8Array(256), o = { kind: 0, top: 0, b: null };
+  for (let i = 0; i < 16; i++) for (let j = 0; j < 16; j++) m[i * 16 + j] = WG_colInfo(cx * 16 + i, cz * 16 + j, o).top;
+  return m;
+}
+
+// ── facade dressing ───────────────────────────────────────────────────────
+function WG_facade(b, st, x, y, z, ex) {
+  // ex: which of -x,+x,-z,+z are exposed at this height (booleans)
+  let n = 0, side = 0;
+  for (let i = 0; i < 4; i++) if (ex[i]) { n++; side = i; }
+  if (n >= 2) return st.pier;                         // a corner is always a pier
+  const u = (side < 2 ? z : x) + b.wo;
+  const f = Math.floor((y - b.base) / st.FH);
+  const yy = (y - b.base) - f * st.FH;
+  const iu = NZ_mod(u, st.WP);
+  const cu = Math.floor(u / st.WP);
+  if (yy === 0) return st.ledge;                      // the floor slab
+  if (iu === 0) return st.pier;                       // the vertical pier between windows
+  // ground floor of shops and offices: tall dark glass instead of small windows
+  if (f === 0 && st.store) return yy <= 3 ? st.win : st.wall;
+  if (yy < st.wy || yy >= st.wy + st.wr) return st.wall;       // spandrel above/below the window band
+  // a window: lit or dark, decided from the building and the window's own address
+  if (NZ_f(b.seed + side * 131, f, cu) < st.lit) {
+    const k = NZ_f(b.seed, f * 3 + 1, cu * 7 + side);
+    return k < 0.62 ? BK.WIN_WARM : (k < 0.9 ? BK.WIN_COOL : BK.WIN_WHITE);
+  }
+  return st.win;
+}
+
+// Things standing on a flat roof: tanks, antennas, vents. Deterministic per
+// building, placed away from the parapet.
+function WG_roofProps(b) {
+  if (b.props) return b.props;
+  const p = [], w = b.x1 - b.x0, d = b.z1 - b.z0;
+  const ins = (b.tiers && b.tiers.length) ? b.tiers[b.tiers.length - 1][0] : 0;
+  const x0 = b.x0 + ins + 2, x1 = b.x1 - ins - 2, z0 = b.z0 + ins + 2, z1 = b.z1 - ins - 2;
+  if (b.roof !== 0 || x1 - x0 < 6 || z1 - z0 < 6) { b.props = p; return p; }
+  const n = 1 + (NZ_hash(b.seed, 9, 1) % 3);
+  for (let i = 0; i < n; i++) {
+    const k = NZ_hash(b.seed, 20 + i, 2) % 5;
+    const px = x0 + (NZ_hash(b.seed, 30 + i, 3) % Math.max(1, x1 - x0 - 4));
+    const pz = z0 + (NZ_hash(b.seed, 40 + i, 4) % Math.max(1, z1 - z0 - 4));
+    p.push({ k: k, x: px, z: pz });
+  }
+  b.props = p;
+  return p;
+}
+
+// Block id for a prop voxel at (x, dy, z), dy counted up from the roof surface.
+function WG_propBlock(p, x, dy, z, seed) {
+  const lx = x - p.x, lz = z - p.z;
+  if (p.k === 0) {                                    // water tank on legs
+    if (lx < 0 || lx > 4 || lz < 0 || lz > 4) return 0;
+    if (dy < 3) return ((lx === 0 || lx === 4) && (lz === 0 || lz === 4)) ? BK.STEEL_DK : 0;
+    if (dy < 7) return (dy === 4 || dy === 6) ? BK.STEEL_DK : BK.WOOD;
+    if (dy === 7) return (lx > 0 && lx < 4 && lz > 0 && lz < 4) ? BK.WOOD_DK : 0;
+    return 0;
+  }
+  if (p.k === 1 || p.k === 4) {                       // antenna with a red beacon
+    if (lx !== 2 || lz !== 2) return (dy === 4 && (lx === 1 || lx === 3) && lz === 2) ? BK.STEEL_DK : 0;
+    const h = 9 + (seed % 7);
+    if (dy < h) return BK.STEEL_DK;
+    if (dy === h) return BK.BEACON_RED;
+    return 0;
+  }
+  if (p.k === 2) {                                    // ventilation box
+    if (lx < 0 || lx > 2 || lz < 0 || lz > 2 || dy > 1) return 0;
+    return dy === 1 ? BK.STEEL : BK.CONCRETE;
+  }
+  if (p.k === 3) {                                    // skylight
+    if (lx < 0 || lx > 3 || lz < 0 || lz > 3 || dy > 0) return 0;
+    return BK.SKYLIGHT;
+  }
+  return 0;
+}
+
+// ── street furniture ──────────────────────────────────────────────────────
+
+// A street lamp: pole on the outer sidewalk voxel, an arm over the road, the lamp
+// head at the arm's end. Returns {part: 1 pole | 2 arm | 3 head, dir} or null.
+function WG_lampAt(x, z) {
+  const ux = NZ_mod(x, WG_PITCH), uz = NZ_mod(z, WG_PITCH);
+  // street running along z (the strip is x-narrow)
+  if (ux < WG_ST && uz >= WG_ST) {
+    const zz = NZ_mod(z, 32);
+    if (ux === 0 && zz === 6) return { part: 1, dir: 1 };
+    if (ux === 9 && zz === 22) return { part: 1, dir: -1 };
+    if (ux === 1 && zz === 6) return { part: 2, dir: 1 };
+    if (ux === 2 && zz === 6) return { part: 3, dir: 1 };
+    if (ux === 8 && zz === 22) return { part: 2, dir: -1 };
+    if (ux === 7 && zz === 22) return { part: 3, dir: -1 };
+  }
+  if (uz < WG_ST && ux >= WG_ST) {
+    const xx = NZ_mod(x, 32);
+    if (uz === 0 && xx === 6) return { part: 1, dir: 1 };
+    if (uz === 9 && xx === 22) return { part: 1, dir: -1 };
+    if (uz === 1 && xx === 6) return { part: 2, dir: 1 };
+    if (uz === 2 && xx === 6) return { part: 3, dir: 1 };
+    if (uz === 8 && xx === 22) return { part: 2, dir: -1 };
+    if (uz === 7 && xx === 22) return { part: 3, dir: -1 };
+  }
+  return null;
+}
+
+// Parked cars: a 4x2x2 shape in the kerbside lanes, placed by hash. Returns the
+// block at (x, dy, z) or 0.
+var WG_CARCOL = [];
+(function () { WG_CARCOL = [BK.CAR_RED, BK.CAR_BLUE, BK.CAR_WHITE, BK.CAR_BLACK, BK.CAR_YELLOW, BK.CAR_BLACK, BK.CAR_WHITE]; })();
+function WG_carBlock(x, dy, z) {
+  if (dy > 1) return 0;
+  const ux = NZ_mod(x, WG_PITCH), uz = NZ_mod(z, WG_PITCH);
+  let along, lane, strip;
+  if (ux < WG_ST && uz >= WG_ST) {                    // street along z
+    if (!((ux >= 2 && ux <= 3) || (ux >= 6 && ux <= 7))) return 0;
+    lane = ux <= 3 ? 0 : 1; strip = Math.floor(x / WG_PITCH) * 2 + lane; along = z;
+  } else if (uz < WG_ST && ux >= WG_ST) {             // street along x
+    if (!((uz >= 2 && uz <= 3) || (uz >= 6 && uz <= 7))) return 0;
+    lane = uz <= 3 ? 0 : 1; strip = Math.floor(z / WG_PITCH) * 2 + lane + 1000; along = x;
+  } else return 0;
+  const slot = Math.floor(along / 10), la = NZ_mod(along, 10);
+  const h = NZ_hash(slot, strip, 77);
+  if ((h & 255) / 255 > 0.38) return 0;
+  const off = (h >>> 8) % 5;
+  // The whole car must sit clear of the crossings. Deciding that per column would
+  // slice a car in half at the edge of the exclusion zone, so decide it per car.
+  const m0 = NZ_mod(slot * 10 + off, WG_PITCH);
+  if (m0 < WG_ST + 2 || m0 + 3 > WG_PITCH - 4) return 0;
+  const i = la - off;
+  if (i < 0 || i > 3) return 0;
+  const col = WG_CARCOL[(h >>> 16) % WG_CARCOL.length];
+  if (dy === 0) return i === 0 ? BK.HEADLIGHT : (i === 3 ? BK.TAILLIGHT : col);
+  return (i === 1 || i === 2) ? BK.GLASS : 0;
+}
+
+// ── filling a chunk ───────────────────────────────────────────────────────
+
+var WG_C18 = 18;
+function WG_genChunk(cx, cz) {
+  const H = WG_H, vox = new Uint8Array(256 * H), top = new Uint8Array(256);
+  const x0 = cx * 16, z0 = cz * 16;
+  // classify an 18x18 patch: the chunk plus one column all round, so a facade
+  // can see whether its neighbour column is lower
+  const kind = new Uint8Array(324), tp = new Uint8Array(324), bl = new Array(324);
+  const o = { kind: 0, top: 0, b: null };
+  for (let i = 0; i < 18; i++) for (let j = 0; j < 18; j++) {
+    WG_colInfo(x0 + i - 1, z0 + j - 1, o);
+    const k = i * 18 + j;
+    kind[k] = o.kind; tp[k] = o.top; bl[k] = o.b;
+  }
+  for (let i = 0; i < 16; i++) {
+    for (let j = 0; j < 16; j++) {
+      const x = x0 + i, z = z0 + j, ci = (i + 1) * 18 + (j + 1);
+      const col = (i * 16 + j) * H;
+      const kd = kind[ci];
+      vox[col] = BK.BEDROCK;
+      if (kd === WG_K.WATER) {
+        const bed = WG_FLOOR - (NZ_hash(x >> 2, z >> 2, 9) & 1);
+        for (let y = 1; y <= bed; y++) vox[col + y] = y === bed ? BK.SAND : BK.STONE;
+        for (let y = bed + 1; y <= WG_SEA; y++) vox[col + y] = BK.WATER;
+        top[i * 16 + j] = bed + 1;
+        continue;
+      }
+      for (let y = 1; y < WG_GY; y++) vox[col + y] = BK.STONE;
+      const ux = NZ_mod(x, WG_PITCH), uz = NZ_mod(z, WG_PITCH);
+      let t = WG_GY + 1;
+      if (kd === WG_K.ROAD) {
+        let blk = BK.ASPHALT;
+        const inX = ux < WG_ST, inZ = uz < WG_ST;
+        if (inX && !inZ) {                                   // street along z
+          if (ux === 4 && NZ_mod(z, 6) < 3) blk = BK.ROADLINE;
+          if ((uz >= WG_ST && uz < WG_ST + 2) || uz > WG_PITCH - 3) if ((ux & 1) === 0) blk = BK.ROADLINE;   // zebra
+        } else if (inZ && !inX) {
+          if (uz === 4 && NZ_mod(x, 6) < 3) blk = BK.ROADLINE;
+          if ((ux >= WG_ST && ux < WG_ST + 2) || ux > WG_PITCH - 3) if ((uz & 1) === 0) blk = BK.ROADLINE;
+        }
+        vox[col + WG_GY] = blk;
+      } else if (kd === WG_K.SIDEWALK) {
+        vox[col + WG_GY] = BK.SIDEWALK; vox[col + WG_GY + 1] = BK.SIDEWALK;
+        // kerb: the sidewalk voxel that touches the road
+        const kerbX = (ux === 1 || ux === 8) && uz >= WG_ST;
+        const kerbZ = (uz === 1 || uz === 8) && ux >= WG_ST;
+        if (kerbX || kerbZ) vox[col + WG_GY + 1] = BK.CURB;
+        t = WG_GY + 2;
+      } else if (kd === WG_K.PARK) {
+        vox[col + WG_GY] = BK.DIRT; vox[col + WG_GY + 1] = BK.GRASS; t = WG_GY + 2;
+      } else if (kd === WG_K.YARD) {
+        vox[col + WG_GY] = BK.CONCRETE_DK; vox[col + WG_GY + 1] = BK.CONCRETE_DK; t = WG_GY + 2;
+      } else if (kd === WG_K.PLAZA) {
+        vox[col + WG_GY] = BK.CONCRETE; vox[col + WG_GY + 1] = ((ux + uz) & 7) === 0 ? BK.CONCRETE_DK : BK.CONCRETE_LT; t = WG_GY + 2;
+      } else if (kd === WG_K.BUILDING) {
+        vox[col + WG_GY] = BK.SIDEWALK; vox[col + WG_GY + 1] = BK.SIDEWALK;
+        const b = bl[ci], T = tp[ci], st = WG_STY[b.st];
+        const nT = [tp[(i) * 18 + (j + 1)], tp[(i + 2) * 18 + (j + 1)], tp[(i + 1) * 18 + j], tp[(i + 1) * 18 + (j + 2)]];
+        // a neighbour that is not part of this building counts as ground
+        for (let q = 0; q < 4; q++) {
+          const ni = i + (q === 0 ? 0 : q === 1 ? 2 : 1), nj = j + (q === 2 ? 0 : q === 3 ? 2 : 1);
+          if (bl[ni * 18 + nj] !== b) nT[q] = WG_BASE;
+        }
+        const mn = Math.min(nT[0], nT[1], nT[2], nT[3]);
+        const ex = [false, false, false, false];
+        // a parapet is a top voxel that stands one higher than a neighbour in the same building
+        let par = false;
+        if (b.roof === 0) for (let q = 0; q < 4; q++) if (nT[q] === T - 1 && nT[q] > WG_BASE) par = true;
+        for (let y = WG_BASE; y < T; y++) {
+          let blk;
+          if (y === T - 1) {
+            blk = par ? st.ledge : st.roof;
+          } else if (y >= mn) {
+            for (let q = 0; q < 4; q++) ex[q] = nT[q] <= y;
+            blk = (b.roof !== 0 && y >= b.base + b.h) ? st.roof : WG_facade(b, st, x, y, z, ex);
+          } else blk = BK.CONCRETE_DK;
+          vox[col + y] = blk;
+        }
+        // props on flat roofs
+        if (b.roof === 0 && T < WG_H - 20) {
+          const pr = WG_roofProps(b);
+          for (let q = 0; q < pr.length; q++) {
+            const p = pr[q];
+            if (x < p.x || x > p.x + 4 || z < p.z || z > p.z + 4) continue;
+            // only on a column whose roof is at the building's top level
+            if (T !== b.base + (b.tiers && b.tiers.length ? b.tiers[b.tiers.length - 1][1] : b.h)) continue;
+            for (let dy = 0; dy < 20 && T + dy < WG_H; dy++) {
+              const pb = WG_propBlock(p, x, dy, z, b.seed);
+              if (pb) vox[col + T + dy] = pb;
+            }
+          }
+        }
+        t = T;
+      } else {                                               // plain lot or shore paving
+        vox[col + WG_GY] = BK.SIDEWALK; vox[col + WG_GY + 1] = BK.SIDEWALK; t = WG_GY + 2;
+      }
+      // furniture on streets
+      if (kd === WG_K.SIDEWALK || kd === WG_K.ROAD) {
+        const lamp = WG_lampAt(x, z);
+        if (lamp) {
+          const y0 = WG_GY + 2;
+          if (lamp.part === 1) { for (let y = y0; y <= y0 + 6; y++) vox[col + y] = BK.LAMP_POLE; t = y0 + 7; }
+          else if (lamp.part === 2) { vox[col + y0 + 6] = BK.LAMP_POLE; t = y0 + 7; }
+          else { vox[col + y0 + 6] = BK.LAMP_LIGHT; vox[col + y0 + 7] = BK.LAMP_POLE; t = y0 + 8; }
+        } else if (kd === WG_K.ROAD) {
+          for (let dy = 0; dy < 2; dy++) {
+            const cb = WG_carBlock(x, dy, z);
+            if (cb) { vox[col + WG_GY + 1 + dy] = cb; t = WG_GY + 2 + dy; }
+          }
+        }
+      }
+      // trees and benches in parks
+      if (kd === WG_K.PARK) {
+        const tr = NZ_hash(x >> 2, z >> 2, 5);
+        if ((tr & 15) === 0 && (x & 3) === 1 && (z & 3) === 1) {
+          const h = 4 + (tr >>> 8) % 3;
+          for (let y = 0; y < h; y++) vox[col + WG_GY + 2 + y] = BK.TRUNK;
+          t = WG_GY + 2 + h;
+        }
+      }
+      top[i * 16 + j] = t > 0 ? t : 1;
+    }
+  }
+  // leaves for the trees: a second pass, because a canopy reaches into neighbours
+  for (let i = 0; i < 16; i++) for (let j = 0; j < 16; j++) {
+    const ci = (i + 1) * 18 + (j + 1);
+    if (kind[ci] !== WG_K.PARK) continue;
+    const x = x0 + i, z = z0 + j;
+    for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+      const tx = x + dx, tz = z + dz;
+      if ((tx & 3) !== 1 || (tz & 3) !== 1) continue;
+      const tr = NZ_hash(tx >> 2, tz >> 2, 5);
+      if ((tr & 15) !== 0) continue;
+      if (WG_colInfo(tx, tz, o).kind !== WG_K.PARK) continue;      // no trunk, no canopy
+      const h = 4 + (tr >>> 8) % 3;
+      const col = (i * 16 + j) * WG_H, y0 = WG_GY + 2 + h - 2;
+      for (let dy = 0; dy < 4; dy++) {
+        const r = dy === 3 ? 1 : 2;
+        if (Math.abs(dx) <= r && Math.abs(dz) <= r && !(Math.abs(dx) === 2 && Math.abs(dz) === 2) && vox[col + y0 + dy] === 0) {
+          vox[col + y0 + dy] = BK.LEAVES;
+          if (y0 + dy + 1 > top[i * 16 + j]) top[i * 16 + j] = y0 + dy + 1;
+        }
+      }
+    }
+  }
+  // True heights, props and canopies included: the first free y above the highest
+  // non-air voxel. Scanned from the voxels themselves so it can never disagree
+  // with them. The mesher bounds its loops with it and the game uses it to find
+  // the ground.
+  let maxY = 0;
+  for (let c = 0; c < 256; c++) {
+    let y = H - 1; const col = c * H;
+    while (y > 0 && vox[col + y] === 0) y--;
+    top[c] = y + 1;
+    if (y + 1 > maxY) maxY = y + 1;
+  }
+  return { vox: vox, top: top, maxY: maxY };
+}
+
+// ── light sources ─────────────────────────────────────────────────────────
+// Every emitter that can matter to the region [x0,x1) x [z0,z1): street lamps,
+// computed from the same rule that places them. [x, y, z, r, g, b, intensity, radius]
+function WG_emitters(x0, z0, x1, z1) {
+  const out = [];
+  const y = WG_GY + 2 + 6 + 0.5;
+  const r = 1.0, g = 0.66, b = 0.34;
+  for (let strip = 0; strip < 2; strip++) {
+    // strip 0: streets running along z (x-narrow); strip 1: along x
+    const a0 = strip === 0 ? x0 : z0, a1 = strip === 0 ? x1 : z1;     // across axis
+    const c0 = strip === 0 ? z0 : x0, c1 = strip === 0 ? z1 : x1;     // along axis
+    for (let s = Math.floor(a0 / WG_PITCH) - 1; s <= Math.floor(a1 / WG_PITCH) + 1; s++) {
+      for (let side = 0; side < 2; side++) {
+        const across = s * WG_PITCH + (side === 0 ? 2 : 7) + 0.5;
+        if (across < a0 - 20 || across > a1 + 20) continue;
+        const phase = side === 0 ? 6 : 22;
+        for (let q = Math.floor((c0 - 20 - phase) / 32); q <= Math.floor((c1 + 20 - phase) / 32); q++) {
+          const along = q * 32 + phase + 0.5;
+          const px = strip === 0 ? across : along, pz = strip === 0 ? along : across;
+          // only if the lamp really stands on land and not inside a crossing street
+          const lx = Math.floor(px), lz = Math.floor(pz);
+          if (!WG_isLand(lx, lz)) continue;
+          const other = strip === 0 ? NZ_mod(lz, WG_PITCH) : NZ_mod(lx, WG_PITCH);
+          if (other < WG_ST + 1) continue;
+          out.push([px, y, pz, r, g, b, 1.0, 17]);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+
+// bake
+// ═══════════════════════════════════════════════════════════════════════
+//  BAKE — turns a chunk of voxels into a lit mesh. Shared with the worker.
+//
+//  All lighting is computed here, once, and stored in the vertices, so drawing a
+//  frame is just "rasterise some triangles". That is what makes a dense night
+//  city affordable on a phone. The light model, in the order it is applied:
+//
+//   SKY       Open sky is estimated per CELL from the height of the surrounding
+//             mass: for each of eight directions the tallest thing at a handful of
+//             distances gives a horizon angle, and a surface under a horizon at
+//             elevation e sees cos^2(e) of the sky. An alley between towers is
+//             dark, a rooftop is bright, and nothing was ray-marched to find out.
+//   MOON      A fixed moon, so shadows can be baked. Per COLUMN a single "shadow
+//             ceiling" is found (anything below it is in shade), so each vertex
+//             asks one number instead of marching a ray.
+//   LAMPS     Per VERTEX, because they need the surface normal: the few nearest
+//             emitters, each ray-marched through the real voxels so a lamp does
+//             not light the far side of a wall.
+//   AO        The classic per-corner voxel occlusion, multiplied in last.
+//
+//  Vertex layout, 16 bytes:
+//    0  x y z .        position inside the chunk (0..16, 0..128)
+//    4  block face ao flags
+//    8  r g b emit     albedo, and how hard the voxel glows (emit/255*4)
+//   12  sky bR bG bB   baked sky light, and baked lamp light (value/255*2)
+// ═══════════════════════════════════════════════════════════════════════
+
+var BX_H = WG_H;
+var BX_SHADOW_STEPS = 96;
+
+// The moon: a direction towards it, and the horizontal part used for shadows.
+var BX_MOON = (function () {
+  const az = 0.62, el = 0.74;
+  const ce = Math.cos(el);
+  return { x: ce * Math.sin(az), y: Math.sin(el), z: ce * Math.cos(az), hx: Math.sin(az), hz: Math.cos(az), tanE: Math.tan(el) };
+})();
+
+// Distances at which the horizon is sampled in each of eight directions.
+var BX_HD = [1.5, 3, 5, 8, 12, 18, 26, 36];
+var BX_HDIR = (function () {
+  const a = [];
+  for (let i = 0; i < 8; i++) a.push([Math.cos(i * Math.PI / 4), Math.sin(i * Math.PI / 4)]);
+  return a;
+})();
+
+// Cube faces. Corner order is counter-clockwise seen from outside; the winding
+// is checked in the tests rather than trusted.
+var BX_FACE = (function () {
+  const corners = [
+    [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]],   // +x
+    [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]],   // -x
+    [[0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]],   // +y
+    [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]],   // -y
+    [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]],   // +z
+    [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]],   // -z
+  ];
+  const normals = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+  const out = [];
+  for (let f = 0; f < 6; f++) {
+    const n = normals[f];
+    const a = n[0] ? 0 : (n[1] ? 1 : 2);
+    const t1 = a === 0 ? 1 : 0, t2 = a === 2 ? 1 : 2;
+    const verts = [];
+    for (let c = 0; c < 4; c++) {
+      const p = corners[f][c];
+      const d1 = p[t1] ? 1 : -1, d2 = p[t2] ? 1 : -1;
+      const e1 = [0, 0, 0], e2 = [0, 0, 0];
+      e1[t1] = d1; e2[t2] = d2;
+      verts.push({ p: p, e1: e1, e2: e2 });
+    }
+    out.push({ n: n, verts: verts });
+  }
+  return out;
+})();
+
+// How much ambient each face direction collects, so adjacent walls differ.
+var BX_HEMI = [0.70, 0.70, 1.0, 0.34, 0.80, 0.58];
+var BX_AOF = [0.50, 0.70, 0.86, 1.0];
+
+var BX_AMB = 0.36;       // ambient from an unobstructed sky
+var BX_MOONK = 0.62;     // direct moonlight on a surface facing it
+
+// ── reusable scratch, so a worker does not reallocate per chunk ───────────
+var BX_cAmb = new Float32Array(324 * BX_H);
+var BX_cMoon = new Float32Array(324 * BX_H);
+var BX_cDone = new Uint8Array(324 * BX_H);
+var BX_S = new Float32Array(324);
+var BX_HB = new Uint8Array(324 * 64);
+var BX_reg = new Uint8Array(48 * 48 * BX_H);
+
+function BX_mesh() {
+  return { v: new Uint8Array(16 * 8192), nv: 0, i: new Uint32Array(6 * 8192), ni: 0 };
+}
+function BX_ensure(m, addV) {
+  if ((m.nv + addV) * 16 > m.v.length) {
+    const nvv = new Uint8Array(Math.max(m.v.length * 2, (m.nv + addV) * 16)); nvv.set(m.v); m.v = nvv;
+  }
+  const addI = (addV >> 2) * 6;
+  if (m.ni + addI > m.i.length) {
+    const ni = new Uint32Array(Math.max(m.i.length * 2, m.ni + addI)); ni.set(m.i); m.i = ni;
+  }
+}
+
+// Is anything opaque between two points (region-local floats)? The end cell, which
+// holds the emitter itself, never blocks.
+function BX_blocked(reg, ax, ay, az, bx, by, bz) {
+  let ix = Math.floor(ax), iy = Math.floor(ay), iz = Math.floor(az);
+  const ex = Math.floor(bx), ey = Math.floor(by), ez = Math.floor(bz);
+  const dx = bx - ax, dy = by - ay, dz = bz - az;
+  const sx = dx > 0 ? 1 : -1, sy = dy > 0 ? 1 : -1, sz = dz > 0 ? 1 : -1;
+  const tDx = dx !== 0 ? Math.abs(1 / dx) : 1e30, tDy = dy !== 0 ? Math.abs(1 / dy) : 1e30, tDz = dz !== 0 ? Math.abs(1 / dz) : 1e30;
+  let tx = dx > 0 ? (ix + 1 - ax) * tDx : (ax - ix) * tDx;
+  let ty = dy > 0 ? (iy + 1 - ay) * tDy : (ay - iy) * tDy;
+  let tz = dz > 0 ? (iz + 1 - az) * tDz : (az - iz) * tDz;
+  for (let n = 0; n < 40; n++) {
+    if (tx < ty) { if (tx < tz) { ix += sx; tx += tDx; } else { iz += sz; tz += tDz; } }
+    else { if (ty < tz) { iy += sy; ty += tDy; } else { iz += sz; tz += tDz; } }
+    if (ix === ex && iy === ey && iz === ez) return false;
+    if (ix < 0 || ix >= 48 || iz < 0 || iz >= 48 || iy < 0 || iy >= BX_H) return false;
+    if (BK_OPAQUE[reg[(ix * 48 + iz) * BX_H + iy]]) return true;
+  }
+  return false;
+}
+
+// One chunk, as a resumable job. `env` supplies getVox(cx, cz) -> the 16x16xH block
+// array of a chunk and getMass(cx, cz) -> its 256 mass heights. The generator yields
+// regularly so the main thread can run it a few milliseconds per frame when no
+// worker is available; in a worker it is simply driven to the end.
+function* BX_bake(cx, cz, env) {
+  const H = BX_H;
+  const reg = BX_reg;
+  const ox = cx * 16, oz = cz * 16;
+
+  // 1. the 3x3 neighbourhood as one array, so face culling, AO and lamp rays can
+  //    read across chunk edges without any lookups
+  for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+    const v = env.getVox(cx + dx, cz + dz);
+    for (let i = 0; i < 16; i++) for (let j = 0; j < 16; j++) {
+      reg.set(v.subarray((i * 16 + j) * H, (i * 16 + j + 1) * H), (((dx + 1) * 16 + i) * 48 + (dz + 1) * 16 + j) * H);
+    }
+  }
+  yield 0;
+  const vox = env.getVox(cx, cz);
+  const gen = env.getGen(cx, cz);
+  const maxY = Math.min(H - 2, gen.maxY + 1);
+
+  // mass height at a world column
+  const massCache = new Map();
+  function mass(x, z) {
+    const mcx = x >> 4, mcz = z >> 4, key = mcx * 65536 + mcz;
+    let m = massCache.get(key);
+    if (!m) { m = env.getMass(mcx, mcz); massCache.set(key, m); }
+    return m[(x & 15) * 16 + (z & 15)];
+  }
+
+  // 2. per-column terms for the chunk and a one-column margin
+  const S = BX_S, HB = BX_HB;
+  const mhx = BX_MOON.hx, mhz = BX_MOON.hz, tanE = BX_MOON.tanE;
+  for (let i = 0; i < 18; i++) for (let j = 0; j < 18; j++) {
+    const x = ox + i - 1, z = oz + j - 1, col = i * 18 + j;
+    // moon shadow ceiling: the highest point of this column that is in shade
+    let best = -1e9;
+    for (let s = 1; s <= BX_SHADOW_STEPS; s += (s < 40 ? 1 : 2)) {
+      const h = mass(Math.floor(x + 0.5 + mhx * s), Math.floor(z + 0.5 + mhz * s)) - s * tanE;
+      if (h > best) best = h;
+    }
+    S[col] = best;
+    // horizon heights
+    for (let d = 0; d < 8; d++) for (let q = 0; q < 8; q++) {
+      HB[col * 64 + d * 8 + q] = mass(Math.floor(x + 0.5 + BX_HDIR[d][0] * BX_HD[q]), Math.floor(z + 0.5 + BX_HDIR[d][1] * BX_HD[q]));
+    }
+  }
+  BX_cDone.fill(0);
+  yield 0;
+
+  // lamps in range, bucketed by 8 so a vertex finds its neighbours without a scan
+  const lampsRaw = WG_emitters(ox - 24, oz - 24, ox + 40, oz + 40);
+  const buckets = new Array(64);
+  for (let i = 0; i < 64; i++) buckets[i] = [];
+  for (let i = 0; i < lampsRaw.length; i++) {
+    const e = lampsRaw[i];
+    const lx = e[0] - ox, lz = e[2] - oz;
+    const bi = (lx + 24) >> 3, bj = (lz + 24) >> 3;
+    if (bi >= 0 && bi < 8 && bj >= 0 && bj < 8) buckets[bi * 8 + bj].push([lx, e[1], lz, e[3], e[4], e[5], e[6], e[7]]);
+  }
+
+  // cell light: ambient sky and moon visibility, memoised per cell
+  const cAmb = BX_cAmb, cMoon = BX_cMoon, cDone = BX_cDone;
+  function cell(x, y, z) {           // chunk-local x,z in [-1,16]
+    const col = (x + 1) * 18 + (z + 1), idx = col * H + y;
+    if (cDone[idx]) return idx;
+    const yc = y + 0.5;
+    let sum = 0;
+    for (let d = 0; d < 8; d++) {
+      let t = 0;
+      for (let q = 0; q < 8; q++) {
+        const tt = (HB[col * 64 + d * 8 + q] - yc) / BX_HD[q];
+        if (tt > t) t = tt;
+      }
+      sum += 1 / (1 + t * t);
+    }
+    // overhead cover: something solid right above kills the sky
+    let cover = 1;
+    const ri = (((x + 16) * 48) + (z + 16)) * H + y;
+    for (let k = 1; k <= 8 && y + k < H; k++) {
+      if (BK_OPAQUE[reg[ri + k]]) { cover = 0.12 + 0.88 * (k - 1) / 8; break; }
+    }
+    cAmb[idx] = (sum / 8) * cover;
+    const sc = S[col];
+    const u = NZ_clamp((yc - (sc - 0.5)) / 2, 0, 1);
+    cMoon[idx] = u * u * (3 - 2 * u) * Math.min(1, cover * 1.6);
+    cDone[idx] = 1;
+    return idx;
+  }
+
+  const op = BX_mesh(), wa = BX_mesh();
+  const aoV = [0, 0, 0, 0], skyV = [0, 0, 0, 0], blR = [0, 0, 0, 0], blG = [0, 0, 0, 0], blB = [0, 0, 0, 0];
+  const R1 = 48 * H, R2 = H;           // region strides for x and z
+
+  // 3. mesh
+  for (let x = 0; x < 16; x++) {
+    for (let z = 0; z < 16; z++) {
+      const base = (x * 16 + z) * H;
+      const rb = (((x + 16) * 48) + (z + 16)) * H;
+      for (let y = 1; y <= maxY; y++) {
+        const b = vox[base + y];
+        if (b === 0) continue;
+        const isWater = (BK_FLAGS[b] & BK_FL_TRANS) !== 0;
+        for (let f = 0; f < 6; f++) {
+          const F = BX_FACE[f], n = F.n;
+          const nb = reg[rb + y + n[1] + n[0] * R1 + n[2] * R2];
+          if (isWater) { if (f !== 2 || nb !== 0) continue; }
+          else if (BK_OPAQUE[nb]) continue;
+          const mesh = isWater ? wa : op;
+          BX_ensure(mesh, 4);
+          const fx = x + n[0], fy = y + n[1], fz = z + n[2];
+          // the four cells of the layer in front of the face that every vertex averages
+          for (let c = 0; c < 4; c++) {
+            const V = F.verts[c];
+            const sx1 = fx + V.e1[0], sy1 = fy + V.e1[1], sz1 = fz + V.e1[2];
+            const sx2 = fx + V.e2[0], sy2 = fy + V.e2[1], sz2 = fz + V.e2[2];
+            const cx3 = sx1 + V.e2[0], cy3 = sy1 + V.e2[1], cz3 = sz1 + V.e2[2];
+            const o0 = BK_OPAQUE[reg[(((fx + 16) * 48) + (fz + 16)) * H + fy]];
+            const o1 = BK_OPAQUE[reg[(((sx1 + 16) * 48) + (sz1 + 16)) * H + sy1]];
+            const o2 = BK_OPAQUE[reg[(((sx2 + 16) * 48) + (sz2 + 16)) * H + sy2]];
+            const o3 = BK_OPAQUE[reg[(((cx3 + 16) * 48) + (cz3 + 16)) * H + cy3]];
+            aoV[c] = (o1 && o2) ? 0 : 3 - (o1 + o2 + o3);
+            // smooth light: average the open cells among the four
+            let a = 0, m = 0, k = 0;
+            if (!o0) { const i0 = cell(fx, fy, fz); a += cAmb[i0]; m += cMoon[i0]; k++; }
+            if (!o1) { const i1 = cell(sx1, sy1, sz1); a += cAmb[i1]; m += cMoon[i1]; k++; }
+            if (!o2) { const i2 = cell(sx2, sy2, sz2); a += cAmb[i2]; m += cMoon[i2]; k++; }
+            if (!o3 && !(o1 && o2)) { const i3 = cell(cx3, cy3, cz3); a += cAmb[i3]; m += cMoon[i3]; k++; }
+            if (k === 0) { const i0 = cell(fx, fy, fz); a = cAmb[i0]; m = cMoon[i0]; k = 1; }
+            a /= k; m /= k;
+            const ndl = n[0] * BX_MOON.x + n[1] * BX_MOON.y + n[2] * BX_MOON.z;
+            let sky = BX_AMB * BX_HEMI[f] * a + BX_MOONK * (ndl > 0 ? ndl : 0) * m;
+            // lamps, ray-marched through the real voxels
+            let lr = 0, lg = 0, lb = 0;
+            if (!isWater) {
+              const px = x + V.p[0], py = y + V.p[1], pz = z + V.p[2];
+              const bi = (Math.floor(px) + 24) >> 3, bj = (Math.floor(pz) + 24) >> 3;
+              // +-2 buckets of 8: the farthest covered point is never closer than 16, so
+              // a lamp of radius 17 is found from anywhere in the chunk. With +-1 it was
+              // only seen from 8-16 blocks, and the light would have been cut differently
+              // in every chunk.
+              for (let ii = bi - 2; ii <= bi + 2; ii++) for (let jj = bj - 2; jj <= bj + 2; jj++) {
+                if (ii < 0 || ii > 7 || jj < 0 || jj > 7) continue;
+                const bk = buckets[ii * 8 + jj];
+                for (let q = 0; q < bk.length; q++) {
+                  const e = bk[q];
+                  const ddx = e[0] - px, ddy = e[1] - py, ddz = e[2] - pz;
+                  const d2 = ddx * ddx + ddy * ddy + ddz * ddz;
+                  const R = e[7];
+                  if (d2 >= R * R) continue;
+                  const d = Math.sqrt(d2) + 1e-4;
+                  const nd = (n[0] * ddx + n[1] * ddy + n[2] * ddz) / d;
+                  if (nd <= 0.02) continue;
+                  const fall = 1 - d / R;
+                  const str = e[6] * fall * fall * nd;
+                  if (str < 0.015) continue;
+                  if (BX_blocked(reg, px + 16 + n[0] * 0.03, py + n[1] * 0.03, pz + 16 + n[2] * 0.03, e[0] + 16, e[1], e[2] + 16)) continue;
+                  lr += e[3] * str; lg += e[4] * str; lb += e[5] * str;
+                }
+              }
+            }
+            const aoF = BX_AOF[aoV[c]];
+            skyV[c] = sky * aoF;
+            const al = 0.55 + 0.45 * aoF;
+            blR[c] = lr * al; blG[c] = lg * al; blB[c] = lb * al;
+          }
+          // write the four vertices
+          const albR = BK_RGB[b * 3], albG = BK_RGB[b * 3 + 1], albB = BK_RGB[b * 3 + 2];
+          const vr = 0.93 + 0.14 * NZ_f(ox + x, y, oz + z);
+          const cr = Math.min(255, albR * vr), cg = Math.min(255, albG * vr), cb = Math.min(255, albB * vr);
+          const em = Math.min(255, Math.round(BK_EMIT[b] / 4 * 255));
+          const fl = BK_FLAGS[b];
+          const v0 = mesh.nv;
+          for (let c = 0; c < 4; c++) {
+            const V = F.verts[c], o = (v0 + c) * 16, d = mesh.v;
+            d[o] = x + V.p[0]; d[o + 1] = y + V.p[1]; d[o + 2] = z + V.p[2]; d[o + 3] = 0;
+            d[o + 4] = b; d[o + 5] = f; d[o + 6] = aoV[c]; d[o + 7] = fl;
+            d[o + 8] = cr; d[o + 9] = cg; d[o + 10] = cb; d[o + 11] = em;
+            d[o + 12] = Math.min(255, skyV[c] * 255);
+            d[o + 13] = Math.min(255, blR[c] * 127.5); d[o + 14] = Math.min(255, blG[c] * 127.5); d[o + 15] = Math.min(255, blB[c] * 127.5);
+          }
+          const I = mesh.i, ni = mesh.ni;
+          // split the quad along the diagonal that hides the AO seam
+          if (aoV[0] + aoV[2] >= aoV[1] + aoV[3]) {
+            I[ni] = v0; I[ni + 1] = v0 + 1; I[ni + 2] = v0 + 2; I[ni + 3] = v0; I[ni + 4] = v0 + 2; I[ni + 5] = v0 + 3;
+          } else {
+            I[ni] = v0 + 1; I[ni + 1] = v0 + 2; I[ni + 2] = v0 + 3; I[ni + 3] = v0 + 1; I[ni + 4] = v0 + 3; I[ni + 5] = v0;
+          }
+          mesh.nv += 4; mesh.ni += 6;
+        }
+      }
+    }
+    if ((x & 3) === 3) yield 0;
+  }
+
+  function pack(m) {
+    const idx = m.nv < 65536 ? new Uint16Array(m.i.subarray(0, m.ni)) : m.i.slice(0, m.ni);
+    return { v: m.v.slice(0, m.nv * 16), i: idx, nv: m.nv, ni: m.ni, wide: m.nv >= 65536 };
+  }
+  // lamps that belong to THIS chunk, in world coordinates, for the main thread
+  const own = [];
+  for (let i = 0; i < lampsRaw.length; i++) {
+    const e = lampsRaw[i];
+    if (e[0] >= ox && e[0] < ox + 16 && e[2] >= oz && e[2] < oz + 16) own.push(e);
+  }
+  return { opaque: pack(op), water: pack(wa), emitters: own, maxY: gen.maxY };
+}
+
+
+// jobs
+// ═══════════════════════════════════════════════════════════════════════
+//  JOBS — the chunk cache that feeds the baker. Shared with the worker.
+//
+//  A chunk's mesh depends on its eight neighbours (for face culling, AO and lamp
+//  rays) and on the mass heights of chunks far beyond that (for moon shadows), so
+//  whoever bakes needs those at hand. They are cached here: generated once, kept
+//  while recent, and rebuilt on demand if evicted — generation is deterministic,
+//  so an evicted chunk simply comes back identical.
+// ═══════════════════════════════════════════════════════════════════════
+
+var JB_gen = new Map();
+var JB_mass = new Map();
+var JB_GEN_CAP = 360;
+var JB_MASS_CAP = 6000;
+
+function JB_key(cx, cz) { return (cx + 32768) * 65536 + (cz + 32768); }
+
+function JB_getGen(cx, cz) {
+  const k = JB_key(cx, cz);
+  let g = JB_gen.get(k);
+  if (!g) {
+    g = WG_genChunk(cx, cz);
+    JB_gen.set(k, g);
+    if (JB_gen.size > JB_GEN_CAP) {
+      // Map iterates in insertion order, so the first keys are the oldest
+      let n = JB_gen.size - JB_GEN_CAP;
+      for (const key of JB_gen.keys()) { if (n-- <= 0) break; JB_gen.delete(key); }
+    }
+  }
+  return g;
+}
+
+function JB_getMass(cx, cz) {
+  const k = JB_key(cx, cz);
+  let m = JB_mass.get(k);
+  if (!m) {
+    m = WG_massChunk(cx, cz);
+    JB_mass.set(k, m);
+    if (JB_mass.size > JB_MASS_CAP) {
+      let n = JB_mass.size - JB_MASS_CAP;
+      for (const key of JB_mass.keys()) { if (n-- <= 0) break; JB_mass.delete(key); }
+    }
+  }
+  return m;
+}
+
+var JB_env = {
+  getVox: function (cx, cz) { return JB_getGen(cx, cz).vox; },
+  getGen: JB_getGen,
+  getMass: JB_getMass,
+};
+
+// Bake one chunk to the end and package the result for transfer.
+function JB_bakeNow(cx, cz) {
+  const it = BX_bake(cx, cz, JB_env);
+  let r;
+  do { r = it.next(); } while (!r.done);
+  return JB_package(cx, cz, r.value);
+}
+
+function JB_package(cx, cz, out) {
+  const g = JB_getGen(cx, cz);
+  return {
+    t: 'chunk', cx: cx, cz: cz,
+    opaque: out.opaque, water: out.water, emitters: out.emitters,
+    vox: g.vox.slice(), top: g.top.slice(), maxY: out.maxY,
+  };
+}
+
+function JB_transfers(m) {
+  return [m.opaque.v.buffer, m.opaque.i.buffer, m.water.v.buffer, m.water.i.buffer, m.vox.buffer, m.top.buffer];
+}
+
+
+// workerboot
+// Worker entry point. Appended ONLY to the worker's source, never to the main
+// script, so the main thread does not install a message handler of its own.
+self.onmessage = function (e) {
+  const m = e.data;
+  if (m.t === 'bake') {
+    const t0 = Date.now();
+    const r = JB_bakeNow(m.cx, m.cz);
+    r.id = m.id; r.ms = Date.now() - t0;
+    self.postMessage(r, JB_transfers(r));
+  }
+};
+self.postMessage({ t: 'ready' });
+</script>
+<script>
+
+// ═══ MATH ═══
+// ═══════════════════════════════════════════════════════════════════════
+//  MATH — column-major 4x4 matrices in Float32Array(16), the layout WebGL wants.
+//  Every function writes into an output argument so the frame loop allocates
+//  nothing.
+// ═══════════════════════════════════════════════════════════════════════
+
+function M4_new() { return new Float32Array(16); }
+function M4_ident(o) { o.fill(0); o[0] = o[5] = o[10] = o[15] = 1; return o; }
+
+function M4_persp(o, fovy, aspect, n, f) {
+  const t = 1 / Math.tan(fovy / 2);
+  o.fill(0);
+  o[0] = t / aspect; o[5] = t; o[10] = (f + n) / (n - f); o[11] = -1; o[14] = 2 * f * n / (n - f);
+  return o;
+}
+
+// o = a * b. Safe when o is a or b.
+var M4_tmp = new Float32Array(16);
+function M4_mul(o, a, b) {
+  const t = M4_tmp;
+  for (let c = 0; c < 4; c++) {
+    const b0 = b[c * 4], b1 = b[c * 4 + 1], b2 = b[c * 4 + 2], b3 = b[c * 4 + 3];
+    for (let r = 0; r < 4; r++) t[c * 4 + r] = a[r] * b0 + a[4 + r] * b1 + a[8 + r] * b2 + a[12 + r] * b3;
+  }
+  o.set(t);
+  return o;
+}
+
+function M4_look(o, ex, ey, ez, tx, ty, tz, ux, uy, uz) {
+  let zx = ex - tx, zy = ey - ty, zz = ez - tz;
+  let l = Math.hypot(zx, zy, zz) || 1; zx /= l; zy /= l; zz /= l;
+  let xx = uy * zz - uz * zy, xy = uz * zx - ux * zz, xz = ux * zy - uy * zx;
+  l = Math.hypot(xx, xy, xz) || 1; xx /= l; xy /= l; xz /= l;
+  const yx = zy * xz - zz * xy, yy = zz * xx - zx * xz, yz = zx * xy - zy * xx;
+  o[0] = xx; o[1] = yx; o[2] = zx; o[3] = 0;
+  o[4] = xy; o[5] = yy; o[6] = zy; o[7] = 0;
+  o[8] = xz; o[9] = yz; o[10] = zz; o[11] = 0;
+  o[12] = -(xx * ex + xy * ey + xz * ez);
+  o[13] = -(yx * ex + yy * ey + yz * ez);
+  o[14] = -(zx * ex + zy * ey + zz * ez);
+  o[15] = 1;
+  return o;
+}
+
+function M4_inv(o, m) {
+  const a00 = m[0], a01 = m[1], a02 = m[2], a03 = m[3], a10 = m[4], a11 = m[5], a12 = m[6], a13 = m[7];
+  const a20 = m[8], a21 = m[9], a22 = m[10], a23 = m[11], a30 = m[12], a31 = m[13], a32 = m[14], a33 = m[15];
+  const b00 = a00 * a11 - a01 * a10, b01 = a00 * a12 - a02 * a10, b02 = a00 * a13 - a03 * a10;
+  const b03 = a01 * a12 - a02 * a11, b04 = a01 * a13 - a03 * a11, b05 = a02 * a13 - a03 * a12;
+  const b06 = a20 * a31 - a21 * a30, b07 = a20 * a32 - a22 * a30, b08 = a20 * a33 - a23 * a30;
+  const b09 = a21 * a32 - a22 * a31, b10 = a21 * a33 - a23 * a31, b11 = a22 * a33 - a23 * a32;
+  let det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+  if (!det) return null;
+  det = 1 / det;
+  o[0] = (a11 * b11 - a12 * b10 + a13 * b09) * det; o[1] = (a02 * b10 - a01 * b11 - a03 * b09) * det;
+  o[2] = (a31 * b05 - a32 * b04 + a33 * b03) * det; o[3] = (a22 * b04 - a21 * b05 - a23 * b03) * det;
+  o[4] = (a12 * b08 - a10 * b11 - a13 * b07) * det; o[5] = (a00 * b11 - a02 * b08 + a03 * b07) * det;
+  o[6] = (a32 * b02 - a30 * b05 - a33 * b01) * det; o[7] = (a20 * b05 - a22 * b02 + a23 * b01) * det;
+  o[8] = (a10 * b10 - a11 * b08 + a13 * b06) * det; o[9] = (a01 * b08 - a00 * b10 - a03 * b06) * det;
+  o[10] = (a30 * b04 - a31 * b02 + a33 * b00) * det; o[11] = (a21 * b02 - a20 * b04 - a23 * b00) * det;
+  o[12] = (a11 * b07 - a10 * b09 - a12 * b06) * det; o[13] = (a00 * b09 - a01 * b07 + a02 * b06) * det;
+  o[14] = (a31 * b01 - a30 * b03 - a32 * b00) * det; o[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det;
+  return o;
+}
+
+// A model matrix from position, yaw (about Y), pitch (about X) and uniform scale.
+function M4_model(o, px, py, pz, yaw, pitch, roll, s) {
+  const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+  const cr = Math.cos(roll), sr = Math.sin(roll);
+  // R = Ry * Rx * Rz
+  const r00 = cy * cr + sy * sp * sr, r01 = -cy * sr + sy * sp * cr, r02 = sy * cp;
+  const r10 = cp * sr, r11 = cp * cr, r12 = -sp;
+  const r20 = -sy * cr + cy * sp * sr, r21 = sy * sr + cy * sp * cr, r22 = cy * cp;
+  o[0] = r00 * s; o[1] = r10 * s; o[2] = r20 * s; o[3] = 0;
+  o[4] = r01 * s; o[5] = r11 * s; o[6] = r21 * s; o[7] = 0;
+  o[8] = r02 * s; o[9] = r12 * s; o[10] = r22 * s; o[11] = 0;
+  o[12] = px; o[13] = py; o[14] = pz; o[15] = 1;
+  return o;
+}
+
+// Six frustum planes from a view-projection matrix (Gribb/Hartmann), each
+// normalised, stored as [nx, ny, nz, d] x 6.
+function M4_planes(p, m) {
+  const set = (i, a, b, c, d) => { const l = Math.hypot(a, b, c) || 1; p[i * 4] = a / l; p[i * 4 + 1] = b / l; p[i * 4 + 2] = c / l; p[i * 4 + 3] = d / l; };
+  set(0, m[3] + m[0], m[7] + m[4], m[11] + m[8], m[15] + m[12]);
+  set(1, m[3] - m[0], m[7] - m[4], m[11] - m[8], m[15] - m[12]);
+  set(2, m[3] + m[1], m[7] + m[5], m[11] + m[9], m[15] + m[13]);
+  set(3, m[3] - m[1], m[7] - m[5], m[11] - m[9], m[15] - m[13]);
+  set(4, m[3] + m[2], m[7] + m[6], m[11] + m[10], m[15] + m[14]);
+  set(5, m[3] - m[2], m[7] - m[6], m[11] - m[10], m[15] - m[14]);
+  return p;
+}
+
+// Does an axis-aligned box touch the frustum? Conservative: never culls something visible.
+function M4_boxVisible(p, x0, y0, z0, x1, y1, z1) {
+  for (let i = 0; i < 6; i++) {
+    const a = p[i * 4], b = p[i * 4 + 1], c = p[i * 4 + 2], d = p[i * 4 + 3];
+    const px = a > 0 ? x1 : x0, py = b > 0 ? y1 : y0, pz = c > 0 ? z1 : z0;
+    if (a * px + b * py + c * pz + d < 0) return false;
+  }
+  return true;
+}
+
+
+// ═══ NOISE ═══
+// ═══════════════════════════════════════════════════════════════════════
+//  NOISE — deterministic hashing and value noise. Shared: the same source runs
+//  on the main thread and inside the chunk worker, so it must stay free of any
+//  window/document reference. Everything is a pure function of its arguments.
+// ═══════════════════════════════════════════════════════════════════════
+
+// Three integers in, one well-mixed uint32 out. Used everywhere a "random"
+// value is needed, because a world that has to be rebuilt identically in any
+// order — chunk by chunk, on any worker — cannot use a stateful generator.
+function NZ_hash(a, b, c) {
+  let h = Math.imul(a | 0, 0x85ebca6b) ^ Math.imul(b | 0, 0xc2b2ae35) ^ Math.imul(c | 0, 0x27d4eb2f);
+  h ^= h >>> 16; h = Math.imul(h, 0x7feb352d);
+  h ^= h >>> 15; h = Math.imul(h, 0x846ca68b);
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+function NZ_f(a, b, c) { return NZ_hash(a, b, c) / 4294967296; }
+
+// Smooth 2D value noise in [0,1).
+function NZ_noise2(x, z, s) {
+  const xi = Math.floor(x), zi = Math.floor(z);
+  const fx = x - xi, fz = z - zi;
+  const u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
+  const a = NZ_f(xi, zi, s), b = NZ_f(xi + 1, zi, s);
+  const c = NZ_f(xi, zi + 1, s), d = NZ_f(xi + 1, zi + 1, s);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+
+// Fractal sum, normalised back into [0,1).
+function NZ_fbm2(x, z, s, oct) {
+  let amp = 0.5, f = 1, sum = 0, norm = 0;
+  for (let i = 0; i < oct; i++) {
+    sum += amp * NZ_noise2(x * f, z * f, s + i * 31);
+    norm += amp; amp *= 0.5; f *= 2;
+  }
+  return sum / norm;
+}
+
+function NZ_clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+function NZ_smooth(a, b, x) { const t = NZ_clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); }
+// positive modulo: the world has negative coordinates, and JS % keeps the sign
+function NZ_mod(a, n) { const r = a % n; return r < 0 ? r + n : r; }
+
+
+// ═══ BLOCKS ═══
+// ═══════════════════════════════════════════════════════════════════════
+//  BLOCKS — the palette. Shared with the worker.
+//
+//  Colours are sRGB bytes and deliberately dark and cold: a night city reads
+//  through VALUE and a few hot accents (sodium lamps, lit windows, neon), not
+//  through saturated albedo. The mesher bakes light into vertices, so these are
+//  albedos, and a mid-grey here lands near black on screen under moonlight.
+// ═══════════════════════════════════════════════════════════════════════
+
+var BK_FL_WET = 1;     // rain-slicked: picks up fresnel sheen and light streaks
+var BK_FL_EMIT = 2;    // self-lit: ignores baked light, feeds the bloom
+var BK_FL_TRANS = 4;   // translucent (water): meshed separately
+var BK_FL_GLOSS = 8;   // hard glossy surface (glass, ice, metal)
+var BK_FL_ANIM = 16;   // shimmers (lava, slime)
+var BK_FL_NEON = 32;   // flickers
+
+var BK = {};
+var BK_NAMES = [];
+var BK_SOLID = new Uint8Array(256);    // stops movement
+var BK_OPAQUE = new Uint8Array(256);   // stops light, casts AO
+var BK_RGB = new Uint8Array(256 * 3);
+var BK_EMIT = new Float32Array(256);   // emissive strength (HDR multiplier)
+var BK_FLAGS = new Uint8Array(256);
+
+(function () {
+  let next = 0;
+  function def(name, r, g, b, flags, emit) {
+    const id = next++;
+    BK[name] = id; BK_NAMES[id] = name;
+    BK_RGB[id * 3] = r; BK_RGB[id * 3 + 1] = g; BK_RGB[id * 3 + 2] = b;
+    BK_FLAGS[id] = flags | 0;
+    BK_EMIT[id] = emit || 0;
+    const trans = (flags & BK_FL_TRANS) !== 0;
+    BK_SOLID[id] = (id === 0 || trans) ? 0 : 1;
+    BK_OPAQUE[id] = (id === 0 || trans) ? 0 : 1;
+    if (emit) BK_FLAGS[id] |= BK_FL_EMIT;
+    return id;
+  }
+  const W = BK_FL_WET, G = BK_FL_GLOSS, T = BK_FL_TRANS, A = BK_FL_ANIM, N = BK_FL_NEON;
+
+  def('AIR', 0, 0, 0, 0);
+  // ground and structure
+  def('BEDROCK', 18, 20, 26, 0);
+  def('STONE', 56, 60, 70, 0);
+  def('DIRT', 62, 50, 42, 0);
+  def('ASPHALT', 32, 34, 40, W);
+  def('ROADLINE', 176, 168, 122, W);
+  def('SIDEWALK', 88, 92, 100, W);
+  def('CURB', 114, 117, 125, W);
+  def('CONCRETE', 104, 108, 116, 0);
+  def('CONCRETE_DK', 62, 66, 74, 0);
+  def('CONCRETE_LT', 142, 146, 154, 0);
+  def('BRICK', 106, 54, 44, 0);
+  def('BRICK_DK', 72, 40, 36, 0);
+  def('GOTHIC', 68, 72, 84, 0);
+  def('GOTHIC_DK', 42, 46, 56, 0);
+  def('STEEL', 82, 90, 106, G);
+  def('STEEL_DK', 46, 52, 64, G);
+  def('RUST', 110, 66, 42, 0);
+  def('GLASS', 22, 32, 48, G);
+  def('GLASS_BLUE', 36, 58, 86, G);
+  def('WIN_WARM', 255, 190, 104, 0, 1.55);
+  def('WIN_COOL', 150, 200, 255, 0, 1.45);
+  def('WIN_WHITE', 240, 236, 214, 0, 1.5);
+  def('ROOF_TAR', 30, 32, 38, 0);
+  def('ROOF_GRAVEL', 56, 56, 60, 0);
+  def('WATER', 16, 42, 62, T);
+  def('SAND', 118, 104, 82, 0);
+  def('WOOD', 90, 62, 40, 0);
+  def('WOOD_DK', 56, 38, 28, 0);
+  def('GRASS', 28, 56, 36, 0);
+  def('ICE', 146, 198, 226, G | W);
+  def('SNOW', 204, 218, 232, 0);
+  def('LAMP_POLE', 28, 32, 40, G);
+  def('LAMP_LIGHT', 255, 168, 78, 0, 2.2);
+  def('NEON_PINK', 255, 56, 150, N, 2.0);
+  def('NEON_CYAN', 56, 220, 255, N, 2.0);
+  def('NEON_GREEN', 90, 255, 120, N, 1.9);
+  def('NEON_YELLOW', 255, 220, 60, N, 1.9);
+  def('NEON_RED', 255, 48, 48, N, 1.9);
+  def('NEON_PURPLE', 170, 80, 255, N, 1.9);
+  def('LAVA', 255, 96, 24, A, 2.4);
+  def('HOT_METAL', 255, 140, 54, A, 1.5);
+  def('COPPER', 64, 124, 108, G);
+  def('CARN_RED', 188, 30, 40, 0);
+  def('CARN_WHITE', 222, 222, 226, 0);
+  def('CARN_YELLOW', 232, 188, 40, 0);
+  def('CARN_PURPLE', 108, 48, 148, 0);
+  def('CARN_TEAL', 36, 150, 150, 0);
+  def('CONT_RED', 146, 38, 34, 0);
+  def('CONT_BLUE', 38, 66, 128, 0);
+  def('CONT_GREEN', 38, 98, 68, 0);
+  def('CONT_ORANGE', 186, 98, 38, 0);
+  def('CONT_GREY', 98, 104, 112, 0);
+  def('HAZ_Y', 232, 198, 30, 0);
+  def('HAZ_K', 28, 28, 32, 0);
+  def('SEWER_BRICK', 38, 56, 50, W);
+  def('SEWER_SLIME', 60, 200, 90, A, 0.9);
+  def('SEWER_WATER', 36, 96, 66, T | A);
+  def('BRIDGE_DECK', 56, 60, 68, W);
+  def('CABLE', 38, 42, 50, G);
+  def('SIGNAL', 255, 238, 160, 0, 2.6);
+  def('WHITE', 228, 230, 236, 0);
+  def('BLACK', 14, 14, 18, 0);
+  def('RED', 176, 28, 32, 0);
+  def('PURPLE', 86, 46, 118, 0);
+  def('GREEN', 58, 146, 68, 0);
+  def('GARGOYLE', 52, 56, 66, 0);
+  def('SKYLIGHT', 120, 170, 210, G, 0.6);
+  def('BEACON_RED', 255, 40, 40, 0, 2.2);
+  def('CAR_RED', 150, 28, 30, G);
+  def('CAR_BLUE', 34, 60, 120, G);
+  def('CAR_WHITE', 190, 192, 198, G);
+  def('CAR_BLACK', 22, 24, 28, G);
+  def('CAR_YELLOW', 196, 156, 30, G);
+  def('HEADLIGHT', 255, 244, 200, 0, 1.6);
+  def('TAILLIGHT', 255, 40, 36, 0, 1.4);
+  def('HYDRANT', 170, 32, 30, 0);
+  def('FROZEN_WATER', 120, 170, 204, G | W);
+  def('FURNACE', 70, 40, 34, 0);
+  def('GAS', 120, 220, 90, T | A);
+  def('LEAVES', 24, 50, 32, 0);
+  def('TRUNK', 52, 38, 30, 0);
+  def('BENCH', 74, 52, 36, 0);
+  def('CRANE', 170, 120, 30, 0);
+  def('SNOW_ICE', 170, 196, 218, G);
+  def('BOLT', 255, 255, 255, 0, 2.0);
+})();
+
+// Convenience predicates for the mesher.
+function BK_isSolid(id) { return BK_SOLID[id] === 1; }
+
+
+// ═══ WORLDGEN ═══
+// ═══════════════════════════════════════════════════════════════════════
+//  WORLDGEN — the whole of Gotham as a pure function of (x, y, z).
+//
+//  Shared with the chunk worker. Nothing here keeps state that depends on the
+//  ORDER chunks are requested in: any chunk can be built alone, on any worker,
+//  in any order, and neighbouring chunks agree at their seams. That property is
+//  what makes an infinite streamed world possible, and every design choice below
+//  serves it:
+//
+//   - the city is a regular street grid; each block's contents are a hash of its
+//     (bx, bz), so a block can be recomputed from nothing;
+//   - buildings are described analytically (footprint, tiers, roof) and a column
+//     asks "what is my height" instead of being stamped into the world;
+//   - whether a facade voxel is a window, a pier or a ledge is decided from the
+//     voxel's own coordinates and its building's seed, not from a neighbour.
+// ═══════════════════════════════════════════════════════════════════════
+
+var WG_H = 128;            // world height
+var WG_GY = 25;            // y of the top road voxel; feet stand at GY + 1
+var WG_SEA = 21;           // y of the top water voxel; the surface sits at 22.0
+var WG_FLOOR = 8;          // sea floor
+var WG_PITCH = 48;         // one city block plus its street
+var WG_ST = 10;            // street width: 2 sidewalk + 6 road + 2 sidewalk
+var WG_BASE = WG_GY + 2;   // y of the first building voxel (above the raised pavement)
+var WG_SEED = 1939;
+
+var WG_D = { SEA: 0, AZOTEAS: 1, MUELLES: 2, ARKHAM: 3, HIELO: 4, ALCANT: 5, FUNDI: 6, PUENTE: 7, CARNAVAL: 8 };
+var WG_DNAME = ['MAR ABIERTO', 'AZOTEAS DE GOTHAM', 'MUELLES DE GOTHAM', 'TORRE DE ARKHAM', 'MUELLE HELADO',
+  'ALCANTARILLAS', 'FUNDICIÓN DE ACERO', 'EL PUENTE DE GOTHAM', 'CARNAVAL DE ARKHAM'];
+
+// ── land, channel, districts ──────────────────────────────────────────────
+
+// A channel runs east-west through the whole island. Its centre wanders, so it
+// reads as a river rather than a ruled line, and it is wide enough that the only
+// ways across are the bridge, a long glide or the grapple.
+function WG_channelZ(x) { return 170 + 22 * Math.sin(x / 160) + 9 * Math.sin(x / 53 + 1.3); }
+function WG_channelHW(x) { return 50 + 7 * Math.sin(x / 97 + 0.6); }
+function WG_inChannel(x, z) { return Math.abs(z - WG_channelZ(x)) < WG_channelHW(x); }
+
+function WG_landRaw(x, z) {
+  const r = Math.hypot(x / 770, z / 720);
+  const n = NZ_fbm2(x / 120, z / 120, 7, 3) - 0.5;
+  return r + n * 0.24 < 1.0;
+}
+function WG_isLand(x, z) { return WG_landRaw(x, z) && !WG_inChannel(x, z); }
+
+// Voronoi-ish regions, warped so borders wander. Centres are in blocks and the
+// radius is only a weight: a district with a bigger radius wins more ground.
+var WG_CENTERS = [
+  [WG_D.AZOTEAS, 0, -40, 300],
+  [WG_D.ARKHAM, -20, -540, 240],
+  [WG_D.CARNAVAL, -480, -330, 260],
+  [WG_D.HIELO, 480, -360, 260],
+  [WG_D.MUELLES, -460, 420, 290],
+  [WG_D.ALCANT, 40, 420, 250],
+  [WG_D.FUNDI, 480, 420, 260],
+];
+function WG_districtAt(x, z) {
+  const wx = x + (NZ_fbm2(x / 150, z / 150, 3, 2) - 0.5) * 90;
+  const wz = z + (NZ_fbm2(x / 150 + 40, z / 150 + 40, 5, 2) - 0.5) * 90;
+  let best = 1, bd = 1e9;
+  for (let i = 0; i < WG_CENTERS.length; i++) {
+    const c = WG_CENTERS[i];
+    const d = Math.hypot(wx - c[1], wz - c[2]) / c[3];
+    if (d < bd) { bd = d; best = c[0]; }
+  }
+  // the bridge approaches belong to the bridge, whatever bank they are on
+  if (Math.abs(x - 5) < 70 && Math.abs(z - WG_channelZ(5)) < 130) return WG_D.PUENTE;
+  return best;
+}
+
+// ── building styles ───────────────────────────────────────────────────────
+// A style says how a facade is dressed. Resolved to block ids once, below.
+var WG_STY = [];
+(function () {
+  function S(o) {
+    const r = {};
+    for (const k in o) r[k] = (typeof o[k] === 'string' && BK[o[k]] !== undefined) ? BK[o[k]] : o[k];
+    WG_STY.push(r);
+  }
+  // 0 office block: dark concrete, blue glass, steel piers
+  S({ wall: 'CONCRETE_DK', pier: 'STEEL_DK', ledge: 'CONCRETE', win: 'GLASS_BLUE', roof: 'ROOF_TAR', WP: 3, FH: 4, lit: 0.34, wr: 2, wy: 1, store: 1 });
+  // 1 glass tower: curtain wall, thin mullions
+  S({ wall: 'STEEL_DK', pier: 'STEEL', ledge: 'STEEL', win: 'GLASS_BLUE', roof: 'ROOF_TAR', WP: 2, FH: 4, lit: 0.27, wr: 3, wy: 1, store: 1 });
+  // 2 art deco: pale stone, tall dark window strips
+  S({ wall: 'CONCRETE_LT', pier: 'CONCRETE', ledge: 'CONCRETE_LT', win: 'GLASS', roof: 'ROOF_GRAVEL', WP: 4, FH: 4, lit: 0.40, wr: 2, wy: 1, store: 1 });
+  // 3 brick: small windows, red walls
+  S({ wall: 'BRICK', pier: 'BRICK_DK', ledge: 'CONCRETE', win: 'GLASS', roof: 'ROOF_TAR', WP: 4, FH: 4, lit: 0.30, wr: 2, wy: 1, store: 1 });
+  // 4 gothic: narrow tall windows, stone
+  S({ wall: 'GOTHIC', pier: 'GOTHIC_DK', ledge: 'GOTHIC_DK', win: 'GLASS', roof: 'COPPER', WP: 4, FH: 5, lit: 0.22, wr: 3, wy: 1, store: 0 });
+  // 5 warehouse: rust and concrete, few windows
+  S({ wall: 'CONCRETE', pier: 'RUST', ledge: 'CONCRETE_DK', win: 'GLASS', roof: 'ROOF_GRAVEL', WP: 6, FH: 6, lit: 0.10, wr: 1, wy: 4, store: 0 });
+  // 6 industrial: rust and steel
+  S({ wall: 'RUST', pier: 'STEEL_DK', ledge: 'STEEL_DK', win: 'GLASS', roof: 'STEEL_DK', WP: 5, FH: 5, lit: 0.16, wr: 1, wy: 3, store: 0 });
+  // 7 carnival: bright stripes
+  S({ wall: 'CARN_RED', pier: 'CARN_WHITE', ledge: 'CARN_PURPLE', win: 'GLASS', roof: 'CARN_PURPLE', WP: 4, FH: 4, lit: 0.45, wr: 2, wy: 1, store: 1 });
+  // 8 ice: pale blue and snow
+  S({ wall: 'CONCRETE_LT', pier: 'ICE', ledge: 'SNOW', win: 'GLASS_BLUE', roof: 'SNOW', WP: 4, FH: 4, lit: 0.35, wr: 2, wy: 1, store: 1 });
+})();
+
+// ── blocks ────────────────────────────────────────────────────────────────
+
+var WG_blockCache = new Map();
+
+function WG_mk(x0, z0, x1, z1, h, st, seed, o) {
+  const b = { x0: x0, z0: z0, x1: x1, z1: z1, h: h, st: st, seed: seed, base: WG_BASE,
+    tiers: null, roof: 0, rh: 0, wo: NZ_hash(seed, 3, 5) % 7, props: null, lit: -1 };
+  if (o) for (const k in o) b[k] = o[k];
+  return b;
+}
+
+function WG_blockInfo(bx, bz) {
+  const key = (bx + 512) * 1024 + (bz + 512);
+  let b = WG_blockCache.get(key);
+  if (!b) { b = WG_genBlock(bx, bz); WG_blockCache.set(key, b); }
+  return b;
+}
+
+function WG_genBlock(bx, bz) {
+  const ox = bx * WG_PITCH + WG_ST, oz = bz * WG_PITCH + WG_ST;
+  const L = WG_PITCH - WG_ST;   // 38
+  const info = { bx: bx, bz: bz, ox: ox, oz: oz, d: 0, full: false, kind: 'water', bld: [] };
+  let land = 0;
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+    if (WG_isLand(ox + i * (L / 2), oz + j * (L / 2))) land++;
+  }
+  if (land === 0) return info;
+  info.d = WG_districtAt(ox + L / 2, oz + L / 2);
+  if (land < 9) { info.kind = 'shore'; return info; }
+  info.full = true;
+  info.kind = 'bld';
+
+  const s = NZ_hash(bx, bz, WG_SEED);
+  const r = NZ_f(bx, bz, 11), r2 = NZ_f(bx, bz, 12), r3 = NZ_f(bx, bz, 13), r4 = NZ_f(bx, bz, 14);
+  const cxm = ox + L / 2, czm = oz + L / 2;
+  const d = info.d;
+
+  if (d === WG_D.AZOTEAS || d === WG_D.PUENTE) {
+    const cd = Math.min(1, Math.hypot(cxm, czm + 40) / 300);
+    if (r < 0.10) { info.kind = 'park'; return info; }
+    if (r < 0.52) {
+      // one big tower, often stepped like the old art-deco skyscrapers
+      const ins = Math.floor(r2 * 4);
+      const hmax = 92 - 62 * cd;
+      const h = Math.floor(24 + r3 * (hmax - 24));
+      const st = r4 < 0.34 ? 0 : (r4 < 0.62 ? 1 : 2);
+      const tiers = [];
+      if (h > 44 && (st === 2 || r2 > 0.55)) {
+        tiers.push([4 + ins, Math.floor(h * 0.78)]);
+        if (h > 62) tiers.push([9 + ins, Math.floor(h * 0.92)]);
+        if (h > 76) tiers.push([14 + ins, h]);
+      }
+      const hh = tiers.length ? Math.floor(h * 0.62) : h;
+      const b = WG_mk(ox + ins, oz + ins, ox + L - ins, oz + L - ins, hh, st, s, { tiers: tiers.length ? tiers : null });
+      info.bld.push(b);
+    } else {
+      // four mid-rises, with a gap so the alleys between them are walkable
+      const q = [[0, 0], [20, 0], [0, 20], [20, 20]];
+      for (let i = 0; i < 4; i++) {
+        const rr = NZ_f(bx * 4 + i, bz, 21);
+        const hh = Math.floor(12 + rr * (46 - 26 * cd));
+        const st = NZ_f(bx * 4 + i, bz, 22) < 0.5 ? 0 : 3;
+        info.bld.push(WG_mk(ox + q[i][0], oz + q[i][1], ox + q[i][0] + 18, oz + q[i][1] + 18, hh, st, NZ_hash(s, i, 7)));
+      }
+    }
+    return info;
+  }
+
+  if (d === WG_D.ARKHAM) {
+    if (r < 0.14) { info.kind = 'park'; return info; }
+    // gothic masses with pitched roofs and the odd spire
+    if (r < 0.5) {
+      const h = Math.floor(14 + r2 * 22);
+      info.bld.push(WG_mk(ox + 2, oz + 2, ox + L - 2, oz + L - 2, h, 4, s, { roof: r3 < 0.5 ? 1 : 2, rh: 9 }));
+    } else {
+      const q = [[0, 0], [20, 0], [0, 20], [20, 20]];
+      for (let i = 0; i < 4; i++) {
+        const rr = NZ_f(bx * 4 + i, bz, 31);
+        const h = Math.floor(10 + rr * 22);
+        info.bld.push(WG_mk(ox + q[i][0], oz + q[i][1], ox + q[i][0] + 18, oz + q[i][1] + 18, h, 4, NZ_hash(s, i, 9),
+          { roof: rr < 0.3 ? 3 : (rr < 0.65 ? 1 : 2), rh: rr < 0.3 ? 16 : 7 }));
+      }
+    }
+    return info;
+  }
+
+  if (d === WG_D.MUELLES) {
+    if (r < 0.30) { info.kind = 'yard'; return info; }       // container yard
+    // long low warehouses
+    if (r2 < 0.5) {
+      info.bld.push(WG_mk(ox + 1, oz + 2, ox + L - 1, oz + 17, Math.floor(8 + r3 * 7), 5, s));
+      info.bld.push(WG_mk(ox + 1, oz + 21, ox + L - 1, oz + L - 2, Math.floor(8 + r4 * 8), 5, NZ_hash(s, 1, 1)));
+    } else {
+      info.bld.push(WG_mk(ox + 2, oz + 2, ox + L - 2, oz + L - 2, Math.floor(10 + r3 * 14), 5, s));
+    }
+    return info;
+  }
+
+  if (d === WG_D.ALCANT) {
+    if (r < 0.08) { info.kind = 'park'; return info; }
+    // dense little brick houses with pitched roofs: four to six lots per block
+    const q = [[0, 0], [13, 0], [26, 0], [0, 20], [13, 20], [26, 20]];
+    for (let i = 0; i < 6; i++) {
+      const rr = NZ_f(bx * 8 + i, bz, 41);
+      if (rr < 0.12) continue;
+      const w = i % 3 === 2 ? 12 : 12;
+      info.bld.push(WG_mk(ox + q[i][0], oz + q[i][1], ox + q[i][0] + w, oz + q[i][1] + 17,
+        Math.floor(9 + rr * 16), 3, NZ_hash(s, i, 13), { roof: rr < 0.5 ? 1 : 2, rh: 6 }));
+    }
+    return info;
+  }
+
+  if (d === WG_D.FUNDI) {
+    if (r < 0.2) { info.kind = 'yard'; return info; }
+    info.bld.push(WG_mk(ox + 2, oz + 2, ox + L - 2, oz + L - 2, Math.floor(14 + r2 * 26), 6, s));
+    return info;
+  }
+
+  if (d === WG_D.CARNAVAL) {
+    if (r < 0.34) { info.kind = 'plaza'; return info; }
+    const q = [[0, 0], [20, 0], [0, 20], [20, 20]];
+    for (let i = 0; i < 4; i++) {
+      const rr = NZ_f(bx * 4 + i, bz, 51);
+      if (rr < 0.2) continue;
+      info.bld.push(WG_mk(ox + q[i][0], oz + q[i][1], ox + q[i][0] + 18, oz + q[i][1] + 18,
+        Math.floor(8 + rr * 18), 7, NZ_hash(s, i, 17), { roof: rr < 0.6 ? 3 : 0, rh: 10 }));
+    }
+    return info;
+  }
+
+  if (d === WG_D.HIELO) {
+    if (r < 0.28) { info.kind = 'plaza'; return info; }
+    const q = [[0, 0], [20, 0], [0, 20], [20, 20]];
+    for (let i = 0; i < 4; i++) {
+      const rr = NZ_f(bx * 4 + i, bz, 61);
+      if (rr < 0.25) continue;
+      info.bld.push(WG_mk(ox + q[i][0], oz + q[i][1], ox + q[i][0] + 18, oz + q[i][1] + 18,
+        Math.floor(8 + rr * 16), 8, NZ_hash(s, i, 19)));
+    }
+    return info;
+  }
+
+  info.kind = 'plaza';
+  return info;
+}
+
+// ── a building's height at one column ─────────────────────────────────────
+// 0 means "this column is not inside the building". Includes the parapet and the
+// roof profile, so it is the true solid top; props above it are not counted.
+function WG_bTop(b, x, z) {
+  if (x < b.x0 || x >= b.x1 || z < b.z0 || z >= b.z1) return 0;
+  let h = b.h, ins = 0;
+  const T = b.tiers;
+  if (T) {
+    for (let i = 0; i < T.length; i++) {
+      const t = T[i], k = t[0];
+      if (t[1] > h && x >= b.x0 + k && x < b.x1 - k && z >= b.z0 + k && z < b.z1 - k) { h = t[1]; ins = k; }
+    }
+  }
+  let top = b.base + h;
+  if (b.roof === 0) {
+    if (x === b.x0 + ins || x === b.x1 - 1 - ins || z === b.z0 + ins || z === b.z1 - 1 - ins) top += 1;   // parapet
+  } else if (b.roof === 1) {                                  // gable, ridge along x
+    const mid = (b.z0 + b.z1 - 1) / 2, half = (b.z1 - b.z0) / 2;
+    top += Math.max(0, Math.min(b.rh, Math.floor((half - Math.abs(z - mid)) * 0.62)));
+  } else if (b.roof === 2) {                                  // gable, ridge along z
+    const mid = (b.x0 + b.x1 - 1) / 2, half = (b.x1 - b.x0) / 2;
+    top += Math.max(0, Math.min(b.rh, Math.floor((half - Math.abs(x - mid)) * 0.62)));
+  } else if (b.roof === 3) {                                  // pyramid / spire
+    const cx = (b.x0 + b.x1 - 1) / 2, cz = (b.z0 + b.z1 - 1) / 2;
+    const dd = Math.max(Math.abs(x - cx), Math.abs(z - cz));
+    top += Math.max(0, b.rh - Math.floor(dd * (b.rh / ((b.x1 - b.x0) / 2 + 0.5))));
+  }
+  return top < WG_H - 1 ? top : WG_H - 1;
+}
+
+// ── column classification ─────────────────────────────────────────────────
+var WG_K = { WATER: 0, ROAD: 1, SIDEWALK: 2, LOT: 3, BUILDING: 4, PARK: 5, SHORE: 6, PLAZA: 7, YARD: 8 };
+
+// Fills `o` with what stands in column (x, z): its kind, the solid top (the first
+// free y above the mass), and the building if there is one.
+function WG_colInfo(x, z, o) {
+  o.b = null;
+  if (!WG_isLand(x, z)) { o.kind = WG_K.WATER; o.top = WG_FLOOR + 1; return o; }
+  const ux = NZ_mod(x, WG_PITCH), uz = NZ_mod(z, WG_PITCH);
+  const sx = ux < WG_ST, sz = uz < WG_ST;
+  if (sx || sz) {
+    // a street. The outer two voxels each side are raised pavement.
+    const a = sx ? ux : 99, c = sz ? uz : 99;
+    if ((sx && (ux < 2 || ux > 7)) && (!sz || (uz < 2 || uz > 7))) { o.kind = WG_K.SIDEWALK; o.top = WG_GY + 2; return o; }
+    if ((sz && (uz < 2 || uz > 7)) && (!sx || (ux < 2 || ux > 7))) { o.kind = WG_K.SIDEWALK; o.top = WG_GY + 2; return o; }
+    o.kind = WG_K.ROAD; o.top = WG_GY + 1; return o;
+  }
+  const bx = Math.floor(x / WG_PITCH), bz = Math.floor(z / WG_PITCH);
+  const info = WG_blockInfo(bx, bz);
+  if (info.kind === 'water') { o.kind = WG_K.WATER; o.top = WG_FLOOR + 1; return o; }
+  if (info.kind === 'shore') { o.kind = WG_K.SHORE; o.top = WG_GY + 2; return o; }
+  for (let i = 0; i < info.bld.length; i++) {
+    const t = WG_bTop(info.bld[i], x, z);
+    if (t) { o.kind = WG_K.BUILDING; o.b = info.bld[i]; o.top = t; return o; }
+  }
+  o.kind = info.kind === 'park' ? WG_K.PARK : (info.kind === 'plaza' ? WG_K.PLAZA : (info.kind === 'yard' ? WG_K.YARD : WG_K.LOT));
+  o.top = WG_GY + 2;
+  return o;
+}
+
+var WG_tmpCol = { kind: 0, top: 0, b: null };
+// The solid mass at a column, ignoring small props. The light baker uses it for
+// moon shadows and horizon occlusion, so it has to be cheap and consistent.
+function WG_topMass(x, z) { return WG_colInfo(x, z, WG_tmpCol).top; }
+
+function WG_massChunk(cx, cz) {
+  const m = new Uint8Array(256), o = { kind: 0, top: 0, b: null };
+  for (let i = 0; i < 16; i++) for (let j = 0; j < 16; j++) m[i * 16 + j] = WG_colInfo(cx * 16 + i, cz * 16 + j, o).top;
+  return m;
+}
+
+// ── facade dressing ───────────────────────────────────────────────────────
+function WG_facade(b, st, x, y, z, ex) {
+  // ex: which of -x,+x,-z,+z are exposed at this height (booleans)
+  let n = 0, side = 0;
+  for (let i = 0; i < 4; i++) if (ex[i]) { n++; side = i; }
+  if (n >= 2) return st.pier;                         // a corner is always a pier
+  const u = (side < 2 ? z : x) + b.wo;
+  const f = Math.floor((y - b.base) / st.FH);
+  const yy = (y - b.base) - f * st.FH;
+  const iu = NZ_mod(u, st.WP);
+  const cu = Math.floor(u / st.WP);
+  if (yy === 0) return st.ledge;                      // the floor slab
+  if (iu === 0) return st.pier;                       // the vertical pier between windows
+  // ground floor of shops and offices: tall dark glass instead of small windows
+  if (f === 0 && st.store) return yy <= 3 ? st.win : st.wall;
+  if (yy < st.wy || yy >= st.wy + st.wr) return st.wall;       // spandrel above/below the window band
+  // a window: lit or dark, decided from the building and the window's own address
+  if (NZ_f(b.seed + side * 131, f, cu) < st.lit) {
+    const k = NZ_f(b.seed, f * 3 + 1, cu * 7 + side);
+    return k < 0.62 ? BK.WIN_WARM : (k < 0.9 ? BK.WIN_COOL : BK.WIN_WHITE);
+  }
+  return st.win;
+}
+
+// Things standing on a flat roof: tanks, antennas, vents. Deterministic per
+// building, placed away from the parapet.
+function WG_roofProps(b) {
+  if (b.props) return b.props;
+  const p = [], w = b.x1 - b.x0, d = b.z1 - b.z0;
+  const ins = (b.tiers && b.tiers.length) ? b.tiers[b.tiers.length - 1][0] : 0;
+  const x0 = b.x0 + ins + 2, x1 = b.x1 - ins - 2, z0 = b.z0 + ins + 2, z1 = b.z1 - ins - 2;
+  if (b.roof !== 0 || x1 - x0 < 6 || z1 - z0 < 6) { b.props = p; return p; }
+  const n = 1 + (NZ_hash(b.seed, 9, 1) % 3);
+  for (let i = 0; i < n; i++) {
+    const k = NZ_hash(b.seed, 20 + i, 2) % 5;
+    const px = x0 + (NZ_hash(b.seed, 30 + i, 3) % Math.max(1, x1 - x0 - 4));
+    const pz = z0 + (NZ_hash(b.seed, 40 + i, 4) % Math.max(1, z1 - z0 - 4));
+    p.push({ k: k, x: px, z: pz });
+  }
+  b.props = p;
+  return p;
+}
+
+// Block id for a prop voxel at (x, dy, z), dy counted up from the roof surface.
+function WG_propBlock(p, x, dy, z, seed) {
+  const lx = x - p.x, lz = z - p.z;
+  if (p.k === 0) {                                    // water tank on legs
+    if (lx < 0 || lx > 4 || lz < 0 || lz > 4) return 0;
+    if (dy < 3) return ((lx === 0 || lx === 4) && (lz === 0 || lz === 4)) ? BK.STEEL_DK : 0;
+    if (dy < 7) return (dy === 4 || dy === 6) ? BK.STEEL_DK : BK.WOOD;
+    if (dy === 7) return (lx > 0 && lx < 4 && lz > 0 && lz < 4) ? BK.WOOD_DK : 0;
+    return 0;
+  }
+  if (p.k === 1 || p.k === 4) {                       // antenna with a red beacon
+    if (lx !== 2 || lz !== 2) return (dy === 4 && (lx === 1 || lx === 3) && lz === 2) ? BK.STEEL_DK : 0;
+    const h = 9 + (seed % 7);
+    if (dy < h) return BK.STEEL_DK;
+    if (dy === h) return BK.BEACON_RED;
+    return 0;
+  }
+  if (p.k === 2) {                                    // ventilation box
+    if (lx < 0 || lx > 2 || lz < 0 || lz > 2 || dy > 1) return 0;
+    return dy === 1 ? BK.STEEL : BK.CONCRETE;
+  }
+  if (p.k === 3) {                                    // skylight
+    if (lx < 0 || lx > 3 || lz < 0 || lz > 3 || dy > 0) return 0;
+    return BK.SKYLIGHT;
+  }
+  return 0;
+}
+
+// ── street furniture ──────────────────────────────────────────────────────
+
+// A street lamp: pole on the outer sidewalk voxel, an arm over the road, the lamp
+// head at the arm's end. Returns {part: 1 pole | 2 arm | 3 head, dir} or null.
+function WG_lampAt(x, z) {
+  const ux = NZ_mod(x, WG_PITCH), uz = NZ_mod(z, WG_PITCH);
+  // street running along z (the strip is x-narrow)
+  if (ux < WG_ST && uz >= WG_ST) {
+    const zz = NZ_mod(z, 32);
+    if (ux === 0 && zz === 6) return { part: 1, dir: 1 };
+    if (ux === 9 && zz === 22) return { part: 1, dir: -1 };
+    if (ux === 1 && zz === 6) return { part: 2, dir: 1 };
+    if (ux === 2 && zz === 6) return { part: 3, dir: 1 };
+    if (ux === 8 && zz === 22) return { part: 2, dir: -1 };
+    if (ux === 7 && zz === 22) return { part: 3, dir: -1 };
+  }
+  if (uz < WG_ST && ux >= WG_ST) {
+    const xx = NZ_mod(x, 32);
+    if (uz === 0 && xx === 6) return { part: 1, dir: 1 };
+    if (uz === 9 && xx === 22) return { part: 1, dir: -1 };
+    if (uz === 1 && xx === 6) return { part: 2, dir: 1 };
+    if (uz === 2 && xx === 6) return { part: 3, dir: 1 };
+    if (uz === 8 && xx === 22) return { part: 2, dir: -1 };
+    if (uz === 7 && xx === 22) return { part: 3, dir: -1 };
+  }
+  return null;
+}
+
+// Parked cars: a 4x2x2 shape in the kerbside lanes, placed by hash. Returns the
+// block at (x, dy, z) or 0.
+var WG_CARCOL = [];
+(function () { WG_CARCOL = [BK.CAR_RED, BK.CAR_BLUE, BK.CAR_WHITE, BK.CAR_BLACK, BK.CAR_YELLOW, BK.CAR_BLACK, BK.CAR_WHITE]; })();
+function WG_carBlock(x, dy, z) {
+  if (dy > 1) return 0;
+  const ux = NZ_mod(x, WG_PITCH), uz = NZ_mod(z, WG_PITCH);
+  let along, lane, strip;
+  if (ux < WG_ST && uz >= WG_ST) {                    // street along z
+    if (!((ux >= 2 && ux <= 3) || (ux >= 6 && ux <= 7))) return 0;
+    lane = ux <= 3 ? 0 : 1; strip = Math.floor(x / WG_PITCH) * 2 + lane; along = z;
+  } else if (uz < WG_ST && ux >= WG_ST) {             // street along x
+    if (!((uz >= 2 && uz <= 3) || (uz >= 6 && uz <= 7))) return 0;
+    lane = uz <= 3 ? 0 : 1; strip = Math.floor(z / WG_PITCH) * 2 + lane + 1000; along = x;
+  } else return 0;
+  const slot = Math.floor(along / 10), la = NZ_mod(along, 10);
+  const h = NZ_hash(slot, strip, 77);
+  if ((h & 255) / 255 > 0.38) return 0;
+  const off = (h >>> 8) % 5;
+  // The whole car must sit clear of the crossings. Deciding that per column would
+  // slice a car in half at the edge of the exclusion zone, so decide it per car.
+  const m0 = NZ_mod(slot * 10 + off, WG_PITCH);
+  if (m0 < WG_ST + 2 || m0 + 3 > WG_PITCH - 4) return 0;
+  const i = la - off;
+  if (i < 0 || i > 3) return 0;
+  const col = WG_CARCOL[(h >>> 16) % WG_CARCOL.length];
+  if (dy === 0) return i === 0 ? BK.HEADLIGHT : (i === 3 ? BK.TAILLIGHT : col);
+  return (i === 1 || i === 2) ? BK.GLASS : 0;
+}
+
+// ── filling a chunk ───────────────────────────────────────────────────────
+
+var WG_C18 = 18;
+function WG_genChunk(cx, cz) {
+  const H = WG_H, vox = new Uint8Array(256 * H), top = new Uint8Array(256);
+  const x0 = cx * 16, z0 = cz * 16;
+  // classify an 18x18 patch: the chunk plus one column all round, so a facade
+  // can see whether its neighbour column is lower
+  const kind = new Uint8Array(324), tp = new Uint8Array(324), bl = new Array(324);
+  const o = { kind: 0, top: 0, b: null };
+  for (let i = 0; i < 18; i++) for (let j = 0; j < 18; j++) {
+    WG_colInfo(x0 + i - 1, z0 + j - 1, o);
+    const k = i * 18 + j;
+    kind[k] = o.kind; tp[k] = o.top; bl[k] = o.b;
+  }
+  for (let i = 0; i < 16; i++) {
+    for (let j = 0; j < 16; j++) {
+      const x = x0 + i, z = z0 + j, ci = (i + 1) * 18 + (j + 1);
+      const col = (i * 16 + j) * H;
+      const kd = kind[ci];
+      vox[col] = BK.BEDROCK;
+      if (kd === WG_K.WATER) {
+        const bed = WG_FLOOR - (NZ_hash(x >> 2, z >> 2, 9) & 1);
+        for (let y = 1; y <= bed; y++) vox[col + y] = y === bed ? BK.SAND : BK.STONE;
+        for (let y = bed + 1; y <= WG_SEA; y++) vox[col + y] = BK.WATER;
+        top[i * 16 + j] = bed + 1;
+        continue;
+      }
+      for (let y = 1; y < WG_GY; y++) vox[col + y] = BK.STONE;
+      const ux = NZ_mod(x, WG_PITCH), uz = NZ_mod(z, WG_PITCH);
+      let t = WG_GY + 1;
+      if (kd === WG_K.ROAD) {
+        let blk = BK.ASPHALT;
+        const inX = ux < WG_ST, inZ = uz < WG_ST;
+        if (inX && !inZ) {                                   // street along z
+          if (ux === 4 && NZ_mod(z, 6) < 3) blk = BK.ROADLINE;
+          if ((uz >= WG_ST && uz < WG_ST + 2) || uz > WG_PITCH - 3) if ((ux & 1) === 0) blk = BK.ROADLINE;   // zebra
+        } else if (inZ && !inX) {
+          if (uz === 4 && NZ_mod(x, 6) < 3) blk = BK.ROADLINE;
+          if ((ux >= WG_ST && ux < WG_ST + 2) || ux > WG_PITCH - 3) if ((uz & 1) === 0) blk = BK.ROADLINE;
+        }
+        vox[col + WG_GY] = blk;
+      } else if (kd === WG_K.SIDEWALK) {
+        vox[col + WG_GY] = BK.SIDEWALK; vox[col + WG_GY + 1] = BK.SIDEWALK;
+        // kerb: the sidewalk voxel that touches the road
+        const kerbX = (ux === 1 || ux === 8) && uz >= WG_ST;
+        const kerbZ = (uz === 1 || uz === 8) && ux >= WG_ST;
+        if (kerbX || kerbZ) vox[col + WG_GY + 1] = BK.CURB;
+        t = WG_GY + 2;
+      } else if (kd === WG_K.PARK) {
+        vox[col + WG_GY] = BK.DIRT; vox[col + WG_GY + 1] = BK.GRASS; t = WG_GY + 2;
+      } else if (kd === WG_K.YARD) {
+        vox[col + WG_GY] = BK.CONCRETE_DK; vox[col + WG_GY + 1] = BK.CONCRETE_DK; t = WG_GY + 2;
+      } else if (kd === WG_K.PLAZA) {
+        vox[col + WG_GY] = BK.CONCRETE; vox[col + WG_GY + 1] = ((ux + uz) & 7) === 0 ? BK.CONCRETE_DK : BK.CONCRETE_LT; t = WG_GY + 2;
+      } else if (kd === WG_K.BUILDING) {
+        vox[col + WG_GY] = BK.SIDEWALK; vox[col + WG_GY + 1] = BK.SIDEWALK;
+        const b = bl[ci], T = tp[ci], st = WG_STY[b.st];
+        const nT = [tp[(i) * 18 + (j + 1)], tp[(i + 2) * 18 + (j + 1)], tp[(i + 1) * 18 + j], tp[(i + 1) * 18 + (j + 2)]];
+        // a neighbour that is not part of this building counts as ground
+        for (let q = 0; q < 4; q++) {
+          const ni = i + (q === 0 ? 0 : q === 1 ? 2 : 1), nj = j + (q === 2 ? 0 : q === 3 ? 2 : 1);
+          if (bl[ni * 18 + nj] !== b) nT[q] = WG_BASE;
+        }
+        const mn = Math.min(nT[0], nT[1], nT[2], nT[3]);
+        const ex = [false, false, false, false];
+        // a parapet is a top voxel that stands one higher than a neighbour in the same building
+        let par = false;
+        if (b.roof === 0) for (let q = 0; q < 4; q++) if (nT[q] === T - 1 && nT[q] > WG_BASE) par = true;
+        for (let y = WG_BASE; y < T; y++) {
+          let blk;
+          if (y === T - 1) {
+            blk = par ? st.ledge : st.roof;
+          } else if (y >= mn) {
+            for (let q = 0; q < 4; q++) ex[q] = nT[q] <= y;
+            blk = (b.roof !== 0 && y >= b.base + b.h) ? st.roof : WG_facade(b, st, x, y, z, ex);
+          } else blk = BK.CONCRETE_DK;
+          vox[col + y] = blk;
+        }
+        // props on flat roofs
+        if (b.roof === 0 && T < WG_H - 20) {
+          const pr = WG_roofProps(b);
+          for (let q = 0; q < pr.length; q++) {
+            const p = pr[q];
+            if (x < p.x || x > p.x + 4 || z < p.z || z > p.z + 4) continue;
+            // only on a column whose roof is at the building's top level
+            if (T !== b.base + (b.tiers && b.tiers.length ? b.tiers[b.tiers.length - 1][1] : b.h)) continue;
+            for (let dy = 0; dy < 20 && T + dy < WG_H; dy++) {
+              const pb = WG_propBlock(p, x, dy, z, b.seed);
+              if (pb) vox[col + T + dy] = pb;
+            }
+          }
+        }
+        t = T;
+      } else {                                               // plain lot or shore paving
+        vox[col + WG_GY] = BK.SIDEWALK; vox[col + WG_GY + 1] = BK.SIDEWALK; t = WG_GY + 2;
+      }
+      // furniture on streets
+      if (kd === WG_K.SIDEWALK || kd === WG_K.ROAD) {
+        const lamp = WG_lampAt(x, z);
+        if (lamp) {
+          const y0 = WG_GY + 2;
+          if (lamp.part === 1) { for (let y = y0; y <= y0 + 6; y++) vox[col + y] = BK.LAMP_POLE; t = y0 + 7; }
+          else if (lamp.part === 2) { vox[col + y0 + 6] = BK.LAMP_POLE; t = y0 + 7; }
+          else { vox[col + y0 + 6] = BK.LAMP_LIGHT; vox[col + y0 + 7] = BK.LAMP_POLE; t = y0 + 8; }
+        } else if (kd === WG_K.ROAD) {
+          for (let dy = 0; dy < 2; dy++) {
+            const cb = WG_carBlock(x, dy, z);
+            if (cb) { vox[col + WG_GY + 1 + dy] = cb; t = WG_GY + 2 + dy; }
+          }
+        }
+      }
+      // trees and benches in parks
+      if (kd === WG_K.PARK) {
+        const tr = NZ_hash(x >> 2, z >> 2, 5);
+        if ((tr & 15) === 0 && (x & 3) === 1 && (z & 3) === 1) {
+          const h = 4 + (tr >>> 8) % 3;
+          for (let y = 0; y < h; y++) vox[col + WG_GY + 2 + y] = BK.TRUNK;
+          t = WG_GY + 2 + h;
+        }
+      }
+      top[i * 16 + j] = t > 0 ? t : 1;
+    }
+  }
+  // leaves for the trees: a second pass, because a canopy reaches into neighbours
+  for (let i = 0; i < 16; i++) for (let j = 0; j < 16; j++) {
+    const ci = (i + 1) * 18 + (j + 1);
+    if (kind[ci] !== WG_K.PARK) continue;
+    const x = x0 + i, z = z0 + j;
+    for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+      const tx = x + dx, tz = z + dz;
+      if ((tx & 3) !== 1 || (tz & 3) !== 1) continue;
+      const tr = NZ_hash(tx >> 2, tz >> 2, 5);
+      if ((tr & 15) !== 0) continue;
+      if (WG_colInfo(tx, tz, o).kind !== WG_K.PARK) continue;      // no trunk, no canopy
+      const h = 4 + (tr >>> 8) % 3;
+      const col = (i * 16 + j) * WG_H, y0 = WG_GY + 2 + h - 2;
+      for (let dy = 0; dy < 4; dy++) {
+        const r = dy === 3 ? 1 : 2;
+        if (Math.abs(dx) <= r && Math.abs(dz) <= r && !(Math.abs(dx) === 2 && Math.abs(dz) === 2) && vox[col + y0 + dy] === 0) {
+          vox[col + y0 + dy] = BK.LEAVES;
+          if (y0 + dy + 1 > top[i * 16 + j]) top[i * 16 + j] = y0 + dy + 1;
+        }
+      }
+    }
+  }
+  // True heights, props and canopies included: the first free y above the highest
+  // non-air voxel. Scanned from the voxels themselves so it can never disagree
+  // with them. The mesher bounds its loops with it and the game uses it to find
+  // the ground.
+  let maxY = 0;
+  for (let c = 0; c < 256; c++) {
+    let y = H - 1; const col = c * H;
+    while (y > 0 && vox[col + y] === 0) y--;
+    top[c] = y + 1;
+    if (y + 1 > maxY) maxY = y + 1;
+  }
+  return { vox: vox, top: top, maxY: maxY };
+}
+
+// ── light sources ─────────────────────────────────────────────────────────
+// Every emitter that can matter to the region [x0,x1) x [z0,z1): street lamps,
+// computed from the same rule that places them. [x, y, z, r, g, b, intensity, radius]
+function WG_emitters(x0, z0, x1, z1) {
+  const out = [];
+  const y = WG_GY + 2 + 6 + 0.5;
+  const r = 1.0, g = 0.66, b = 0.34;
+  for (let strip = 0; strip < 2; strip++) {
+    // strip 0: streets running along z (x-narrow); strip 1: along x
+    const a0 = strip === 0 ? x0 : z0, a1 = strip === 0 ? x1 : z1;     // across axis
+    const c0 = strip === 0 ? z0 : x0, c1 = strip === 0 ? z1 : x1;     // along axis
+    for (let s = Math.floor(a0 / WG_PITCH) - 1; s <= Math.floor(a1 / WG_PITCH) + 1; s++) {
+      for (let side = 0; side < 2; side++) {
+        const across = s * WG_PITCH + (side === 0 ? 2 : 7) + 0.5;
+        if (across < a0 - 20 || across > a1 + 20) continue;
+        const phase = side === 0 ? 6 : 22;
+        for (let q = Math.floor((c0 - 20 - phase) / 32); q <= Math.floor((c1 + 20 - phase) / 32); q++) {
+          const along = q * 32 + phase + 0.5;
+          const px = strip === 0 ? across : along, pz = strip === 0 ? along : across;
+          // only if the lamp really stands on land and not inside a crossing street
+          const lx = Math.floor(px), lz = Math.floor(pz);
+          if (!WG_isLand(lx, lz)) continue;
+          const other = strip === 0 ? NZ_mod(lz, WG_PITCH) : NZ_mod(lx, WG_PITCH);
+          if (other < WG_ST + 1) continue;
+          out.push([px, y, pz, r, g, b, 1.0, 17]);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+
+// ═══ BAKE ═══
+// ═══════════════════════════════════════════════════════════════════════
+//  BAKE — turns a chunk of voxels into a lit mesh. Shared with the worker.
+//
+//  All lighting is computed here, once, and stored in the vertices, so drawing a
+//  frame is just "rasterise some triangles". That is what makes a dense night
+//  city affordable on a phone. The light model, in the order it is applied:
+//
+//   SKY       Open sky is estimated per CELL from the height of the surrounding
+//             mass: for each of eight directions the tallest thing at a handful of
+//             distances gives a horizon angle, and a surface under a horizon at
+//             elevation e sees cos^2(e) of the sky. An alley between towers is
+//             dark, a rooftop is bright, and nothing was ray-marched to find out.
+//   MOON      A fixed moon, so shadows can be baked. Per COLUMN a single "shadow
+//             ceiling" is found (anything below it is in shade), so each vertex
+//             asks one number instead of marching a ray.
+//   LAMPS     Per VERTEX, because they need the surface normal: the few nearest
+//             emitters, each ray-marched through the real voxels so a lamp does
+//             not light the far side of a wall.
+//   AO        The classic per-corner voxel occlusion, multiplied in last.
+//
+//  Vertex layout, 16 bytes:
+//    0  x y z .        position inside the chunk (0..16, 0..128)
+//    4  block face ao flags
+//    8  r g b emit     albedo, and how hard the voxel glows (emit/255*4)
+//   12  sky bR bG bB   baked sky light, and baked lamp light (value/255*2)
+// ═══════════════════════════════════════════════════════════════════════
+
+var BX_H = WG_H;
+var BX_SHADOW_STEPS = 96;
+
+// The moon: a direction towards it, and the horizontal part used for shadows.
+var BX_MOON = (function () {
+  const az = 0.62, el = 0.74;
+  const ce = Math.cos(el);
+  return { x: ce * Math.sin(az), y: Math.sin(el), z: ce * Math.cos(az), hx: Math.sin(az), hz: Math.cos(az), tanE: Math.tan(el) };
+})();
+
+// Distances at which the horizon is sampled in each of eight directions.
+var BX_HD = [1.5, 3, 5, 8, 12, 18, 26, 36];
+var BX_HDIR = (function () {
+  const a = [];
+  for (let i = 0; i < 8; i++) a.push([Math.cos(i * Math.PI / 4), Math.sin(i * Math.PI / 4)]);
+  return a;
+})();
+
+// Cube faces. Corner order is counter-clockwise seen from outside; the winding
+// is checked in the tests rather than trusted.
+var BX_FACE = (function () {
+  const corners = [
+    [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]],   // +x
+    [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]],   // -x
+    [[0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]],   // +y
+    [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]],   // -y
+    [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]],   // +z
+    [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]],   // -z
+  ];
+  const normals = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+  const out = [];
+  for (let f = 0; f < 6; f++) {
+    const n = normals[f];
+    const a = n[0] ? 0 : (n[1] ? 1 : 2);
+    const t1 = a === 0 ? 1 : 0, t2 = a === 2 ? 1 : 2;
+    const verts = [];
+    for (let c = 0; c < 4; c++) {
+      const p = corners[f][c];
+      const d1 = p[t1] ? 1 : -1, d2 = p[t2] ? 1 : -1;
+      const e1 = [0, 0, 0], e2 = [0, 0, 0];
+      e1[t1] = d1; e2[t2] = d2;
+      verts.push({ p: p, e1: e1, e2: e2 });
+    }
+    out.push({ n: n, verts: verts });
+  }
+  return out;
+})();
+
+// How much ambient each face direction collects, so adjacent walls differ.
+var BX_HEMI = [0.70, 0.70, 1.0, 0.34, 0.80, 0.58];
+var BX_AOF = [0.50, 0.70, 0.86, 1.0];
+
+var BX_AMB = 0.36;       // ambient from an unobstructed sky
+var BX_MOONK = 0.62;     // direct moonlight on a surface facing it
+
+// ── reusable scratch, so a worker does not reallocate per chunk ───────────
+var BX_cAmb = new Float32Array(324 * BX_H);
+var BX_cMoon = new Float32Array(324 * BX_H);
+var BX_cDone = new Uint8Array(324 * BX_H);
+var BX_S = new Float32Array(324);
+var BX_HB = new Uint8Array(324 * 64);
+var BX_reg = new Uint8Array(48 * 48 * BX_H);
+
+function BX_mesh() {
+  return { v: new Uint8Array(16 * 8192), nv: 0, i: new Uint32Array(6 * 8192), ni: 0 };
+}
+function BX_ensure(m, addV) {
+  if ((m.nv + addV) * 16 > m.v.length) {
+    const nvv = new Uint8Array(Math.max(m.v.length * 2, (m.nv + addV) * 16)); nvv.set(m.v); m.v = nvv;
+  }
+  const addI = (addV >> 2) * 6;
+  if (m.ni + addI > m.i.length) {
+    const ni = new Uint32Array(Math.max(m.i.length * 2, m.ni + addI)); ni.set(m.i); m.i = ni;
+  }
+}
+
+// Is anything opaque between two points (region-local floats)? The end cell, which
+// holds the emitter itself, never blocks.
+function BX_blocked(reg, ax, ay, az, bx, by, bz) {
+  let ix = Math.floor(ax), iy = Math.floor(ay), iz = Math.floor(az);
+  const ex = Math.floor(bx), ey = Math.floor(by), ez = Math.floor(bz);
+  const dx = bx - ax, dy = by - ay, dz = bz - az;
+  const sx = dx > 0 ? 1 : -1, sy = dy > 0 ? 1 : -1, sz = dz > 0 ? 1 : -1;
+  const tDx = dx !== 0 ? Math.abs(1 / dx) : 1e30, tDy = dy !== 0 ? Math.abs(1 / dy) : 1e30, tDz = dz !== 0 ? Math.abs(1 / dz) : 1e30;
+  let tx = dx > 0 ? (ix + 1 - ax) * tDx : (ax - ix) * tDx;
+  let ty = dy > 0 ? (iy + 1 - ay) * tDy : (ay - iy) * tDy;
+  let tz = dz > 0 ? (iz + 1 - az) * tDz : (az - iz) * tDz;
+  for (let n = 0; n < 40; n++) {
+    if (tx < ty) { if (tx < tz) { ix += sx; tx += tDx; } else { iz += sz; tz += tDz; } }
+    else { if (ty < tz) { iy += sy; ty += tDy; } else { iz += sz; tz += tDz; } }
+    if (ix === ex && iy === ey && iz === ez) return false;
+    if (ix < 0 || ix >= 48 || iz < 0 || iz >= 48 || iy < 0 || iy >= BX_H) return false;
+    if (BK_OPAQUE[reg[(ix * 48 + iz) * BX_H + iy]]) return true;
+  }
+  return false;
+}
+
+// One chunk, as a resumable job. `env` supplies getVox(cx, cz) -> the 16x16xH block
+// array of a chunk and getMass(cx, cz) -> its 256 mass heights. The generator yields
+// regularly so the main thread can run it a few milliseconds per frame when no
+// worker is available; in a worker it is simply driven to the end.
+function* BX_bake(cx, cz, env) {
+  const H = BX_H;
+  const reg = BX_reg;
+  const ox = cx * 16, oz = cz * 16;
+
+  // 1. the 3x3 neighbourhood as one array, so face culling, AO and lamp rays can
+  //    read across chunk edges without any lookups
+  for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+    const v = env.getVox(cx + dx, cz + dz);
+    for (let i = 0; i < 16; i++) for (let j = 0; j < 16; j++) {
+      reg.set(v.subarray((i * 16 + j) * H, (i * 16 + j + 1) * H), (((dx + 1) * 16 + i) * 48 + (dz + 1) * 16 + j) * H);
+    }
+  }
+  yield 0;
+  const vox = env.getVox(cx, cz);
+  const gen = env.getGen(cx, cz);
+  const maxY = Math.min(H - 2, gen.maxY + 1);
+
+  // mass height at a world column
+  const massCache = new Map();
+  function mass(x, z) {
+    const mcx = x >> 4, mcz = z >> 4, key = mcx * 65536 + mcz;
+    let m = massCache.get(key);
+    if (!m) { m = env.getMass(mcx, mcz); massCache.set(key, m); }
+    return m[(x & 15) * 16 + (z & 15)];
+  }
+
+  // 2. per-column terms for the chunk and a one-column margin
+  const S = BX_S, HB = BX_HB;
+  const mhx = BX_MOON.hx, mhz = BX_MOON.hz, tanE = BX_MOON.tanE;
+  for (let i = 0; i < 18; i++) for (let j = 0; j < 18; j++) {
+    const x = ox + i - 1, z = oz + j - 1, col = i * 18 + j;
+    // moon shadow ceiling: the highest point of this column that is in shade
+    let best = -1e9;
+    for (let s = 1; s <= BX_SHADOW_STEPS; s += (s < 40 ? 1 : 2)) {
+      const h = mass(Math.floor(x + 0.5 + mhx * s), Math.floor(z + 0.5 + mhz * s)) - s * tanE;
+      if (h > best) best = h;
+    }
+    S[col] = best;
+    // horizon heights
+    for (let d = 0; d < 8; d++) for (let q = 0; q < 8; q++) {
+      HB[col * 64 + d * 8 + q] = mass(Math.floor(x + 0.5 + BX_HDIR[d][0] * BX_HD[q]), Math.floor(z + 0.5 + BX_HDIR[d][1] * BX_HD[q]));
+    }
+  }
+  BX_cDone.fill(0);
+  yield 0;
+
+  // lamps in range, bucketed by 8 so a vertex finds its neighbours without a scan
+  const lampsRaw = WG_emitters(ox - 24, oz - 24, ox + 40, oz + 40);
+  const buckets = new Array(64);
+  for (let i = 0; i < 64; i++) buckets[i] = [];
+  for (let i = 0; i < lampsRaw.length; i++) {
+    const e = lampsRaw[i];
+    const lx = e[0] - ox, lz = e[2] - oz;
+    const bi = (lx + 24) >> 3, bj = (lz + 24) >> 3;
+    if (bi >= 0 && bi < 8 && bj >= 0 && bj < 8) buckets[bi * 8 + bj].push([lx, e[1], lz, e[3], e[4], e[5], e[6], e[7]]);
+  }
+
+  // cell light: ambient sky and moon visibility, memoised per cell
+  const cAmb = BX_cAmb, cMoon = BX_cMoon, cDone = BX_cDone;
+  function cell(x, y, z) {           // chunk-local x,z in [-1,16]
+    const col = (x + 1) * 18 + (z + 1), idx = col * H + y;
+    if (cDone[idx]) return idx;
+    const yc = y + 0.5;
+    let sum = 0;
+    for (let d = 0; d < 8; d++) {
+      let t = 0;
+      for (let q = 0; q < 8; q++) {
+        const tt = (HB[col * 64 + d * 8 + q] - yc) / BX_HD[q];
+        if (tt > t) t = tt;
+      }
+      sum += 1 / (1 + t * t);
+    }
+    // overhead cover: something solid right above kills the sky
+    let cover = 1;
+    const ri = (((x + 16) * 48) + (z + 16)) * H + y;
+    for (let k = 1; k <= 8 && y + k < H; k++) {
+      if (BK_OPAQUE[reg[ri + k]]) { cover = 0.12 + 0.88 * (k - 1) / 8; break; }
+    }
+    cAmb[idx] = (sum / 8) * cover;
+    const sc = S[col];
+    const u = NZ_clamp((yc - (sc - 0.5)) / 2, 0, 1);
+    cMoon[idx] = u * u * (3 - 2 * u) * Math.min(1, cover * 1.6);
+    cDone[idx] = 1;
+    return idx;
+  }
+
+  const op = BX_mesh(), wa = BX_mesh();
+  const aoV = [0, 0, 0, 0], skyV = [0, 0, 0, 0], blR = [0, 0, 0, 0], blG = [0, 0, 0, 0], blB = [0, 0, 0, 0];
+  const R1 = 48 * H, R2 = H;           // region strides for x and z
+
+  // 3. mesh
+  for (let x = 0; x < 16; x++) {
+    for (let z = 0; z < 16; z++) {
+      const base = (x * 16 + z) * H;
+      const rb = (((x + 16) * 48) + (z + 16)) * H;
+      for (let y = 1; y <= maxY; y++) {
+        const b = vox[base + y];
+        if (b === 0) continue;
+        const isWater = (BK_FLAGS[b] & BK_FL_TRANS) !== 0;
+        for (let f = 0; f < 6; f++) {
+          const F = BX_FACE[f], n = F.n;
+          const nb = reg[rb + y + n[1] + n[0] * R1 + n[2] * R2];
+          if (isWater) { if (f !== 2 || nb !== 0) continue; }
+          else if (BK_OPAQUE[nb]) continue;
+          const mesh = isWater ? wa : op;
+          BX_ensure(mesh, 4);
+          const fx = x + n[0], fy = y + n[1], fz = z + n[2];
+          // the four cells of the layer in front of the face that every vertex averages
+          for (let c = 0; c < 4; c++) {
+            const V = F.verts[c];
+            const sx1 = fx + V.e1[0], sy1 = fy + V.e1[1], sz1 = fz + V.e1[2];
+            const sx2 = fx + V.e2[0], sy2 = fy + V.e2[1], sz2 = fz + V.e2[2];
+            const cx3 = sx1 + V.e2[0], cy3 = sy1 + V.e2[1], cz3 = sz1 + V.e2[2];
+            const o0 = BK_OPAQUE[reg[(((fx + 16) * 48) + (fz + 16)) * H + fy]];
+            const o1 = BK_OPAQUE[reg[(((sx1 + 16) * 48) + (sz1 + 16)) * H + sy1]];
+            const o2 = BK_OPAQUE[reg[(((sx2 + 16) * 48) + (sz2 + 16)) * H + sy2]];
+            const o3 = BK_OPAQUE[reg[(((cx3 + 16) * 48) + (cz3 + 16)) * H + cy3]];
+            aoV[c] = (o1 && o2) ? 0 : 3 - (o1 + o2 + o3);
+            // smooth light: average the open cells among the four
+            let a = 0, m = 0, k = 0;
+            if (!o0) { const i0 = cell(fx, fy, fz); a += cAmb[i0]; m += cMoon[i0]; k++; }
+            if (!o1) { const i1 = cell(sx1, sy1, sz1); a += cAmb[i1]; m += cMoon[i1]; k++; }
+            if (!o2) { const i2 = cell(sx2, sy2, sz2); a += cAmb[i2]; m += cMoon[i2]; k++; }
+            if (!o3 && !(o1 && o2)) { const i3 = cell(cx3, cy3, cz3); a += cAmb[i3]; m += cMoon[i3]; k++; }
+            if (k === 0) { const i0 = cell(fx, fy, fz); a = cAmb[i0]; m = cMoon[i0]; k = 1; }
+            a /= k; m /= k;
+            const ndl = n[0] * BX_MOON.x + n[1] * BX_MOON.y + n[2] * BX_MOON.z;
+            let sky = BX_AMB * BX_HEMI[f] * a + BX_MOONK * (ndl > 0 ? ndl : 0) * m;
+            // lamps, ray-marched through the real voxels
+            let lr = 0, lg = 0, lb = 0;
+            if (!isWater) {
+              const px = x + V.p[0], py = y + V.p[1], pz = z + V.p[2];
+              const bi = (Math.floor(px) + 24) >> 3, bj = (Math.floor(pz) + 24) >> 3;
+              // +-2 buckets of 8: the farthest covered point is never closer than 16, so
+              // a lamp of radius 17 is found from anywhere in the chunk. With +-1 it was
+              // only seen from 8-16 blocks, and the light would have been cut differently
+              // in every chunk.
+              for (let ii = bi - 2; ii <= bi + 2; ii++) for (let jj = bj - 2; jj <= bj + 2; jj++) {
+                if (ii < 0 || ii > 7 || jj < 0 || jj > 7) continue;
+                const bk = buckets[ii * 8 + jj];
+                for (let q = 0; q < bk.length; q++) {
+                  const e = bk[q];
+                  const ddx = e[0] - px, ddy = e[1] - py, ddz = e[2] - pz;
+                  const d2 = ddx * ddx + ddy * ddy + ddz * ddz;
+                  const R = e[7];
+                  if (d2 >= R * R) continue;
+                  const d = Math.sqrt(d2) + 1e-4;
+                  const nd = (n[0] * ddx + n[1] * ddy + n[2] * ddz) / d;
+                  if (nd <= 0.02) continue;
+                  const fall = 1 - d / R;
+                  const str = e[6] * fall * fall * nd;
+                  if (str < 0.015) continue;
+                  if (BX_blocked(reg, px + 16 + n[0] * 0.03, py + n[1] * 0.03, pz + 16 + n[2] * 0.03, e[0] + 16, e[1], e[2] + 16)) continue;
+                  lr += e[3] * str; lg += e[4] * str; lb += e[5] * str;
+                }
+              }
+            }
+            const aoF = BX_AOF[aoV[c]];
+            skyV[c] = sky * aoF;
+            const al = 0.55 + 0.45 * aoF;
+            blR[c] = lr * al; blG[c] = lg * al; blB[c] = lb * al;
+          }
+          // write the four vertices
+          const albR = BK_RGB[b * 3], albG = BK_RGB[b * 3 + 1], albB = BK_RGB[b * 3 + 2];
+          const vr = 0.93 + 0.14 * NZ_f(ox + x, y, oz + z);
+          const cr = Math.min(255, albR * vr), cg = Math.min(255, albG * vr), cb = Math.min(255, albB * vr);
+          const em = Math.min(255, Math.round(BK_EMIT[b] / 4 * 255));
+          const fl = BK_FLAGS[b];
+          const v0 = mesh.nv;
+          for (let c = 0; c < 4; c++) {
+            const V = F.verts[c], o = (v0 + c) * 16, d = mesh.v;
+            d[o] = x + V.p[0]; d[o + 1] = y + V.p[1]; d[o + 2] = z + V.p[2]; d[o + 3] = 0;
+            d[o + 4] = b; d[o + 5] = f; d[o + 6] = aoV[c]; d[o + 7] = fl;
+            d[o + 8] = cr; d[o + 9] = cg; d[o + 10] = cb; d[o + 11] = em;
+            d[o + 12] = Math.min(255, skyV[c] * 255);
+            d[o + 13] = Math.min(255, blR[c] * 127.5); d[o + 14] = Math.min(255, blG[c] * 127.5); d[o + 15] = Math.min(255, blB[c] * 127.5);
+          }
+          const I = mesh.i, ni = mesh.ni;
+          // split the quad along the diagonal that hides the AO seam
+          if (aoV[0] + aoV[2] >= aoV[1] + aoV[3]) {
+            I[ni] = v0; I[ni + 1] = v0 + 1; I[ni + 2] = v0 + 2; I[ni + 3] = v0; I[ni + 4] = v0 + 2; I[ni + 5] = v0 + 3;
+          } else {
+            I[ni] = v0 + 1; I[ni + 1] = v0 + 2; I[ni + 2] = v0 + 3; I[ni + 3] = v0 + 1; I[ni + 4] = v0 + 3; I[ni + 5] = v0;
+          }
+          mesh.nv += 4; mesh.ni += 6;
+        }
+      }
+    }
+    if ((x & 3) === 3) yield 0;
+  }
+
+  function pack(m) {
+    const idx = m.nv < 65536 ? new Uint16Array(m.i.subarray(0, m.ni)) : m.i.slice(0, m.ni);
+    return { v: m.v.slice(0, m.nv * 16), i: idx, nv: m.nv, ni: m.ni, wide: m.nv >= 65536 };
+  }
+  // lamps that belong to THIS chunk, in world coordinates, for the main thread
+  const own = [];
+  for (let i = 0; i < lampsRaw.length; i++) {
+    const e = lampsRaw[i];
+    if (e[0] >= ox && e[0] < ox + 16 && e[2] >= oz && e[2] < oz + 16) own.push(e);
+  }
+  return { opaque: pack(op), water: pack(wa), emitters: own, maxY: gen.maxY };
+}
+
+
+// ═══ JOBS ═══
+// ═══════════════════════════════════════════════════════════════════════
+//  JOBS — the chunk cache that feeds the baker. Shared with the worker.
+//
+//  A chunk's mesh depends on its eight neighbours (for face culling, AO and lamp
+//  rays) and on the mass heights of chunks far beyond that (for moon shadows), so
+//  whoever bakes needs those at hand. They are cached here: generated once, kept
+//  while recent, and rebuilt on demand if evicted — generation is deterministic,
+//  so an evicted chunk simply comes back identical.
+// ═══════════════════════════════════════════════════════════════════════
+
+var JB_gen = new Map();
+var JB_mass = new Map();
+var JB_GEN_CAP = 360;
+var JB_MASS_CAP = 6000;
+
+function JB_key(cx, cz) { return (cx + 32768) * 65536 + (cz + 32768); }
+
+function JB_getGen(cx, cz) {
+  const k = JB_key(cx, cz);
+  let g = JB_gen.get(k);
+  if (!g) {
+    g = WG_genChunk(cx, cz);
+    JB_gen.set(k, g);
+    if (JB_gen.size > JB_GEN_CAP) {
+      // Map iterates in insertion order, so the first keys are the oldest
+      let n = JB_gen.size - JB_GEN_CAP;
+      for (const key of JB_gen.keys()) { if (n-- <= 0) break; JB_gen.delete(key); }
+    }
+  }
+  return g;
+}
+
+function JB_getMass(cx, cz) {
+  const k = JB_key(cx, cz);
+  let m = JB_mass.get(k);
+  if (!m) {
+    m = WG_massChunk(cx, cz);
+    JB_mass.set(k, m);
+    if (JB_mass.size > JB_MASS_CAP) {
+      let n = JB_mass.size - JB_MASS_CAP;
+      for (const key of JB_mass.keys()) { if (n-- <= 0) break; JB_mass.delete(key); }
+    }
+  }
+  return m;
+}
+
+var JB_env = {
+  getVox: function (cx, cz) { return JB_getGen(cx, cz).vox; },
+  getGen: JB_getGen,
+  getMass: JB_getMass,
+};
+
+// Bake one chunk to the end and package the result for transfer.
+function JB_bakeNow(cx, cz) {
+  const it = BX_bake(cx, cz, JB_env);
+  let r;
+  do { r = it.next(); } while (!r.done);
+  return JB_package(cx, cz, r.value);
+}
+
+function JB_package(cx, cz, out) {
+  const g = JB_getGen(cx, cz);
+  return {
+    t: 'chunk', cx: cx, cz: cz,
+    opaque: out.opaque, water: out.water, emitters: out.emitters,
+    vox: g.vox.slice(), top: g.top.slice(), maxY: out.maxY,
+  };
+}
+
+function JB_transfers(m) {
+  return [m.opaque.v.buffer, m.opaque.i.buffer, m.water.v.buffer, m.water.i.buffer, m.vox.buffer, m.top.buffer];
+}
+
+
+// ═══ GL ═══
+// ═══════════════════════════════════════════════════════════════════════
+//  GL — small helpers over WebGL2: compile, link, framebuffers.
+// ═══════════════════════════════════════════════════════════════════════
+
+function GL_compile(gl, type, src, label) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    const log = gl.getShaderInfoLog(s);
+    gl.deleteShader(s);
+    throw new Error('shader ' + label + ': ' + log);
+  }
+  return s;
+}
+
+// A linked program with a memoised uniform lookup: prog.u('name') -> location.
+function GL_prog(gl, vs, fs, label) {
+  const p = gl.createProgram();
+  gl.attachShader(p, GL_compile(gl, gl.VERTEX_SHADER, vs, label + '.vs'));
+  gl.attachShader(p, GL_compile(gl, gl.FRAGMENT_SHADER, fs, label + '.fs'));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('link ' + label + ': ' + gl.getProgramInfoLog(p));
+  const cache = {};
+  return {
+    id: p,
+    u: function (n) { let l = cache[n]; if (l === undefined) { l = gl.getUniformLocation(p, n); cache[n] = l; } return l; },
+  };
+}
+
+// A texture usable as a render target. `fmt` is 'f16' (HDR) or 'u8'.
+function GL_tex(gl, w, h, fmt, linear) {
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  if (fmt === 'f16') gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.HALF_FLOAT, null);
+  else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  const f = linear === false ? gl.NEAREST : gl.LINEAR;
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, f);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, f);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return t;
+}
+
+// A framebuffer with a colour texture and, optionally, a depth renderbuffer.
+function GL_fbo(gl, w, h, fmt, depth) {
+  const tex = GL_tex(gl, w, h, fmt);
+  const fb = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  let rb = null;
+  if (depth) {
+    rb = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, rb);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, w, h);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, rb);
+  }
+  const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return { fb: fb, tex: tex, rb: rb, w: w, h: h, ok: ok, fmt: fmt };
+}
+
+function GL_freeFbo(gl, f) {
+  if (!f) return;
+  gl.deleteFramebuffer(f.fb); gl.deleteTexture(f.tex); if (f.rb) gl.deleteRenderbuffer(f.rb);
+}
+
+
+// ═══ SHADERS ═══
+// ═══════════════════════════════════════════════════════════════════════
+//  SHADERS — every GLSL program in the game, as strings.
+//
+//  Lighting arrives pre-baked in the vertices (see bake.js), so the terrain
+//  shader does very little: it multiplies albedo by that light, adds the few
+//  things that have to be per-pixel (voxel bevel, wet sheen, emission, fog) and
+//  writes linear HDR. Everything is tone-mapped and graded afterwards, in
+//  display space, in the composite pass.
+// ═══════════════════════════════════════════════════════════════════════
+
+// Shared by every fragment shader that needs the sky: the sky pass itself, and
+// anything that reflects it (water, wet streets, glass).
+var SH_COMMON = `
+const vec3 VXN[6] = vec3[6](vec3(1.,0.,0.), vec3(-1.,0.,0.), vec3(0.,1.,0.), vec3(0.,-1.,0.), vec3(0.,0.,1.), vec3(0.,0.,-1.));
+float h31(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
+float h21(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+
+uniform vec3 uCam;
+uniform vec3 uMoonDir;
+uniform vec3 uHorizon;
+uniform vec3 uZenith;
+uniform float uTime;
+uniform float uCloudH;
+uniform float uStorm;
+
+// Exponential height fog, integrated along the ray from the camera to p. Fog pools
+// near the street and thins with altitude, so a ray that spends its length in clean
+// air high above the city is barely fogged, while one that runs along a canyon
+// floor is swallowed. Using only the fragment's own height — which this did at
+// first — fogged an aerial view as heavily as a street, and from a rooftop the city
+// vanished. Closed form: od = a e^{-k h0} (1 - e^{-k dy}) / (k dy / dist).
+uniform vec3 uFog;
+uniform float uFogD;      // density at the baseline height
+uniform float uFogK;      // how fast it thins with altitude
+uniform float uFogB;      // a constant floor of haze
+uniform float uFogBase;   // the baseline height (street level)
+uniform float uFarDist;   // where the loaded world ends
+uniform float uFogFar;    // how opaque it is by then
+float fogAmt(vec3 p) {
+  vec3 d = p - uCam;
+  float dist = length(d);
+  float base = uFogD * exp(-uFogK * (uCam.y - uFogBase));
+  float kdy = uFogK * d.y;
+  // a level ray has no altitude change to integrate over
+  float od = abs(kdy) > 1e-3 ? base * (1.0 - exp(-kdy)) * dist / kdy : base * dist;
+  od += uFogB * dist;
+  // Height fog alone leaves the EDGE of the loaded world visible from the air: look
+  // down from a rooftop and the city simply stops, a floating island. This term is
+  // independent of altitude and climbs steeply to nearly opaque at the load
+  // distance, so the world always dissolves before it ends.
+  // measured on the HORIZONTAL distance, because that is what the loader limits: from
+  // 150 blocks up even a street directly below is far away in 3D and would be fogged out
+  od += uFogFar * pow(clamp(length(d.xz) / uFarDist, 0.0, 1.5), 3.0);
+  return 1.0 - exp(-clamp(od, 0.0, 12.0));
+}
+
+vec3 skyColor(vec3 d) {
+  float h = d.y;
+  vec3 col = mix(uHorizon, uZenith, pow(clamp(h, 0.0, 1.0), 0.5));
+  // sodium glow of the city hugging the horizon
+  col += vec3(0.050, 0.028, 0.012) * exp(-abs(h) * 9.0) * 0.8;
+  col = mix(col, uFog, clamp(-h * 5.0, 0.0, 1.0));
+  if (h > 0.0) {                                     // stars
+    vec3 q = d * 90.0, g = floor(q);
+    float s = h31(g);
+    float tw = 0.65 + 0.35 * sin(uTime * 2.0 + s * 40.0);
+    float st = smoothstep(0.9965, 1.0, s) * tw * smoothstep(0.04, 0.3, h);
+    float r = 1.0 - smoothstep(0.0, 0.45, length(fract(q) - 0.5));
+    col += vec3(0.85, 0.9, 1.0) * st * r * 2.5 * (1.0 - uStorm);
+  }
+  float md = dot(d, uMoonDir);                       // the moon: disc, halo, glare
+  col += vec3(1.0, 0.96, 0.88) * smoothstep(0.99962, 0.99985, md) * 7.0;
+  col += vec3(0.55, 0.65, 0.90) * pow(max(md, 0.0), 220.0) * 0.9;
+  col += vec3(0.28, 0.38, 0.62) * pow(max(md, 0.0), 18.0) * 0.35;
+  if (h > 0.02) {                                    // blocky clouds on a plane
+    float t = (uCloudH - uCam.y) / h;
+    vec3 p = uCam + d * t;
+    vec2 uv = p.xz * 0.012 + vec2(uTime * 0.006, uTime * 0.002);
+    float n = 0.55 * h21(floor(uv * 3.0)) + 0.30 * h21(floor(uv * 7.0) + 11.0) + 0.15 * h21(floor(uv * 15.0) + 23.0);
+    float cov = smoothstep(0.57, 0.74, n) * smoothstep(0.03, 0.28, h);
+    float lit = 0.25 + 0.75 * pow(max(dot(normalize(vec3(d.x, 0.0, d.z) + 1e-4), normalize(vec3(uMoonDir.x, 0.0, uMoonDir.z))), 0.0), 3.0);
+    vec3 cc = mix(vec3(0.011, 0.014, 0.020), vec3(0.075, 0.085, 0.108), lit * (0.5 + 0.5 * h21(floor(uv * 7.0) + 3.0)));
+    cc += vec3(0.030, 0.018, 0.009) * (1.0 - h);
+    col = mix(col, cc, cov * 0.80);
+  }
+  return col;
+}
+`;
+
+var SH_SKY_VS = `#version 300 es
+precision highp float;
+out vec2 vNdc;
+void main() {
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  vNdc = p * 2.0 - 1.0;
+  gl_Position = vec4(vNdc, 1.0, 1.0);
+}`;
+
+var SH_SKY_FS = `#version 300 es
+precision highp float;
+precision highp int;
+in vec2 vNdc;
+uniform mat4 uInvVP;
+${SH_COMMON}
+out vec4 oColor;
+void main() {
+  vec4 w = uInvVP * vec4(vNdc, 1.0, 1.0);
+  vec3 d = normalize(w.xyz / w.w - uCam);
+  oColor = vec4(skyColor(d), 1.0);
+}`;
+
+// ── terrain ───────────────────────────────────────────────────────────────
+var SH_TERRAIN_VS = `#version 300 es
+precision highp float;
+precision highp int;
+layout(location = 0) in vec4 aPos;
+layout(location = 1) in uvec4 aIds;     // block, face, ao, flags
+layout(location = 2) in vec4 aCol;      // albedo rgb, emission
+layout(location = 3) in vec4 aLit;      // baked sky, baked lamp rgb
+uniform mat4 uVP;
+uniform vec3 uOrg;
+out vec3 vW;
+out vec4 vCol;
+out vec4 vLit;
+flat out uvec4 vIds;
+void main() {
+  vec3 p = uOrg + aPos.xyz;
+  vW = p; vCol = aCol; vLit = aLit; vIds = aIds;
+  gl_Position = uVP * vec4(p, 1.0);
+}`;
+
+var SH_TERRAIN_FS = `#version 300 es
+precision highp float;
+precision highp int;
+in vec3 vW;
+in vec4 vCol;
+in vec4 vLit;
+flat in uvec4 vIds;
+uniform vec3 uSkyTint;
+uniform float uSkyI;
+uniform float uBlockI;
+uniform float uFlash;
+uniform float uBevel;
+uniform float uWet;
+uniform float uCut;       // the far pass discards everything inside this radius
+${SH_COMMON}
+layout(location = 0) out vec4 oColor;
+
+void main() {
+  if (uCut > 0.0 && dot(vW.xz - uCam.xz, vW.xz - uCam.xz) < uCut * uCut) discard;
+  uint face = vIds.y;
+  uint fl = vIds.w;
+  vec3 N = VXN[face];
+  vec3 albedo = pow(vCol.rgb, vec3(2.2));
+  float emit = vCol.a * 4.0;
+  vec3 V = uCam - vW;
+  float dist = length(V);
+  V /= dist;
+
+  // The voxel bevel: each face darkens a little toward its edges, which is what
+  // makes a wall of cubes read as cubes. It fades with distance, or it turns
+  // into moire on far facades.
+  vec2 uv = face < 2u ? fract(vW.zy) : (face < 4u ? fract(vW.xz) : fract(vW.xy));
+  float e = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
+  float bev = mix(1.0 - 0.30 * uBevel, 1.0, smoothstep(0.0, 0.17, e));
+  bev = mix(bev, 1.0, smoothstep(36.0, 120.0, dist));
+
+  vec3 light = uSkyTint * (vLit.x * uSkyI) + vLit.yzw * (2.0 * uBlockI);
+  vec3 col = albedo * light * bev;
+
+  bool wet = (fl & 1u) != 0u;
+  bool gloss = (fl & 8u) != 0u;
+  if ((wet || gloss) && emit == 0.0) {
+    float ndv = clamp(dot(N, V), 0.0, 1.0);
+    float fr = pow(1.0 - ndv, 5.0);
+    vec3 R = reflect(-V, N);
+    // puddles: wet ground is patchy, and the patches are mirrors
+    float pud = smoothstep(0.35, 0.65, h21(floor(vW.xz * 0.5) + 7.0)) * 0.7 + 0.3;
+    float k = wet ? (N.y > 0.5 ? 1.0 * uWet * pud : 0.15 * uWet) : 0.35;
+    vec3 refl = skyColor(R);
+    col += refl * (0.03 + 0.95 * fr) * k;
+    // lamp light smeared along the view direction on wet ground
+    col += vLit.yzw * (2.0 * uBlockI) * fr * 2.2 * k * albedo.r * 4.0;
+  }
+
+  if (emit > 0.0) {
+    float fk = 1.0;
+    if ((fl & 32u) != 0u) fk = 0.82 + 0.18 * sin(uTime * 26.0 + vW.x * 3.1 + vW.z * 1.7) - step(0.985, h21(vec2(floor(uTime * 9.0), vW.x + vW.z))) * 0.7;
+    if ((fl & 16u) != 0u) fk = 0.78 + 0.22 * sin(uTime * 1.7 + vW.x * 0.9 + vW.z * 1.3 + vW.y * 0.5);
+    col = albedo * emit * fk * mix(1.0, bev, 0.35);
+  }
+
+  col += uFlash * uSkyTint * vLit.x * albedo * 6.0;
+
+  float fog = fogAmt(vW);
+  vec3 fogc = uFog * (1.0 + 0.8 * pow(max(dot(-V, uMoonDir), 0.0), 6.0));
+  col = mix(col, fogc, fog);
+  oColor = vec4(col, 1.0);
+}`;
+
+// ── water ─────────────────────────────────────────────────────────────────
+var SH_WATER_VS = `#version 300 es
+precision highp float;
+precision highp int;
+layout(location = 0) in vec4 aPos;
+layout(location = 3) in vec4 aLit;
+uniform mat4 uVP;
+uniform vec3 uOrg;
+uniform float uTime;
+out vec3 vW;
+out float vSky;
+void main() {
+  vec3 p = uOrg + aPos.xyz;
+  p.y -= 0.14;
+  p.y += 0.05 * sin(p.x * 0.7 + uTime * 1.1) * cos(p.z * 0.6 - uTime * 0.9);
+  vW = p; vSky = aLit.x;
+  gl_Position = uVP * vec4(p, 1.0);
+}`;
+
+var SH_WATER_FS = `#version 300 es
+precision highp float;
+precision highp int;
+in vec3 vW;
+in float vSky;
+uniform float uCut;
+${SH_COMMON}
+layout(location = 0) out vec4 oColor;
+void main() {
+  if (uCut > 0.0 && dot(vW.xz - uCam.xz, vW.xz - uCam.xz) < uCut * uCut) discard;
+  float t = uTime;
+  vec2 g = vec2(cos(vW.x * 0.7 + t * 1.1) * 0.7, cos(vW.z * 0.6 - t * 0.9) * 0.6) * 0.07;
+  g += vec2(cos((vW.x + vW.z) * 1.9 + t * 2.3), cos((vW.x - vW.z) * 1.7 - t * 2.0)) * 0.035;
+  g += vec2(h21(floor(vW.xz * 2.0 + t * 0.5)) - 0.5, h21(floor(vW.xz * 2.0 - t * 0.4) + 5.0) - 0.5) * 0.025;
+  vec3 N = normalize(vec3(-g.x, 1.0, -g.y));
+  vec3 V = uCam - vW;
+  float dist = length(V);
+  V /= dist;
+  float fr = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0);
+  vec3 refl = skyColor(reflect(-V, N));
+  vec3 deep = vec3(0.004, 0.012, 0.020) * (0.4 + vSky);
+  vec3 col = mix(deep, refl, clamp(fr * 0.92 + 0.07, 0.0, 1.0));
+  col = mix(col, uFog, fogAmt(vW));
+  oColor = vec4(col, mix(0.80, 0.97, fr));
+}`;
+
+// ── glow sprites: lamp heads, neon, the bat-signal lamp ───────────────────
+var SH_GLOW_VS = `#version 300 es
+precision highp float;
+layout(location = 0) in vec2 aCorner;       // -1..1
+layout(location = 1) in vec4 aPosSize;      // xyz, radius
+layout(location = 2) in vec4 aColI;         // rgb, intensity
+uniform mat4 uVP;
+uniform vec3 uRight;
+uniform vec3 uUp;
+out vec2 vC;
+out vec4 vColI;
+out vec3 vWp;
+void main() {
+  vC = aCorner; vColI = aColI; vWp = aPosSize.xyz;
+  vec3 p = aPosSize.xyz + (uRight * aCorner.x + uUp * aCorner.y) * aPosSize.w;
+  gl_Position = uVP * vec4(p, 1.0);
+}`;
+
+var SH_GLOW_FS = `#version 300 es
+precision highp float;
+in vec2 vC;
+in vec4 vColI;
+in vec3 vWp;
+${SH_COMMON}
+layout(location = 0) out vec4 oColor;
+void main() {
+  float r2 = dot(vC, vC);
+  if (r2 > 1.0) discard;
+  float core = exp(-r2 * 14.0);
+  float halo = exp(-r2 * 3.2) * 0.35;
+  oColor = vec4(vColI.rgb * (core * 3.0 + halo) * vColI.a * (1.0 - 0.85 * fogAmt(vWp)), 1.0);
+}`;
+
+// ── rain: a volume of streaks around the camera, animated entirely on the GPU ─
+var SH_RAIN_VS = `#version 300 es
+precision highp float;
+layout(location = 0) in vec2 aCorner;       // x: -1..1 across, y: 0..1 along
+uniform mat4 uVP;
+uniform vec3 uCam;
+uniform float uTime;
+uniform float uCount;
+uniform float uWind;
+out float vA;
+float hh(float n) { return fract(sin(n * 127.1) * 43758.5453); }
+void main() {
+  float id = float(gl_InstanceID);
+  float W = 70.0, Hh = 46.0;
+  vec3 base = vec3(hh(id) * W, hh(id + 11.3) * Hh, hh(id + 27.7) * W);
+  float speed = 26.0 + hh(id + 3.1) * 10.0;
+  vec3 p;
+  p.y = Hh - mod(base.y + uTime * speed, Hh);
+  float slant = uWind * (0.25 + hh(id + 5.5) * 0.15);
+  p.x = base.x + (Hh - p.y) * slant;
+  p.z = base.z;
+  // wrap into a box centred on the camera
+  p.x = uCam.x + mod(p.x - uCam.x + W * 0.5, W) - W * 0.5;
+  p.z = uCam.z + mod(p.z - uCam.z + W * 0.5, W) - W * 0.5;
+  p.y += uCam.y - 14.0;
+  float len = 1.1 + hh(id + 8.8) * 0.9;
+  vec3 dir = normalize(vec3(slant, 1.0, 0.0)) * len;
+  vec3 toCam = normalize(uCam - p);
+  float dc = length(p - uCam);
+  vec3 side = normalize(cross(dir, toCam)) * (0.012 + dc * 0.0011);
+  vec3 pos = p + dir * aCorner.y + side * aCorner.x;
+  // a streak a metre from the lens is as long as the screen and reads as a scratch:
+  // fade it in over the first few metres, and out again at the far edge of the box
+  float fade = smoothstep(2.5, 11.0, dc) * (1.0 - smoothstep(24.0, 58.0, dc));
+  vA = (1.0 - aCorner.y * 0.85) * (0.35 + hh(id + 1.9) * 0.65) * fade;
+  gl_Position = uVP * vec4(pos, 1.0);
+}`;
+
+var SH_RAIN_FS = `#version 300 es
+precision highp float;
+in float vA;
+uniform float uAlpha;
+layout(location = 0) out vec4 oColor;
+void main() { oColor = vec4(vec3(0.52, 0.62, 0.80) * vA * uAlpha * 0.55, 1.0); }`;
+
+// ── a light beam: the bat-signal ──────────────────────────────────────────
+var SH_BEAM_VS = `#version 300 es
+precision highp float;
+layout(location = 0) in vec2 aCorner;       // x: -1..1 across, y: 0..1 along
+uniform mat4 uVP;
+uniform vec3 uCam;
+uniform vec3 uP0;
+uniform vec3 uP1;
+uniform vec2 uWidth;                        // radius at base, at tip
+out vec2 vUV;
+void main() {
+  vec3 axis = uP1 - uP0;
+  vec3 p = uP0 + axis * aCorner.y;
+  vec3 toCam = normalize(uCam - p);
+  vec3 side = normalize(cross(axis, toCam));
+  float w = mix(uWidth.x, uWidth.y, aCorner.y);
+  vUV = aCorner;
+  gl_Position = uVP * vec4(p + side * aCorner.x * w, 1.0);
+}`;
+
+var SH_BEAM_FS = `#version 300 es
+precision highp float;
+in vec2 vUV;
+uniform float uTime;
+uniform float uPulse;
+layout(location = 0) out vec4 oColor;
+void main() {
+  float across = 1.0 - abs(vUV.x);
+  float edge = pow(across, 1.6);
+  float along = pow(1.0 - vUV.y, 0.8) * smoothstep(0.0, 0.03, vUV.y);
+  float a = edge * along * uPulse;
+  oColor = vec4(vec3(1.0, 0.93, 0.62) * a * 0.55, 1.0);
+}`;
+
+// ── entities: voxel models with their own light ───────────────────────────
+var SH_ENT_VS = `#version 300 es
+precision highp float;
+precision highp int;
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec4 aCol;          // rgb, emission
+layout(location = 2) in vec4 aNrm;          // face id, ao, 0, 0 (unnormalised bytes)
+uniform mat4 uVP;
+uniform mat4 uModel;
+out vec3 vW;
+out vec4 vCol;
+out vec3 vN;
+void main() {
+  vec4 w = uModel * vec4(aPos, 1.0);
+  vW = w.xyz; vCol = aCol;
+  int f = int(aNrm.x + 0.5);
+  vec3 n = f == 0 ? vec3(1.,0.,0.) : f == 1 ? vec3(-1.,0.,0.) : f == 2 ? vec3(0.,1.,0.) : f == 3 ? vec3(0.,-1.,0.) : f == 4 ? vec3(0.,0.,1.) : vec3(0.,0.,-1.);
+  vN = normalize(mat3(uModel) * n);
+  vCol.rgb *= 0.55 + 0.45 * (aNrm.y / 3.0);
+  gl_Position = uVP * w;
+}`;
+
+var SH_ENT_FS = `#version 300 es
+precision highp float;
+precision highp int;
+in vec3 vW;
+in vec4 vCol;
+in vec3 vN;
+uniform vec3 uSkyTint;
+uniform float uSkyI;
+uniform float uBlockI;
+uniform vec3 uELight;                       // x: ambient sky, y: moonlit, z: unused
+uniform vec3 uEBlock;                       // lamp light on this entity
+uniform vec4 uFlash;                        // rgb tint, amount
+uniform float uEmitMul;
+uniform vec3 uRim;
+${SH_COMMON}
+layout(location = 0) out vec4 oColor;
+void main() {
+  vec3 N = normalize(vN);
+  vec3 albedo = pow(vCol.rgb, vec3(2.2));
+  float emit = vCol.a * 4.0 * uEmitMul;
+  vec3 V = uCam - vW;
+  float dist = length(V);
+  V /= dist;
+  float hemi = 0.55 + 0.45 * N.y;
+  float moon = max(dot(N, uMoonDir), 0.0);
+  vec3 light = uSkyTint * uSkyI * (0.36 * uELight.x * hemi + 0.62 * uELight.y * moon) + uEBlock * (2.0 * uBlockI) * (0.45 + 0.55 * max(N.y * 0.5 + 0.5, 0.0));
+  vec3 col = albedo * light;
+  // a cold rim: it is what keeps a dark character readable against a dark city
+  float rim = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.0);
+  col += uRim * rim * (0.35 + 0.65 * uELight.y) * 0.55;
+  if (emit > 0.0) col = albedo * emit;
+  col = mix(col, uFlash.rgb * 2.0, uFlash.a);
+  col = mix(col, uFog, fogAmt(vW));
+  oColor = vec4(col, 1.0);
+}`;
+
+// ── post-processing ───────────────────────────────────────────────────────
+var SH_FS_VS = `#version 300 es
+precision highp float;
+out vec2 vUV;
+void main() {
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  vUV = p;
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}`;
+
+// Bright pass, with a soft knee so bloom fades in instead of switching on.
+var SH_BRIGHT_FS = `#version 300 es
+precision highp float;
+in vec2 vUV;
+uniform sampler2D uTex;
+uniform float uThr;
+uniform float uKnee;
+layout(location = 0) out vec4 oColor;
+void main() {
+  vec3 c = texture(uTex, vUV).rgb;
+  float l = max(c.r, max(c.g, c.b));
+  float k = clamp(l - uThr + uKnee, 0.0, 2.0 * uKnee);
+  k = k * k / (4.0 * uKnee + 1e-4);
+  float w = max(k, l - uThr) / max(l, 1e-4);
+  oColor = vec4(min(c * w, vec3(24.0)), 1.0);
+}`;
+
+var SH_DOWN_FS = `#version 300 es
+precision highp float;
+in vec2 vUV;
+uniform sampler2D uTex;
+uniform vec2 uTexel;
+layout(location = 0) out vec4 oColor;
+void main() {
+  vec3 c = texture(uTex, vUV).rgb * 4.0;
+  c += texture(uTex, vUV + uTexel * vec2(-1.0, -1.0)).rgb;
+  c += texture(uTex, vUV + uTexel * vec2( 1.0, -1.0)).rgb;
+  c += texture(uTex, vUV + uTexel * vec2(-1.0,  1.0)).rgb;
+  c += texture(uTex, vUV + uTexel * vec2( 1.0,  1.0)).rgb;
+  oColor = vec4(c / 8.0, 1.0);
+}`;
+
+var SH_UP_FS = `#version 300 es
+precision highp float;
+in vec2 vUV;
+uniform sampler2D uTex;
+uniform vec2 uTexel;
+uniform float uMix;
+layout(location = 0) out vec4 oColor;
+void main() {
+  vec3 c = texture(uTex, vUV + uTexel * vec2(-1.0, 0.0)).rgb;
+  c += texture(uTex, vUV + uTexel * vec2(1.0, 0.0)).rgb;
+  c += texture(uTex, vUV + uTexel * vec2(0.0, -1.0)).rgb;
+  c += texture(uTex, vUV + uTexel * vec2(0.0, 1.0)).rgb;
+  c += texture(uTex, vUV + uTexel * vec2(-1.0, -1.0)).rgb * 0.5;
+  c += texture(uTex, vUV + uTexel * vec2(1.0, -1.0)).rgb * 0.5;
+  c += texture(uTex, vUV + uTexel * vec2(-1.0, 1.0)).rgb * 0.5;
+  c += texture(uTex, vUV + uTexel * vec2(1.0, 1.0)).rgb * 0.5;
+  oColor = vec4(c / 6.0 * uMix, 1.0);
+}`;
+
+// Composite: scene + bloom, exposure, tone map, THEN the grade, in display space.
+// Grading before the gamma encode is how the 2D game's contrast control ended up
+// crushing everything under 51/255 to black: its pivot of 0.5 means mid-grey on a
+// screen, but ~0.18 in linear light.
+var SH_COMP_FS = `#version 300 es
+precision highp float;
+in vec2 vUV;
+uniform sampler2D uScene;
+uniform sampler2D uBloom;
+uniform float uExposure;
+uniform float uBloomAmt;
+uniform float uVig;
+uniform float uSat;
+uniform float uContrast;
+uniform vec3 uLift;
+uniform vec3 uGain;
+uniform float uFade;
+uniform vec4 uHurt;
+layout(location = 0) out vec4 oColor;
+
+vec3 aces(vec3 x) {
+  const float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14;
+  return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+void main() {
+  vec3 c = texture(uScene, vUV).rgb + texture(uBloom, vUV).rgb * uBloomAmt;
+  c *= uExposure;
+  c = aces(c);
+  c = pow(c, vec3(1.0 / 2.2));
+  c = c * uGain + uLift;
+  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  c = mix(vec3(l), c, uSat);
+  c = clamp((c - 0.5) * uContrast + 0.5, 0.0, 1.0);
+  vec2 q = vUV * 2.0 - 1.0;
+  float v = 1.0 - dot(q * vec2(0.92, 1.0), q * vec2(0.92, 1.0)) * uVig;
+  c *= clamp(v, 0.0, 1.0);
+  c = mix(c, uHurt.rgb, uHurt.a * smoothstep(0.35, 1.45, length(q)));
+  c *= uFade;
+  oColor = vec4(c, 1.0);
+}`;
+
+// FXAA (lite) on the display-space image, plus film grain and an ordered dither,
+// without which a dark gradient bands hard at 8 bits.
+var SH_FXAA_FS = `#version 300 es
+precision highp float;
+in vec2 vUV;
+uniform sampler2D uTex;
+uniform vec2 uTexel;
+uniform float uGrain;
+uniform float uTime;
+layout(location = 0) out vec4 oColor;
+float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+void main() {
+  vec3 m = texture(uTex, vUV).rgb;
+  float lM = luma(m);
+  float lN = luma(texture(uTex, vUV + uTexel * vec2(0.0, -1.0)).rgb);
+  float lS = luma(texture(uTex, vUV + uTexel * vec2(0.0, 1.0)).rgb);
+  float lW = luma(texture(uTex, vUV + uTexel * vec2(-1.0, 0.0)).rgb);
+  float lE = luma(texture(uTex, vUV + uTexel * vec2(1.0, 0.0)).rgb);
+  float lo = min(lM, min(min(lN, lS), min(lW, lE)));
+  float hi = max(lM, max(max(lN, lS), max(lW, lE)));
+  vec3 col = m;
+  if (hi - lo > max(0.045, hi * 0.12)) {
+    vec2 dir = vec2(-((lN + lE) - (lS + lW)), (lW + lN) - (lE + lS));
+    float red = 1.0 / (min(abs(dir.x), abs(dir.y)) + max((lN + lS + lW + lE) * 0.03, 0.0078));
+    dir = clamp(dir * red, -8.0, 8.0) * uTexel;
+    vec3 a = 0.5 * (texture(uTex, vUV + dir * (1.0 / 3.0 - 0.5)).rgb + texture(uTex, vUV + dir * (2.0 / 3.0 - 0.5)).rgb);
+    vec3 b = a * 0.5 + 0.25 * (texture(uTex, vUV + dir * -0.5).rgb + texture(uTex, vUV + dir * 0.5).rgb);
+    float lb = luma(b);
+    col = (lb < lo || lb > hi) ? a : b;
+  }
+  float n = fract(sin(dot(gl_FragCoord.xy + fract(uTime) * 91.7, vec2(12.9898, 78.233))) * 43758.5453);
+  col += (n - 0.5) * uGrain;
+  col += (fract(sin(dot(gl_FragCoord.xy, vec2(4.1, 7.3))) * 9371.7) - 0.5) / 255.0;
+  oColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+}`;
+
+
+// ═══ WORLD ═══
+// ═══════════════════════════════════════════════════════════════════════
+//  WORLD — the main-thread side of the chunk system.
+//
+//  Decides which chunks should exist around the player, farms the baking out to
+//  workers (or does it itself, a few milliseconds a frame, when workers are not
+//  available), uploads the finished meshes to the GPU a few per frame so a burst
+//  of arrivals never stalls a frame, and answers the questions the game asks of
+//  the terrain: what block is here, what is below me, what does this ray hit.
+//
+//  Chunks that are not loaded count as SOLID. A player who outruns the loader
+//  stops at the edge of the known world instead of falling through the floor of
+//  a place that does not exist yet.
+// ═══════════════════════════════════════════════════════════════════════
+
+class VxWorld {
+  constructor(gl, opts) {
+    opts = opts || {};
+    this.gl = gl;
+    this.radius = opts.radius || 7;
+    this.chunks = new Map();
+    this.pending = new Set();
+    this.need = [];
+    this.centerKey = null;
+    this.dirty = true;
+    this.workers = [];
+    this.mode = 'init';              // init | workers | main
+    this.inflightMax = 2;
+    this.uploadQ = [];
+    this.job = null;                 // main-thread fallback: the chunk being baked
+    this.nextId = 1;
+    this.stats = { baked: 0, ms: 0, drawn: 0, tris: 0, upload: 0 };
+    this.workerFailed = false;
+    this.readyAt = 0;
+  }
+
+  // Try to start a pool of workers from the source text embedded in the page. Any
+  // failure at all (no Worker, a blocked blob URL, a script error) drops back to
+  // baking on the main thread, so the world still loads — just not off-thread.
+  startWorkers(src, n) {
+    if (typeof Worker === 'undefined' || !src) { this.mode = 'main'; return; }
+    try {
+      const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+      let alive = 0;
+      for (let i = 0; i < n; i++) {
+        const w = new Worker(url);
+        const slot = { w: w, busy: 0, ready: false };
+        w.onmessage = e => {
+          const m = e.data;
+          if (m.t === 'ready') { slot.ready = true; alive++; if (this.mode === 'init') this.mode = 'workers'; }
+          else if (m.t === 'chunk') { slot.busy = Math.max(0, slot.busy - 1); this.uploadQ.push(m); this.stats.baked++; this.stats.ms += m.ms || 0; }
+        };
+        w.onerror = () => { this.workerFailed = true; };
+        this.workers.push(slot);
+      }
+      this.readyAt = performance.now();
+      this.mode = 'init';
+    } catch (e) { this.mode = 'main'; this.workerFailed = true; }
+  }
+
+  // Called every frame with the player's position.
+  update(px, pz, budgetMs) {
+    // an init that never produced a ready worker within two seconds is a failed one
+    if (this.mode === 'init' && this.workers.length && (this.workerFailed || performance.now() - this.readyAt > 2500)) {
+      for (const s of this.workers) { try { s.w.terminate(); } catch (e) { } }
+      this.workers = []; this.mode = 'main';
+    }
+    if (this.mode === 'init' && !this.workers.length) this.mode = 'main';
+
+    this.lastX = px; this.lastZ = pz;
+    const pcx = Math.floor(px / 16), pcz = Math.floor(pz / 16);
+    const key = JB_key(pcx, pcz);
+    if (key !== this.centerKey || this.dirty) {
+      this.centerKey = key; this.dirty = false;
+      this.rebuildNeed(pcx, pcz);
+      this.unloadFar(pcx, pcz);
+    }
+    if (this.mode === 'workers') this.dispatch();
+    else if (this.mode === 'main') this.stepMain(budgetMs === undefined ? 5 : budgetMs);
+    this.flushUploads(3);
+  }
+
+  rebuildNeed(pcx, pcz) {
+    const R = this.radius, list = [];
+    for (let dx = -R; dx <= R; dx++) for (let dz = -R; dz <= R; dz++) {
+      const d2 = dx * dx + dz * dz;
+      if (d2 > R * R) continue;
+      const cx = pcx + dx, cz = pcz + dz, k = JB_key(cx, cz);
+      if (this.chunks.has(k) || this.pending.has(k)) continue;
+      list.push({ cx: cx, cz: cz, d2: d2, k: k });
+    }
+    list.sort((a, b) => a.d2 - b.d2);
+    this.need = list;
+  }
+
+  dispatch() {
+    for (const s of this.workers) {
+      if (!s.ready) continue;
+      while (s.busy < this.inflightMax && this.need.length) {
+        const it = this.need.shift();
+        if (this.chunks.has(it.k) || this.pending.has(it.k)) continue;
+        this.pending.add(it.k);
+        s.busy++;
+        s.w.postMessage({ t: 'bake', cx: it.cx, cz: it.cz, id: this.nextId++ });
+      }
+    }
+  }
+
+  // The fallback: run the bake generator for a few milliseconds a frame.
+  stepMain(budgetMs) {
+    const t0 = performance.now();
+    while (performance.now() - t0 < budgetMs) {
+      if (!this.job) {
+        let it = null;
+        while (this.need.length) { const c = this.need.shift(); if (!this.chunks.has(c.k) && !this.pending.has(c.k)) { it = c; break; } }
+        if (!it) return;
+        this.pending.add(it.k);
+        this.job = { cx: it.cx, cz: it.cz, k: it.k, gen: BX_bake(it.cx, it.cz, JB_env), t0: performance.now() };
+      }
+      const r = this.job.gen.next();
+      if (r.done) {
+        const m = JB_package(this.job.cx, this.job.cz, r.value);
+        m.ms = performance.now() - this.job.t0;
+        this.uploadQ.push(m); this.stats.baked++; this.stats.ms += m.ms;
+        this.job = null;
+      }
+    }
+  }
+
+  flushUploads(max) {
+    const gl = this.gl;
+    let n = 0;
+    while (this.uploadQ.length && n < max) {
+      const m = this.uploadQ.shift(), k = JB_key(m.cx, m.cz);
+      this.pending.delete(k);
+      const old = this.chunks.get(k);
+      if (old) this.freeChunk(old);
+      const c = { cx: m.cx, cz: m.cz, key: k, vox: m.vox, top: m.top, maxY: m.maxY, emitters: m.emitters,
+                  o: this.upload(m.opaque), w: this.upload(m.water) };
+      this.chunks.set(k, c);
+      n++; this.stats.upload++;
+    }
+  }
+
+  upload(mesh) {
+    if (!mesh || mesh.ni === 0) return null;
+    const gl = this.gl;
+    const vao = gl.createVertexArray(), vbo = gl.createBuffer(), ibo = gl.createBuffer();
+    gl.bindVertexArray(vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, mesh.v, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 4, gl.UNSIGNED_BYTE, false, 16, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribIPointer(1, 4, gl.UNSIGNED_BYTE, 16, 4);
+    gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 4, gl.UNSIGNED_BYTE, true, 16, 8);
+    gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 4, gl.UNSIGNED_BYTE, true, 16, 12);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.i, gl.STATIC_DRAW);
+    gl.bindVertexArray(null);
+    return { vao: vao, vbo: vbo, ibo: ibo, n: mesh.ni, wide: !!mesh.wide };
+  }
+
+  freeMesh(o) {
+    if (!o) return;
+    const gl = this.gl;
+    gl.deleteVertexArray(o.vao); gl.deleteBuffer(o.vbo); gl.deleteBuffer(o.ibo);
+  }
+  freeChunk(c) { this.freeMesh(c.o); this.freeMesh(c.w); }
+
+  unloadFar(pcx, pcz) {
+    const lim = (this.radius + 2) * (this.radius + 2);
+    for (const [k, c] of this.chunks) {
+      const dx = c.cx - pcx, dz = c.cz - pcz;
+      if (dx * dx + dz * dz > lim) { this.freeChunk(c); this.chunks.delete(k); }
+    }
+  }
+
+  // How many of the chunks the player should have are in place (0..1).
+  loadedFraction() {
+    const R = this.radius; let want = 0, have = 0;
+    const pcx = Math.floor(this.lastX / 16) || 0, pcz = Math.floor(this.lastZ / 16) || 0;
+    for (let dx = -R; dx <= R; dx++) for (let dz = -R; dz <= R; dz++) {
+      if (dx * dx + dz * dz > R * R) continue;
+      want++; if (this.chunks.has(JB_key(pcx + dx, pcz + dz))) have++;
+    }
+    return want ? have / want : 1;
+  }
+
+  // ── queries ─────────────────────────────────────────────────────────────
+  chunkAt(x, z) { return this.chunks.get(JB_key(x >> 4, z >> 4)); }
+
+  // Block id at integer coordinates; -1 when that chunk is not loaded.
+  getBlock(x, y, z) {
+    if (y < 0) return BK.BEDROCK;
+    if (y >= WG_H) return 0;
+    const c = this.chunks.get(JB_key(x >> 4, z >> 4));
+    if (!c) return -1;
+    return c.vox[((x & 15) * 16 + (z & 15)) * WG_H + y];
+  }
+  isSolid(x, y, z) {
+    const b = this.getBlock(x, y, z);
+    return b < 0 ? true : BK_SOLID[b] === 1;
+  }
+
+  // The y of the first free cell above the highest solid voxel at or below `fromY`.
+  groundY(x, z, fromY) {
+    const ix = Math.floor(x), iz = Math.floor(z);
+    for (let y = Math.min(WG_H - 1, Math.floor(fromY)); y >= 0; y--) {
+      if (this.isSolid(ix, y, iz)) return y + 1;
+    }
+    return 0;
+  }
+
+  // A ray through the voxels (Amanatides & Woo). Returns the first solid cell, its
+  // face normal and the distance, or null.
+  raycast(ox, oy, oz, dx, dy, dz, maxDist) {
+    let ix = Math.floor(ox), iy = Math.floor(oy), iz = Math.floor(oz);
+    const sx = dx > 0 ? 1 : -1, sy = dy > 0 ? 1 : -1, sz = dz > 0 ? 1 : -1;
+    const tDx = dx !== 0 ? Math.abs(1 / dx) : 1e30, tDy = dy !== 0 ? Math.abs(1 / dy) : 1e30, tDz = dz !== 0 ? Math.abs(1 / dz) : 1e30;
+    let tx = dx > 0 ? (ix + 1 - ox) * tDx : (ox - ix) * tDx;
+    let ty = dy > 0 ? (iy + 1 - oy) * tDy : (oy - iy) * tDy;
+    let tz = dz > 0 ? (iz + 1 - oz) * tDz : (oz - iz) * tDz;
+    let nx = 0, ny = 0, nz = 0, t = 0;
+    for (let n = 0; n < 400; n++) {
+      if (this.isSolid(ix, iy, iz)) return { x: ix, y: iy, z: iz, nx: nx, ny: ny, nz: nz, t: t };
+      if (tx < ty && tx < tz) { t = tx; if (t > maxDist) return null; ix += sx; tx += tDx; nx = -sx; ny = 0; nz = 0; }
+      else if (ty < tz) { t = ty; if (t > maxDist) return null; iy += sy; ty += tDy; nx = 0; ny = -sy; nz = 0; }
+      else { t = tz; if (t > maxDist) return null; iz += sz; tz += tDz; nx = 0; ny = 0; nz = -sz; }
+    }
+    return null;
+  }
+
+  // ── drawing ─────────────────────────────────────────────────────────────
+  // Draws every loaded chunk that touches the frustum with whichever mesh `which`
+  // names ('o' opaque, 'w' water).
+  draw(prog, planes, camX, camZ, which, maxDist) {
+    const gl = this.gl, org = prog.u('uOrg');
+    const lim = maxDist * maxDist;
+    let drawn = 0, tris = 0;
+    for (const c of this.chunks.values()) {
+      const m = c[which];
+      if (!m) continue;
+      const x0 = c.cx * 16, z0 = c.cz * 16;
+      const dx = x0 + 8 - camX, dz = z0 + 8 - camZ;
+      if (dx * dx + dz * dz > lim) continue;
+      if (!M4_boxVisible(planes, x0, 0, z0, x0 + 16, c.maxY + 2, z0 + 16)) continue;
+      gl.uniform3f(org, x0, 0, z0);
+      gl.bindVertexArray(m.vao);
+      gl.drawElements(gl.TRIANGLES, m.n, m.wide ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+      drawn++; tris += m.n / 3;
+    }
+    gl.bindVertexArray(null);
+    if (which === 'o') { this.stats.drawn = drawn; this.stats.tris = tris; }
+  }
+
+  // Every light source near a point, packed for the glow-sprite pass:
+  // x, y, z, sprite radius, r, g, b, intensity.
+  collectGlow(cx, cy, cz, maxDist, out) {
+    let n = 0;
+    const lim = maxDist * maxDist;
+    for (const c of this.chunks.values()) {
+      const e = c.emitters;
+      for (let i = 0; i < e.length; i++) {
+        const l = e[i];
+        const dx = l[0] - cx, dz = l[2] - cz;
+        if (dx * dx + dz * dz > lim) continue;
+        if (n >= out.length / 8) return n;
+        const o = n * 8;
+        out[o] = l[0]; out[o + 1] = l[1]; out[o + 2] = l[2]; out[o + 3] = 1.7;
+        out[o + 4] = l[3]; out[o + 5] = l[4]; out[o + 6] = l[5]; out[o + 7] = l[6];
+        n++;
+      }
+    }
+    return n;
+  }
+}
+
+
+// ═══ FAR ═══
+// ═══════════════════════════════════════════════════════════════════════
+//  FAR — the distant city, at low resolution.
+//
+//  The detailed chunks stop at about 120 blocks. From street level that is fine:
+//  the fog has long since taken everything. From a rooftop, or gliding, the
+//  horizon is hundreds of blocks away, and without something out there the city
+//  simply ends in a visible edge, a floating island. This builds the rest, as
+//  4x4-block columns taken from the same mass heights the baker uses for shadows,
+//  so it is the SAME city: the towers are where the towers are, as tall as they
+//  are, with rows of lit windows picked by hash.
+//
+//  It costs almost nothing. A chunk's mass is about sixty microseconds and a tile
+//  of sixteen chunks meshes in a couple of milliseconds, so the whole horizon is
+//  built in well under a second without a worker. Tiles are 64 blocks square to
+//  keep the draw-call count down; the shader discards the part of a tile that lies
+//  inside the detailed chunks, so the two never fight.
+// ═══════════════════════════════════════════════════════════════════════
+
+var FR_T = 64;     // tile size in blocks
+var FR_CELL = 4;   // column size in blocks
+var FR_N = FR_T / FR_CELL;       // 16 columns across a tile
+
+class VxFar {
+  constructor(gl, range) {
+    this.gl = gl;
+    this.range = range || 416;
+    this.tiles = new Map();
+    this.need = [];
+    this.centerKey = null;
+    this.stats = { built: 0, ms: 0, drawn: 0 };
+  }
+
+  update(px, pz, budgetMs) {
+    const tx = Math.floor(px / FR_T), tz = Math.floor(pz / FR_T);
+    const key = tx * 100000 + tz;
+    if (key !== this.centerKey) {
+      this.centerKey = key;
+      const R = Math.ceil(this.range / FR_T) + 1, list = [];
+      for (let dx = -R; dx <= R; dx++) for (let dz = -R; dz <= R; dz++) {
+        const d = Math.hypot(dx, dz) * FR_T;
+        if (d > this.range + FR_T) continue;
+        const k = (tx + dx) * 100000 + (tz + dz);
+        if (!this.tiles.has(k)) list.push({ tx: tx + dx, tz: tz + dz, d: d, k: k });
+      }
+      list.sort((a, b) => a.d - b.d);
+      this.need = list;
+      // let go of tiles that have drifted well out of range
+      for (const [k, t] of this.tiles) {
+        if (Math.hypot((t.tx - tx) * FR_T, (t.tz - tz) * FR_T) > this.range + FR_T * 3) { this.free(t); this.tiles.delete(k); }
+      }
+    }
+    const t0 = performance.now();
+    while (this.need.length && performance.now() - t0 < budgetMs) {
+      const n = this.need.shift();
+      if (this.tiles.has(n.k)) continue;
+      this.tiles.set(n.k, this.build(n.tx, n.tz));
+      this.stats.built++;
+    }
+    this.stats.ms += performance.now() - t0;
+  }
+
+  free(t) {
+    const gl = this.gl;
+    for (const m of [t.o, t.w]) if (m) { gl.deleteVertexArray(m.vao); gl.deleteBuffer(m.vbo); gl.deleteBuffer(m.ibo); }
+  }
+
+  done() { return this.need.length === 0; }
+
+  build(tx, tz) {
+    const gl = this.gl;
+    const x0 = tx * FR_T, z0 = tz * FR_T;
+    const cx0 = (x0 >> 4) - 1, cz0 = (z0 >> 4) - 1;
+    // the mass arrays of the sixteen chunks and a ring around them
+    const masses = [];
+    for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) masses.push(JB_getMass(cx0 + i, cz0 + j));
+    const mass = (x, z) => masses[((x >> 4) - cx0) * 6 + ((z >> 4) - cz0)][(x & 15) * 16 + (z & 15)];
+
+    // height and class of every column, with a one-column margin for the side faces
+    const G = FR_N + 2, hgt = new Uint8Array(G * G), cls = new Array(G * G);
+    const o = { kind: 0, top: 0, b: null };
+    for (let i = 0; i < G; i++) for (let j = 0; j < G; j++) {
+      const wx = x0 + (i - 1) * FR_CELL, wz = z0 + (j - 1) * FR_CELL;
+      let h = 0;
+      for (let a = 0; a < FR_CELL; a++) for (let b = 0; b < FR_CELL; b++) { const m = mass(wx + a, wz + b); if (m > h) h = m; }
+      hgt[i * G + j] = h;
+      WG_colInfo(wx + 2, wz + 2, o);
+      cls[i * G + j] = { kind: o.kind, b: o.b };
+    }
+
+    const op = BX_mesh(), wa = BX_mesh();
+    const W = WG_K;
+    for (let i = 1; i <= FR_N; i++) for (let j = 1; j <= FR_N; j++) {
+      const c = cls[i * G + j], h = hgt[i * G + j];
+      const bx = (i - 1) * FR_CELL, bz = (j - 1) * FR_CELL;       // tile-local
+      const wx = x0 + bx, wz = z0 + bz;
+      if (c.kind === W.WATER) { FR_water(wa, bx, bz); continue; }
+      let blk = BK.SIDEWALK, wall = BK.CONCRETE_DK, roof = BK.ROOF_TAR;
+      if (c.kind === W.ROAD) blk = BK.ASPHALT;
+      else if (c.kind === W.PARK) blk = BK.GRASS;
+      else if (c.kind === W.BUILDING && c.b) { const st = WG_STY[c.b.st]; wall = st.wall; roof = st.roof; blk = roof; }
+      const rnd = NZ_f(wx, wz, 3);
+      // the top of the column
+      FR_quad(op, 2, bx, h, bz, FR_CELL, 0, FR_CELL, blk, 0.93 + 0.14 * rnd, 0, 0.62);
+      // side faces where the neighbour is lower
+      const nb = [hgt[(i + 1) * G + j], hgt[(i - 1) * G + j], hgt[i * G + j + 1], hgt[i * G + j - 1]];
+      const fc = [0, 1, 4, 5];
+      for (let q = 0; q < 4; q++) {
+        const lo = nb[q];
+        if (lo >= h) continue;
+        const f = fc[q];
+        const sky = 0.08 + 0.28 * Math.max(0, (f === 0 ? 0.43 : f === 1 ? -0.43 : f === 4 ? 0.60 : -0.60));
+        // water or ground below: stop at the waterline or the street
+        const base = Math.max(lo, c.kind === W.BUILDING ? WG_GY + 2 : 0);
+        FR_side(op, f, bx, bz, base, h, wall, sky, wx, wz, c.kind === W.BUILDING);
+      }
+    }
+    return { tx: tx, tz: tz, o: FR_upload(gl, op), w: FR_upload(gl, wa) };
+  }
+
+  draw(prog, planes, camX, camZ, which, maxDist) {
+    const gl = this.gl, org = prog.u('uOrg');
+    let drawn = 0;
+    const lim = maxDist + FR_T;
+    for (const t of this.tiles.values()) {
+      const m = t[which];
+      if (!m) continue;
+      const x0 = t.tx * FR_T, z0 = t.tz * FR_T;
+      const dx = x0 + FR_T / 2 - camX, dz = z0 + FR_T / 2 - camZ;
+      if (dx * dx + dz * dz > lim * lim) continue;
+      if (!M4_boxVisible(planes, x0, 0, z0, x0 + FR_T, WG_H, z0 + FR_T)) continue;
+      gl.uniform3f(org, x0, 0, z0);
+      gl.bindVertexArray(m.vao);
+      gl.drawElements(gl.TRIANGLES, m.n, m.wide ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+      drawn++;
+    }
+    gl.bindVertexArray(null);
+    this.stats.drawn = drawn;
+  }
+}
+
+// One face of a box, in the terrain vertex format. For a +y face (f=2) the box is
+// the cell's top plane at height y; w,d are the cell footprint.
+function FR_quad(m, f, x, y, z, w, hh, d, blk, vr, emit, sky) {
+  BX_ensure(m, 4);
+  const F = BX_FACE[f];
+  const x1 = x + w, y1 = y + hh, z1 = z + d;
+  const r = BK_RGB[blk * 3] * vr, g = BK_RGB[blk * 3 + 1] * vr, b = BK_RGB[blk * 3 + 2] * vr;
+  const v0 = m.nv, fl = BK_FLAGS[blk];
+  const s = Math.min(255, sky * 255), em = Math.min(255, Math.round(emit / 4 * 255));
+  for (let c = 0; c < 4; c++) {
+    const p = F.verts[c].p, o = (v0 + c) * 16, dd = m.v;
+    dd[o] = p[0] ? x1 : x; dd[o + 1] = p[1] ? y1 : y; dd[o + 2] = p[2] ? z1 : z; dd[o + 3] = 0;
+    dd[o + 4] = blk; dd[o + 5] = f; dd[o + 6] = 3; dd[o + 7] = fl;
+    dd[o + 8] = Math.min(255, r); dd[o + 9] = Math.min(255, g); dd[o + 10] = Math.min(255, b); dd[o + 11] = em;
+    dd[o + 12] = s; dd[o + 13] = 0; dd[o + 14] = 0; dd[o + 15] = 0;
+  }
+  const I = m.i, ni = m.ni;
+  I[ni] = v0; I[ni + 1] = v0 + 1; I[ni + 2] = v0 + 2; I[ni + 3] = v0; I[ni + 4] = v0 + 2; I[ni + 5] = v0 + 3;
+  m.nv += 4; m.ni += 6;
+}
+
+// A vertical wall of a column, from `y0` to `y1`, in floors: a wall band and a
+// window band, the window picked lit or dark by hash. From far away these read as
+// rows of lit windows, which is the whole look of a skyline at night.
+function FR_side(m, f, bx, bz, y0, y1, wall, sky, wx, wz, windows) {
+  const FH = 6;
+  for (let y = y0; y < y1; ) {
+    const fl = Math.floor((y - WG_BASE) / FH);
+    const rel = (y - WG_BASE) - fl * FH;
+    let h, blk, em = 0;
+    if (windows && y >= WG_BASE + FH) {
+      if (rel < 3) { h = Math.min(3 - rel, y1 - y); blk = wall; }
+      else {
+        h = Math.min(FH - rel, y1 - y);
+        const k = NZ_f(wx * 7 + f, fl, wz * 3 + 5);
+        if (k < 0.34) { blk = k < 0.20 ? BK.WIN_WARM : (k < 0.30 ? BK.WIN_COOL : BK.WIN_WHITE); em = BK_EMIT[blk]; }
+        else blk = BK.GLASS_BLUE;
+      }
+    } else { h = y1 - y; blk = wall; }
+    if (h <= 0) break;
+    // the face lies on the cell boundary facing the lower neighbour
+    let x = bx, z = bz, w = FR_CELL, d = FR_CELL;
+    if (f === 0) { x = bx + FR_CELL; w = 0; }
+    else if (f === 1) { w = 0; }
+    else if (f === 4) { z = bz + FR_CELL; d = 0; }
+    else { d = 0; }
+    FR_quad(m, f, x, y, z, w, h, d, blk, 0.92 + 0.16 * NZ_f(wx + y, wz, f), em, em ? 0 : sky);
+    y += h;
+  }
+}
+
+function FR_water(m, bx, bz) {
+  // a +y quad at the waterline; the water shader lowers it a hair and shades it
+  BX_ensure(m, 4);
+  const F = BX_FACE[2], v0 = m.nv;
+  for (let c = 0; c < 4; c++) {
+    const p = F.verts[c].p, o = (v0 + c) * 16, dd = m.v;
+    dd[o] = bx + (p[0] ? FR_CELL : 0); dd[o + 1] = WG_SEA + 1; dd[o + 2] = bz + (p[2] ? FR_CELL : 0); dd[o + 3] = 0;
+    dd[o + 4] = BK.WATER; dd[o + 5] = 2; dd[o + 6] = 3; dd[o + 7] = 4;
+    dd[o + 8] = 16; dd[o + 9] = 42; dd[o + 10] = 62; dd[o + 11] = 0;
+    dd[o + 12] = 150; dd[o + 13] = 0; dd[o + 14] = 0; dd[o + 15] = 0;
+  }
+  const I = m.i, ni = m.ni;
+  I[ni] = v0; I[ni + 1] = v0 + 1; I[ni + 2] = v0 + 2; I[ni + 3] = v0; I[ni + 4] = v0 + 2; I[ni + 5] = v0 + 3;
+  m.nv += 4; m.ni += 6;
+}
+
+function FR_upload(gl, m) {
+  if (!m.ni) return null;
+  const vao = gl.createVertexArray(), vbo = gl.createBuffer(), ibo = gl.createBuffer();
+  gl.bindVertexArray(vao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+  gl.bufferData(gl.ARRAY_BUFFER, m.v.subarray(0, m.nv * 16), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 4, gl.UNSIGNED_BYTE, false, 16, 0);
+  gl.enableVertexAttribArray(1); gl.vertexAttribIPointer(1, 4, gl.UNSIGNED_BYTE, 16, 4);
+  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 4, gl.UNSIGNED_BYTE, true, 16, 8);
+  gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 4, gl.UNSIGNED_BYTE, true, 16, 12);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+  const wide = m.nv >= 65536;
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, wide ? m.i.subarray(0, m.ni) : new Uint16Array(m.i.subarray(0, m.ni)), gl.STATIC_DRAW);
+  gl.bindVertexArray(null);
+  return { vao: vao, vbo: vbo, ibo: ibo, n: m.ni, wide: wide };
+}
+
+
+// ═══ RENDER ═══
+// ═══════════════════════════════════════════════════════════════════════
+//  RENDER — the camera, the frame, and the post-processing chain.
+//
+//  One frame, in order:  sky -> terrain -> entities -> glow -> water -> rain ->
+//  beam, all into a linear-HDR target at a fraction of the screen resolution;
+//  then bright-pass, a mip chain of blurs, and a composite that tone-maps and
+//  grades in DISPLAY space; then FXAA, grain and dither onto the canvas.
+// ═══════════════════════════════════════════════════════════════════════
+
+class VxCamera {
+  constructor() {
+    this.x = 0; this.y = 60; this.z = 0; this.yaw = 0; this.pitch = 0;
+    this.fov = 1.15; this.near = 0.12; this.far = 420; this.aspect = 16 / 9;
+    this.view = M4_new(); this.proj = M4_new(); this.vp = M4_new(); this.inv = M4_new();
+    this.planes = new Float32Array(24);
+    this.fx = 0; this.fy = 0; this.fz = -1;      // forward
+    this.rx = 1; this.ry = 0; this.rz = 0;       // right
+    this.ux = 0; this.uy = 1; this.uz = 0;       // up
+  }
+  // yaw 0 looks down -z; positive yaw turns right (towards +x)
+  update() {
+    const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch), cy = Math.cos(this.yaw), sy = Math.sin(this.yaw);
+    this.fx = sy * cp; this.fy = sp; this.fz = -cy * cp;
+    this.rx = cy; this.ry = 0; this.rz = sy;
+    this.ux = this.ry * this.fz - this.rz * this.fy; this.uy = this.rz * this.fx - this.rx * this.fz; this.uz = this.rx * this.fy - this.ry * this.fx;
+    // right x forward points down for a right-handed camera, so flip to get up
+    this.ux = -this.ux; this.uy = -this.uy; this.uz = -this.uz;
+    M4_persp(this.proj, this.fov, this.aspect, this.near, this.far);
+    M4_look(this.view, this.x, this.y, this.z, this.x + this.fx, this.y + this.fy, this.z + this.fz, 0, 1, 0);
+    M4_mul(this.vp, this.proj, this.view);
+    M4_inv(this.inv, this.vp);
+    M4_planes(this.planes, this.vp);
+  }
+}
+
+class VxRenderer {
+  constructor(canvas) {
+    const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, depth: false, stencil: false,
+      powerPreference: 'high-performance', preserveDrawingBuffer: false });
+    if (!gl) throw new Error('WebGL2 no está disponible en este navegador');
+    this.gl = gl; this.canvas = canvas;
+    this.hdr = !!(gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float'));
+    gl.getExtension('OES_texture_float_linear');
+
+    this.prog = {
+      sky: GL_prog(gl, SH_SKY_VS, SH_SKY_FS, 'sky'),
+      terrain: GL_prog(gl, SH_TERRAIN_VS, SH_TERRAIN_FS, 'terrain'),
+      water: GL_prog(gl, SH_WATER_VS, SH_WATER_FS, 'water'),
+      glow: GL_prog(gl, SH_GLOW_VS, SH_GLOW_FS, 'glow'),
+      rain: GL_prog(gl, SH_RAIN_VS, SH_RAIN_FS, 'rain'),
+      beam: GL_prog(gl, SH_BEAM_VS, SH_BEAM_FS, 'beam'),
+      ent: GL_prog(gl, SH_ENT_VS, SH_ENT_FS, 'ent'),
+      bright: GL_prog(gl, SH_FS_VS, SH_BRIGHT_FS, 'bright'),
+      down: GL_prog(gl, SH_FS_VS, SH_DOWN_FS, 'down'),
+      up: GL_prog(gl, SH_FS_VS, SH_UP_FS, 'up'),
+      comp: GL_prog(gl, SH_FS_VS, SH_COMP_FS, 'comp'),
+      fxaa: GL_prog(gl, SH_FS_VS, SH_FXAA_FS, 'fxaa'),
+    };
+    this.emptyVao = gl.createVertexArray();
+
+    // unit quads: a centred one for sprites, a strip for streaks and beams
+    this.quadVbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.quadVbo);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    this.stripVbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.stripVbo);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, 0, 1, 0, -1, 1, 1, 1]), gl.STATIC_DRAW);
+
+    this.glowData = new Float32Array(8 * 640);
+    this.glowVbo = gl.createBuffer();
+    this.glowVao = gl.createVertexArray();
+    gl.bindVertexArray(this.glowVao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.quadVbo);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.glowVbo);
+    gl.bufferData(gl.ARRAY_BUFFER, this.glowData.byteLength, gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 32, 0); gl.vertexAttribDivisor(1, 1);
+    gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 32, 16); gl.vertexAttribDivisor(2, 1);
+    gl.bindVertexArray(null);
+
+    this.stripVao = gl.createVertexArray();
+    gl.bindVertexArray(this.stripVao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.stripVbo);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0);
+    gl.bindVertexArray(null);
+
+    this.w = 0; this.h = 0; this.scale = 1;
+    this.scene = null; this.ldr = null; this.bloom = [];
+    this.time = 0;
+    this.farDist = 416;        // where the far city ends (fog is opaque by then)
+    this.nearDist = 118;       // where the detailed chunks end
+    this.rain = true;
+    this.beam = { on: true, p0: [0, 0, 0], p1: [0, 0, 0] };
+    this.P = VxRenderer.defaults();
+  }
+
+  static defaults() {
+    return {
+      skyTint: [0.60, 0.70, 0.90], skyI: 2.1, blockI: 1.0,
+      fog: [0.082, 0.082, 0.092], fogD: 0.020, fogK: 0.045, fogB: 0.0018, fogBase: 22, fogFar: 4.6,
+      horizon: [0.046, 0.058, 0.076], zenith: [0.005, 0.009, 0.019],
+      cloudH: 175, storm: 0, flash: 0,
+      bevel: 1.0, wet: 1.0,
+      exposure: 1.45, bloom: 0.50, bloomThr: 0.95, bloomKnee: 0.55,
+      vig: 0.30, sat: 0.94, contrast: 1.06, lift: [0.003, 0.005, 0.009], gain: [1.0, 1.0, 1.02],
+      grain: 0.016, rainAlpha: 0.85, rainCount: 5600, wind: 0.5, fade: 1,
+      hurt: [0.6, 0.0, 0.0, 0.0],
+    };
+  }
+
+  // w,h are the canvas drawing-buffer size; the scene renders at scale*size.
+  resize(w, h, scale) {
+    const gl = this.gl;
+    if (this.canvas.width !== w || this.canvas.height !== h) { this.canvas.width = w; this.canvas.height = h; }
+    const sw = Math.max(8, Math.round(w * scale)), sh = Math.max(8, Math.round(h * scale));
+    if (this.scene && this.scene.w === sw && this.scene.h === sh && this.w === w && this.h === h) return;
+    GL_freeFbo(gl, this.scene); GL_freeFbo(gl, this.ldr);
+    for (const b of this.bloom) GL_freeFbo(gl, b);
+    this.w = w; this.h = h; this.scale = scale;
+    const fmt = this.hdr ? 'f16' : 'u8';
+    this.scene = GL_fbo(gl, sw, sh, fmt, true);
+    if (!this.scene.ok && this.hdr) { this.hdr = false; GL_freeFbo(gl, this.scene); this.scene = GL_fbo(gl, sw, sh, 'u8', true); }
+    this.ldr = GL_fbo(gl, w, h, 'u8', false);
+    this.bloom = [];
+    let bw = sw >> 1, bh = sh >> 1;
+    for (let i = 0; i < 5; i++) {
+      this.bloom.push(GL_fbo(gl, Math.max(2, bw), Math.max(2, bh), this.hdr ? 'f16' : 'u8', false));
+      bw >>= 1; bh >>= 1;
+    }
+  }
+
+  // Set the uniforms every sky-aware program shares.
+  common(p, cam) {
+    const gl = this.gl, P = this.P;
+    gl.uniform3f(p.u('uCam'), cam.x, cam.y, cam.z);
+    gl.uniform3f(p.u('uMoonDir'), BX_MOON.x, BX_MOON.y, BX_MOON.z);
+    gl.uniform3f(p.u('uHorizon'), P.horizon[0], P.horizon[1], P.horizon[2]);
+    gl.uniform3f(p.u('uZenith'), P.zenith[0], P.zenith[1], P.zenith[2]);
+    gl.uniform1f(p.u('uTime'), this.time);
+    gl.uniform1f(p.u('uCloudH'), P.cloudH);
+    gl.uniform1f(p.u('uStorm'), P.storm);
+    gl.uniform3f(p.u('uFog'), P.fog[0], P.fog[1], P.fog[2]);
+    gl.uniform1f(p.u('uFogD'), P.fogD);
+    gl.uniform1f(p.u('uFogK'), P.fogK);
+    gl.uniform1f(p.u('uFogB'), P.fogB);
+    gl.uniform1f(p.u('uFogBase'), P.fogBase);
+    gl.uniform1f(p.u('uFarDist'), this.farDist);
+    gl.uniform1f(p.u('uFogFar'), P.fogFar);
+  }
+  fogUniforms(p) { }
+
+  fullscreen() { const gl = this.gl; gl.bindVertexArray(this.emptyVao); gl.drawArrays(gl.TRIANGLES, 0, 3); }
+
+  // `extra(r, cam)` draws entities and anything else the game owns, inside the
+  // scene pass, after the terrain and before the transparent things.
+  render(cam, world, far, extra) {
+    const gl = this.gl, P = this.P, S = this.scene;
+    cam.aspect = this.w / this.h;
+    cam.far = this.farDist + 80;
+    cam.update();
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, S.fb);
+    gl.viewport(0, 0, S.w, S.h);
+    gl.disable(gl.BLEND);
+    gl.depthMask(true);
+    gl.enable(gl.DEPTH_TEST);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    // sky
+    gl.disable(gl.DEPTH_TEST); gl.depthMask(false); gl.disable(gl.CULL_FACE);
+    let p = this.prog.sky;
+    gl.useProgram(p.id);
+    gl.uniformMatrix4fv(p.u('uInvVP'), false, cam.inv);
+    this.common(p, cam);
+    this.fullscreen();
+
+    // terrain
+    gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.depthMask(true);
+    gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
+    p = this.prog.terrain;
+    gl.useProgram(p.id);
+    gl.uniformMatrix4fv(p.u('uVP'), false, cam.vp);
+    this.common(p, cam); this.fogUniforms(p);
+    gl.uniform3f(p.u('uSkyTint'), P.skyTint[0], P.skyTint[1], P.skyTint[2]);
+    gl.uniform1f(p.u('uSkyI'), P.skyI);
+    gl.uniform1f(p.u('uBlockI'), P.blockI);
+    gl.uniform1f(p.u('uFlash'), P.flash);
+    gl.uniform1f(p.u('uBevel'), P.bevel);
+    gl.uniform1f(p.u('uWet'), P.wet);
+    // the far city first, minus the part the detailed chunks cover
+    if (far) {
+      gl.uniform1f(p.u('uCut'), this.nearDist - 12);
+      far.draw(p, cam.planes, cam.x, cam.z, 'o', this.farDist);
+    }
+    gl.uniform1f(p.u('uCut'), 0);
+    world.draw(p, cam.planes, cam.x, cam.z, 'o', this.nearDist);
+
+    if (extra) extra(this, cam);
+
+    // lamp and neon glow
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+    gl.depthMask(false); gl.disable(gl.CULL_FACE);
+    const n = world.collectGlow(cam.x, cam.y, cam.z, 150, this.glowData);
+    if (n > 0) {
+      p = this.prog.glow;
+      gl.useProgram(p.id);
+      gl.uniformMatrix4fv(p.u('uVP'), false, cam.vp);
+      gl.uniform3f(p.u('uRight'), cam.rx, cam.ry, cam.rz);
+      gl.uniform3f(p.u('uUp'), cam.ux, cam.uy, cam.uz);
+      this.common(p, cam);
+      gl.bindVertexArray(this.glowVao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.glowVbo);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.glowData, 0, n * 8);
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, n);
+    }
+
+    // water: translucent, so after everything opaque
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    p = this.prog.water;
+    gl.useProgram(p.id);
+    gl.uniformMatrix4fv(p.u('uVP'), false, cam.vp);
+    this.common(p, cam); this.fogUniforms(p);
+    if (far) {
+      gl.uniform1f(p.u('uCut'), this.nearDist - 12);
+      far.draw(p, cam.planes, cam.x, cam.z, 'w', this.farDist);
+    }
+    gl.uniform1f(p.u('uCut'), 0);
+    world.draw(p, cam.planes, cam.x, cam.z, 'w', this.nearDist);
+
+    // the bat-signal beam
+    if (this.beam.on) {
+      gl.blendFunc(gl.ONE, gl.ONE);
+      p = this.prog.beam;
+      gl.useProgram(p.id);
+      gl.uniformMatrix4fv(p.u('uVP'), false, cam.vp);
+      gl.uniform3f(p.u('uCam'), cam.x, cam.y, cam.z);
+      gl.uniform3f(p.u('uP0'), this.beam.p0[0], this.beam.p0[1], this.beam.p0[2]);
+      gl.uniform3f(p.u('uP1'), this.beam.p1[0], this.beam.p1[1], this.beam.p1[2]);
+      gl.uniform2f(p.u('uWidth'), 1.4, 16);
+      gl.uniform1f(p.u('uTime'), this.time);
+      gl.uniform1f(p.u('uPulse'), 0.85 + 0.15 * Math.sin(this.time * 1.7));
+      gl.bindVertexArray(this.stripVao);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
+
+    // rain
+    if (this.rain && P.rainAlpha > 0) {
+      gl.blendFunc(gl.ONE, gl.ONE);
+      p = this.prog.rain;
+      gl.useProgram(p.id);
+      gl.uniformMatrix4fv(p.u('uVP'), false, cam.vp);
+      gl.uniform3f(p.u('uCam'), cam.x, cam.y, cam.z);
+      gl.uniform1f(p.u('uTime'), this.time);
+      gl.uniform1f(p.u('uCount'), P.rainCount);
+      gl.uniform1f(p.u('uWind'), P.wind);
+      gl.uniform1f(p.u('uAlpha'), P.rainAlpha);
+      gl.bindVertexArray(this.stripVao);
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, P.rainCount | 0);
+    }
+    gl.disable(gl.BLEND); gl.depthMask(true); gl.bindVertexArray(null);
+
+    this.post();
+  }
+
+  post() {
+    const gl = this.gl, P = this.P, S = this.scene, B = this.bloom;
+    gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND);
+    const bindTex = (t, unit) => { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t); };
+
+    // bright pass into the first (half-resolution) bloom level
+    let p = this.prog.bright;
+    gl.useProgram(p.id);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, B[0].fb); gl.viewport(0, 0, B[0].w, B[0].h);
+    bindTex(S.tex, 0); gl.uniform1i(p.u('uTex'), 0);
+    gl.uniform1f(p.u('uThr'), P.bloomThr); gl.uniform1f(p.u('uKnee'), P.bloomKnee);
+    this.fullscreen();
+
+    // down the chain
+    p = this.prog.down;
+    gl.useProgram(p.id);
+    for (let i = 1; i < B.length; i++) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, B[i].fb); gl.viewport(0, 0, B[i].w, B[i].h);
+      bindTex(B[i - 1].tex, 0); gl.uniform1i(p.u('uTex'), 0);
+      gl.uniform2f(p.u('uTexel'), 1 / B[i - 1].w, 1 / B[i - 1].h);
+      this.fullscreen();
+    }
+    // back up, adding each level onto the one above it
+    p = this.prog.up;
+    gl.useProgram(p.id);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+    for (let i = B.length - 1; i >= 1; i--) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, B[i - 1].fb); gl.viewport(0, 0, B[i - 1].w, B[i - 1].h);
+      bindTex(B[i].tex, 0); gl.uniform1i(p.u('uTex'), 0);
+      gl.uniform2f(p.u('uTexel'), 1 / B[i].w, 1 / B[i].h);
+      gl.uniform1f(p.u('uMix'), 1.0);
+      this.fullscreen();
+    }
+    gl.disable(gl.BLEND);
+
+    // composite into an 8-bit target at canvas resolution
+    p = this.prog.comp;
+    gl.useProgram(p.id);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.ldr.fb); gl.viewport(0, 0, this.w, this.h);
+    bindTex(S.tex, 0); gl.uniform1i(p.u('uScene'), 0);
+    bindTex(B[0].tex, 1); gl.uniform1i(p.u('uBloom'), 1);
+    gl.uniform1f(p.u('uExposure'), P.exposure); gl.uniform1f(p.u('uBloomAmt'), P.bloom);
+    gl.uniform1f(p.u('uVig'), P.vig); gl.uniform1f(p.u('uSat'), P.sat); gl.uniform1f(p.u('uContrast'), P.contrast);
+    gl.uniform3f(p.u('uLift'), P.lift[0], P.lift[1], P.lift[2]);
+    gl.uniform3f(p.u('uGain'), P.gain[0], P.gain[1], P.gain[2]);
+    gl.uniform1f(p.u('uFade'), P.fade);
+    gl.uniform4f(p.u('uHurt'), P.hurt[0], P.hurt[1], P.hurt[2], P.hurt[3]);
+    this.fullscreen();
+
+    // FXAA + grain onto the screen
+    p = this.prog.fxaa;
+    gl.useProgram(p.id);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, this.w, this.h);
+    bindTex(this.ldr.tex, 0); gl.uniform1i(p.u('uTex'), 0);
+    gl.uniform2f(p.u('uTexel'), 1 / this.w, 1 / this.h);
+    gl.uniform1f(p.u('uGrain'), P.grain);
+    gl.uniform1f(p.u('uTime'), this.time);
+    this.fullscreen();
+    gl.bindVertexArray(null);
+  }
+}
+
+
+// ═══ GAME ═══
+// ═══════════════════════════════════════════════════════════════════════
+//  GAME — boot, the frame loop, and the hooks the test tools use.
+// ═══════════════════════════════════════════════════════════════════════
+
+var VX = {
+  rend: null, world: null, far: null, cam: null,
+  hud: null, hudCtx: null,
+  time: 0, last: 0, frame: 0,
+  quality: 2, scale: 1, radius: 8,
+  booted: false, capture: false,
+};
+
+function VX_size() {
+  const stage = document.getElementById('stage');
+  const r = stage.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.75);
+  return { w: Math.max(64, Math.round(r.width * dpr)), h: Math.max(64, Math.round(r.height * dpr)), cssW: r.width, cssH: r.height, dpr: dpr };
+}
+
+function VX_resize() {
+  const s = VX_size();
+  VX.rend.resize(s.w, s.h, VX.scale);
+  const hud = VX.hud;
+  if (hud.width !== s.w || hud.height !== s.h) { hud.width = s.w; hud.height = s.h; }
+}
+
+function VX_boot() {
+  VX.capture = !!window.__capture;
+  const canvas = document.getElementById('gl');
+  VX.hud = document.getElementById('hud');
+  VX.hudCtx = VX.hud.getContext('2d');
+  try {
+    VX.rend = new VxRenderer(canvas);
+  } catch (e) {
+    document.getElementById('bootmsg').textContent = 'Tu navegador no admite WebGL2, necesario para este juego';
+    document.getElementById('bar').hidden = true;
+    return;
+  }
+  VX.cam = new VxCamera();
+  VX.world = new VxWorld(VX.rend.gl, { radius: VX.radius });
+  VX.far = new VxFar(VX.rend.gl, VX.rend.farDist);
+  VX.rend.nearDist = (VX.radius - 1) * 16 + 6;
+  const nw = Math.max(1, Math.min(3, (navigator.hardwareConcurrency || 2) - 1));
+  VX.world.startWorkers(document.getElementById('vx-worker-src').textContent, nw);
+  VX_resize();
+  window.addEventListener('resize', VX_resize);
+
+  // a placeholder vantage until the real game places the player
+  VX.cam.x = 24; VX.cam.y = 96; VX.cam.z = 40; VX.cam.yaw = 2.52; VX.cam.pitch = -0.12;
+  VX.rend.beam.p0 = [10, 80, -20]; VX.rend.beam.p1 = [60, 330, -110];
+
+  VX.booted = true;
+  if (VX.capture) {
+    // tests render on demand; the world still has to stream, so keep it ticking
+    setInterval(function () { VX.world.update(VX.cam.x, VX.cam.z, 10); VX.far.update(VX.cam.x, VX.cam.z, 6); }, 16);
+  } else {
+    VX.last = performance.now();
+    requestAnimationFrame(VX_loop);
+  }
+}
+
+function VX_update(dt) {
+  VX.time += dt;
+  VX.rend.time = VX.time;
+  VX.world.update(VX.cam.x, VX.cam.z, 5);
+  VX.far.update(VX.cam.x, VX.cam.z, 3);
+  const f = VX.world.loadedFraction();
+  const bar = document.getElementById('barfill');
+  if (bar) bar.style.width = Math.round(f * 100) + '%';
+  const boot = document.getElementById('boot');
+  if (boot && !boot.hidden && f > 0.55) boot.hidden = true;
+}
+
+function VX_draw() { VX.rend.render(VX.cam, VX.world, VX.far, null); }
+
+function VX_loop(ts) {
+  const dt = Math.min(0.1, (ts - VX.last) / 1000);
+  VX.last = ts;
+  VX_update(dt);
+  VX_draw();
+  VX.frame++;
+  requestAnimationFrame(VX_loop);
+}
+
+// ── test hooks ────────────────────────────────────────────────────────────
+window.__vx = {
+  ready: function () { return VX.booted && VX.world.loadedFraction() > 0.985 && VX.world.uploadQ.length === 0 && VX.world.pending.size === 0 && VX.far.done(); },
+  fraction: function () { return VX.world.loadedFraction(); },
+  mode: function () { return VX.world.mode; },
+  stats: function () { return Object.assign({ chunks: VX.world.chunks.size, mode: VX.world.mode, hdr: VX.rend.hdr, farTiles: VX.far.tiles.size, farMs: Math.round(VX.far.stats.ms) }, VX.world.stats); },
+  setCam: function (x, y, z, yaw, pitch) { const c = VX.cam; c.x = x; c.y = y; c.z = z; c.yaw = yaw; c.pitch = pitch; VX.world.dirty = true; },
+  set: function (k, v) { VX.rend.P[k] = v; },
+  setBeam: function (a, b) { VX.rend.beam.p0 = a; VX.rend.beam.p1 = b; },
+  render: function (t) {
+    if (t !== undefined) { VX.time = t; VX.rend.time = t; }
+    const boot = document.getElementById('boot'); if (boot) boot.hidden = true;
+    VX_resize(); VX_draw();
+  },
+  world: function () { return VX.world; },
+  cam: function () { return VX.cam; },
+  rend: function () { return VX.rend; },
+};
+
+VX_boot();
+
+</script>
