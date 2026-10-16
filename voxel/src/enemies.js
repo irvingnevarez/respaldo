@@ -98,7 +98,7 @@ class Enemy {
     this.stT = 0;
     const c = this.center();
     GS.fx.sparks(c[0], c[1] + 0.2, c[2], kind === 3 ? 16 : 9, dx / d, dz / d, true);
-    GS.fx.glow(c[0], c[1] + 0.2, c[2], 3.2, 1, 0.8, 0.45, 2.5, 0.12);
+    GS.fx.glow(c[0], c[1] + 0.2, c[2], 2.6, 1, 0.8, 0.45, 1.5, 0.12);
     GS.combo++; GS.comboT = 3.2; GS.bestCombo = Math.max(GS.bestCombo, GS.combo);
     if (this.hp <= 0) this.die(dx, dz);
     return true;

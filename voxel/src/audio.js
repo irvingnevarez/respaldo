@@ -79,7 +79,7 @@ function AU_build() {
 // ── building blocks ───────────────────────────────────────────────────────
 function AU_tone(type, f0, f1, dur, gain, delay, dest, attack) {
   const c = AU.ctx; if (!c) return;
-  const t = c.currentTime + (delay || 0);
+  const t = c.currentTime + (delay || 0) + (AU.tOff || 0);
   const o = c.createOscillator(), g = c.createGain();
   o.type = type; o.frequency.setValueAtTime(f0, t);
   if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
@@ -91,7 +91,7 @@ function AU_tone(type, f0, f1, dur, gain, delay, dest, attack) {
 }
 function AU_noiseBurst(dur, ftype, f0, f1, q, gain, delay, dest, attack) {
   const c = AU.ctx; if (!c) return;
-  const t = c.currentTime + (delay || 0);
+  const t = c.currentTime + (delay || 0) + (AU.tOff || 0);
   const s = c.createBufferSource(); s.buffer = AU.noise;
   const f = c.createBiquadFilter(); f.type = ftype; f.Q.value = q || 0.8;
   f.frequency.setValueAtTime(f0, t); if (f1 && f1 !== f0) f.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
@@ -108,9 +108,9 @@ function AU_pos(x, z) {
 
 // ── one-shot effects ──────────────────────────────────────────────────────
 function AU_event(k, e) {
-  if (!AU.ctx || AU.ctx.state !== 'running' || AU.muted) return;
+  if (!AU.ctx || (AU.ctx.state !== 'running' && !AU.offline) || AU.muted) return;
   // many events can fire together; the same one more than once in 40 ms is one sound
-  const now = AU.ctx.currentTime;
+  const now = AU.ctx.currentTime + (AU.tOff || 0);
   if (AU.lastEvt[k] && now - AU.lastEvt[k] < 0.04) return;
   AU.lastEvt[k] = now;
   const near = (e && e.x !== undefined) ? AU_pos(e.x, e.z) : 1;

@@ -234,7 +234,7 @@ function PJ_explode(p) {
   }
   GS.fx.burst(p.x, p.y, p.z, 26, [1, 0.6, 0.2], 1.6, 1.3);
   GS.fx.puff(p.x, p.y, p.z, 10, 0.55, 0.22);
-  GS.fx.glow(p.x, p.y + 0.3, p.z, 7, 1.0, 0.55, 0.2, 5.0, 0.35);
+  GS.fx.glow(p.x, p.y + 0.3, p.z, 6, 1.0, 0.55, 0.2, 2.6, 0.35);
   GS.events.push({ t: 'boom', x: p.x, y: p.y, z: p.z });
   if (R > 0) {
     const pl = GS.player;

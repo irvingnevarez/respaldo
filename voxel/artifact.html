@@ -5880,10 +5880,14 @@ function AN_strike(p) {
 
 // Spring chain for the four cape strips. `fwd` is the speed the body moves along its
 // facing, `vy` the vertical speed, `g` the glide blend.
+// A wind blowing at the cape as if the body were moving that fast. Zero in play;
+// the trailer raises it for a hero standing on a rooftop in a gale.
+var AN_WIND = 0;
+
 function AN_capeStep(st, dt, fwd, vy, g) {
   const C = st.cape;
   dt = Math.min(dt, 1 / 30);
-  const run = AN_clamp(fwd * 0.050, -0.2, 0.85);
+  const run = AN_clamp((fwd + AN_WIND) * 0.050, -0.2, 0.85);
   const fall = AN_clamp(-vy * 0.045, -0.35, 1.1);
   const total = 0.10 + run * (1 - g) + fall * (1 - g * 0.6) + g * 0.30;
   let lag = 0;
@@ -6267,7 +6271,7 @@ function PJ_explode(p) {
   }
   GS.fx.burst(p.x, p.y, p.z, 26, [1, 0.6, 0.2], 1.6, 1.3);
   GS.fx.puff(p.x, p.y, p.z, 10, 0.55, 0.22);
-  GS.fx.glow(p.x, p.y + 0.3, p.z, 7, 1.0, 0.55, 0.2, 5.0, 0.35);
+  GS.fx.glow(p.x, p.y + 0.3, p.z, 6, 1.0, 0.55, 0.2, 2.6, 0.35);
   GS.events.push({ t: 'boom', x: p.x, y: p.y, z: p.z });
   if (R > 0) {
     const pl = GS.player;
@@ -6450,7 +6454,7 @@ class Enemy {
     this.stT = 0;
     const c = this.center();
     GS.fx.sparks(c[0], c[1] + 0.2, c[2], kind === 3 ? 16 : 9, dx / d, dz / d, true);
-    GS.fx.glow(c[0], c[1] + 0.2, c[2], 3.2, 1, 0.8, 0.45, 2.5, 0.12);
+    GS.fx.glow(c[0], c[1] + 0.2, c[2], 2.6, 1, 0.8, 0.45, 1.5, 0.12);
     GS.combo++; GS.comboT = 3.2; GS.bestCombo = Math.max(GS.bestCombo, GS.combo);
     if (this.hp <= 0) this.die(dx, dz);
     return true;
@@ -7867,7 +7871,7 @@ class PenguinBoss extends BossBase {
           b.y = BS_FLOOR + 0.01; b.vy = 0;
           GS.waves.push({ x: b.x, y: BS_FLOOR, z: b.z, r: 0.6, speed: 15, maxR: 17, hit: false, c: [0.75, 0.9, 1, 0.8] });
           GS.fx.dust(b.x, b.y, b.z, 26, 2.4); GS.fx.debris(b.x, b.y + 0.3, b.z, 16, [170, 205, 230], 1.4);
-          GS.fx.glow(b.x, b.y + 0.6, b.z, 9, 0.7, 0.9, 1, 4, 0.3);
+          GS.fx.glow(b.x, b.y + 0.6, b.z, 8, 0.7, 0.9, 1, 2.2, 0.3);
           GS.slow = 0.12; pl.shake = Math.max(pl.shake, 0.6);
           GS.events.push({ t: 'slamLand' });
           this.set('dazed');
@@ -8861,7 +8865,7 @@ function AU_build() {
 // ── building blocks ───────────────────────────────────────────────────────
 function AU_tone(type, f0, f1, dur, gain, delay, dest, attack) {
   const c = AU.ctx; if (!c) return;
-  const t = c.currentTime + (delay || 0);
+  const t = c.currentTime + (delay || 0) + (AU.tOff || 0);
   const o = c.createOscillator(), g = c.createGain();
   o.type = type; o.frequency.setValueAtTime(f0, t);
   if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
@@ -8873,7 +8877,7 @@ function AU_tone(type, f0, f1, dur, gain, delay, dest, attack) {
 }
 function AU_noiseBurst(dur, ftype, f0, f1, q, gain, delay, dest, attack) {
   const c = AU.ctx; if (!c) return;
-  const t = c.currentTime + (delay || 0);
+  const t = c.currentTime + (delay || 0) + (AU.tOff || 0);
   const s = c.createBufferSource(); s.buffer = AU.noise;
   const f = c.createBiquadFilter(); f.type = ftype; f.Q.value = q || 0.8;
   f.frequency.setValueAtTime(f0, t); if (f1 && f1 !== f0) f.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
@@ -8890,9 +8894,9 @@ function AU_pos(x, z) {
 
 // ── one-shot effects ──────────────────────────────────────────────────────
 function AU_event(k, e) {
-  if (!AU.ctx || AU.ctx.state !== 'running' || AU.muted) return;
+  if (!AU.ctx || (AU.ctx.state !== 'running' && !AU.offline) || AU.muted) return;
   // many events can fire together; the same one more than once in 40 ms is one sound
-  const now = AU.ctx.currentTime;
+  const now = AU.ctx.currentTime + (AU.tOff || 0);
   if (AU.lastEvt[k] && now - AU.lastEvt[k] < 0.04) return;
   AU.lastEvt[k] = now;
   const near = (e && e.x !== undefined) ? AU_pos(e.x, e.z) : 1;
@@ -9641,7 +9645,7 @@ function VX_extra(r, cam) {
   gl.uniform1f(p.u('uBlockI'), P.blockI);
   gl.enable(gl.DEPTH_TEST); gl.depthMask(true); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
   // a camera squeezed against a wall would fill the screen with the back of his head
-  if (GS.tcam.dist > 1.5 || VX.state !== 'play') PL_draw(r, GS.player);
+  if ((GS.tcam.dist > 1.5 || VX.state !== 'play') && !VX.noPlayer) PL_draw(r, GS.player);
   for (const e of GS.enemies) {
     const dx = e.b.x - cam.x, dz = e.b.z - cam.z;
     if (dx * dx + dz * dz > 170 * 170) continue;
@@ -9670,7 +9674,7 @@ function PL_draw(r, pl) {
   let flash = null;
   if (st.hurt > 0) flash = [1, 0.35, 0.3, st.hurt * 0.6];
   else if (pl.inv > 0 && !pl.dead && ((VX.time * 14) | 0) % 2) flash = [1, 1, 1, 0.22];
-  MD_drawModel(r, M, PL_mA, pl.pose, { sky: pl.light.sky, moon: pl.light.moon, bl: pl.light.bl, flash: flash, rim: [0.16, 0.24, 0.42] });
+  MD_drawModel(r, M, PL_mA, pl.pose, { sky: pl.light.sky, moon: pl.light.moon, bl: pl.light.bl, flash: flash, rim: [0.16, 0.24, 0.42], emit: VX.eyeGlow || 1 });
 }
 
 // The grapple rope, from the right hand to the anchor.

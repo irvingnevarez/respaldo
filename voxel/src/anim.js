@@ -32,10 +32,14 @@ function AN_strike(p) {
 
 // Spring chain for the four cape strips. `fwd` is the speed the body moves along its
 // facing, `vy` the vertical speed, `g` the glide blend.
+// A wind blowing at the cape as if the body were moving that fast. Zero in play;
+// the trailer raises it for a hero standing on a rooftop in a gale.
+var AN_WIND = 0;
+
 function AN_capeStep(st, dt, fwd, vy, g) {
   const C = st.cape;
   dt = Math.min(dt, 1 / 30);
-  const run = AN_clamp(fwd * 0.050, -0.2, 0.85);
+  const run = AN_clamp((fwd + AN_WIND) * 0.050, -0.2, 0.85);
   const fall = AN_clamp(-vy * 0.045, -0.35, 1.1);
   const total = 0.10 + run * (1 - g) + fall * (1 - g * 0.6) + g * 0.30;
   let lag = 0;

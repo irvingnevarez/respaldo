@@ -368,7 +368,7 @@ function VX_extra(r, cam) {
   gl.uniform1f(p.u('uBlockI'), P.blockI);
   gl.enable(gl.DEPTH_TEST); gl.depthMask(true); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
   // a camera squeezed against a wall would fill the screen with the back of his head
-  if (GS.tcam.dist > 1.5 || VX.state !== 'play') PL_draw(r, GS.player);
+  if ((GS.tcam.dist > 1.5 || VX.state !== 'play') && !VX.noPlayer) PL_draw(r, GS.player);
   for (const e of GS.enemies) {
     const dx = e.b.x - cam.x, dz = e.b.z - cam.z;
     if (dx * dx + dz * dz > 170 * 170) continue;
@@ -397,7 +397,7 @@ function PL_draw(r, pl) {
   let flash = null;
   if (st.hurt > 0) flash = [1, 0.35, 0.3, st.hurt * 0.6];
   else if (pl.inv > 0 && !pl.dead && ((VX.time * 14) | 0) % 2) flash = [1, 1, 1, 0.22];
-  MD_drawModel(r, M, PL_mA, pl.pose, { sky: pl.light.sky, moon: pl.light.moon, bl: pl.light.bl, flash: flash, rim: [0.16, 0.24, 0.42] });
+  MD_drawModel(r, M, PL_mA, pl.pose, { sky: pl.light.sky, moon: pl.light.moon, bl: pl.light.bl, flash: flash, rim: [0.16, 0.24, 0.42], emit: VX.eyeGlow || 1 });
 }
 
 // The grapple rope, from the right hand to the anchor.

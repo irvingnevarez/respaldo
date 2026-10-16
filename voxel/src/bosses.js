@@ -319,7 +319,7 @@ class PenguinBoss extends BossBase {
           b.y = BS_FLOOR + 0.01; b.vy = 0;
           GS.waves.push({ x: b.x, y: BS_FLOOR, z: b.z, r: 0.6, speed: 15, maxR: 17, hit: false, c: [0.75, 0.9, 1, 0.8] });
           GS.fx.dust(b.x, b.y, b.z, 26, 2.4); GS.fx.debris(b.x, b.y + 0.3, b.z, 16, [170, 205, 230], 1.4);
-          GS.fx.glow(b.x, b.y + 0.6, b.z, 9, 0.7, 0.9, 1, 4, 0.3);
+          GS.fx.glow(b.x, b.y + 0.6, b.z, 8, 0.7, 0.9, 1, 2.2, 0.3);
           GS.slow = 0.12; pl.shake = Math.max(pl.shake, 0.6);
           GS.events.push({ t: 'slamLand' });
           this.set('dazed');
