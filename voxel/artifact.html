@@ -86,7 +86,7 @@ body{
   body{justify-content:flex-start;justify-content:safe center;padding-block:8px;gap:8px}
 }
 @media (max-width:560px) and (orientation:portrait){
-  #stage{aspect-ratio:4/5;width:100%}
+  #stage{aspect-ratio:9/15;width:100%}
   #stick{width:112px;height:112px}
   .tb{width:56px;height:56px}.tb.big{width:68px;height:68px}
   #acts{grid-template-columns:repeat(2,56px);gap:8px}
@@ -8715,9 +8715,11 @@ function UI_title(ctx, w, h, u, win) {
   } else {
     UI_spacedText(ctx, 'GOTHAM', w / 2, h * 0.40, 92 * u, '#e8c34a', 20 * u, 'center', 700);
     UI_spacedText(ctx, 'MUNDO ABIERTO DE VÓXELES', w / 2, h * 0.40 + 36 * u, 17 * u, '#cfd9e8', 9 * u, 'center', 500);
-    if (t > 0.6 && ((t * 1.6) | 0) % 2 === 0) UI_spacedText(ctx, IN.touch ? 'TOCA LA PANTALLA PARA EMPEZAR' : 'PULSA CUALQUIER TECLA PARA EMPEZAR', w / 2, h * 0.76, 15 * u, '#e8c34a', 6 * u, 'center', 500);
-    UI_spacedText(ctx, 'WASD · RATÓN · ESPACIO PLANEA · E GARFIO', w / 2, h * 0.76 + 30 * u, 11 * u, '#7a8aa2', 4 * u, 'center', 500);
-    if (VX.saved) UI_spacedText(ctx, 'PARTIDA GUARDADA · PULSA B ANTES DE EMPEZAR PARA BORRARLA', w / 2, h * 0.76 + 54 * u, 10 * u, '#6ff08a', 3 * u, 'center', 500);
+    const touchy = IN.touch || VX.coarse;
+    if (t > 0.6 && ((t * 1.6) | 0) % 2 === 0) UI_spacedText(ctx, touchy ? 'TOCA LA PANTALLA PARA EMPEZAR' : 'PULSA CUALQUIER TECLA PARA EMPEZAR', w / 2, h * 0.5, 15 * u, '#e8c34a', 6 * u, 'center', 500);
+    if (!touchy) UI_spacedText(ctx, 'WASD · RATÓN · ESPACIO PLANEA · E GARFIO', w / 2, h * 0.5 + 30 * u, 11 * u, '#7a8aa2', 4 * u, 'center', 500);
+    if (VX.saved && !touchy) UI_spacedText(ctx, 'PARTIDA GUARDADA · PULSA B ANTES DE EMPEZAR PARA BORRARLA', w / 2, h * 0.5 + 54 * u, 10 * u, '#6ff08a', 3 * u, 'center', 500);
+    if (VX.saved && touchy) UI_spacedText(ctx, 'PARTIDA GUARDADA', w / 2, h * 0.5 + 30 * u, 10 * u, '#6ff08a', 3 * u, 'center', 500);
   }
   ctx.globalAlpha = 1;
 }
@@ -9365,7 +9367,8 @@ function VX_buildModels(gl) {
 function VX_boot() {
   VX.capture = !!window.__capture;
   // a first guess from the device; the ladder corrects it from real frame times
-  const coarse = window.matchMedia && window.matchMedia('(pointer:coarse)').matches;
+  const coarse = VX.coarse = !!(window.matchMedia && window.matchMedia('(pointer:coarse)').matches);
+  try { if (document.fonts && document.fonts.load) { document.fonts.load('600 20px Oswald'); document.fonts.load('700 20px Oswald'); document.fonts.load('700 12px "JetBrains Mono"'); } } catch (e) { }
   const cores = navigator.hardwareConcurrency || 4;
   VX.quality = coarse ? 1 : (cores <= 2 ? 1 : (cores <= 4 ? 2 : 3));
   VX.scale = VX_Q[VX.quality].scale; VX.radius = VX_Q[VX.quality].radius;

@@ -365,9 +365,11 @@ function UI_title(ctx, w, h, u, win) {
   } else {
     UI_spacedText(ctx, 'GOTHAM', w / 2, h * 0.40, 92 * u, '#e8c34a', 20 * u, 'center', 700);
     UI_spacedText(ctx, 'MUNDO ABIERTO DE VÓXELES', w / 2, h * 0.40 + 36 * u, 17 * u, '#cfd9e8', 9 * u, 'center', 500);
-    if (t > 0.6 && ((t * 1.6) | 0) % 2 === 0) UI_spacedText(ctx, IN.touch ? 'TOCA LA PANTALLA PARA EMPEZAR' : 'PULSA CUALQUIER TECLA PARA EMPEZAR', w / 2, h * 0.76, 15 * u, '#e8c34a', 6 * u, 'center', 500);
-    UI_spacedText(ctx, 'WASD · RATÓN · ESPACIO PLANEA · E GARFIO', w / 2, h * 0.76 + 30 * u, 11 * u, '#7a8aa2', 4 * u, 'center', 500);
-    if (VX.saved) UI_spacedText(ctx, 'PARTIDA GUARDADA · PULSA B ANTES DE EMPEZAR PARA BORRARLA', w / 2, h * 0.76 + 54 * u, 10 * u, '#6ff08a', 3 * u, 'center', 500);
+    const touchy = IN.touch || VX.coarse;
+    if (t > 0.6 && ((t * 1.6) | 0) % 2 === 0) UI_spacedText(ctx, touchy ? 'TOCA LA PANTALLA PARA EMPEZAR' : 'PULSA CUALQUIER TECLA PARA EMPEZAR', w / 2, h * 0.5, 15 * u, '#e8c34a', 6 * u, 'center', 500);
+    if (!touchy) UI_spacedText(ctx, 'WASD · RATÓN · ESPACIO PLANEA · E GARFIO', w / 2, h * 0.5 + 30 * u, 11 * u, '#7a8aa2', 4 * u, 'center', 500);
+    if (VX.saved && !touchy) UI_spacedText(ctx, 'PARTIDA GUARDADA · PULSA B ANTES DE EMPEZAR PARA BORRARLA', w / 2, h * 0.5 + 54 * u, 10 * u, '#6ff08a', 3 * u, 'center', 500);
+    if (VX.saved && touchy) UI_spacedText(ctx, 'PARTIDA GUARDADA', w / 2, h * 0.5 + 30 * u, 10 * u, '#6ff08a', 3 * u, 'center', 500);
   }
   ctx.globalAlpha = 1;
 }

@@ -94,7 +94,8 @@ function VX_buildModels(gl) {
 function VX_boot() {
   VX.capture = !!window.__capture;
   // a first guess from the device; the ladder corrects it from real frame times
-  const coarse = window.matchMedia && window.matchMedia('(pointer:coarse)').matches;
+  const coarse = VX.coarse = !!(window.matchMedia && window.matchMedia('(pointer:coarse)').matches);
+  try { if (document.fonts && document.fonts.load) { document.fonts.load('600 20px Oswald'); document.fonts.load('700 20px Oswald'); document.fonts.load('700 12px "JetBrains Mono"'); } } catch (e) { }
   const cores = navigator.hardwareConcurrency || 4;
   VX.quality = coarse ? 1 : (cores <= 2 ? 1 : (cores <= 4 ? 2 : 3));
   VX.scale = VX_Q[VX.quality].scale; VX.radius = VX_Q[VX.quality].radius;
