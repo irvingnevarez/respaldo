@@ -3,9 +3,14 @@
 Everything here reads the BUILT `../game.html`, never `src/`. Rebuild first:
 
     node src/build.js          # src/*.js -> game.html + artifact.html
-    node demo/verify.js        # boots, no-WebGL fallback, touch layouts, both boss arenas
+    node demo/verify.js        # boots, no-WebGL fallback, touch layouts, victory/game-over,
+                               # real draw of every state on every level, both boss arenas
 
-`verify.js` exits non-zero on any failure, so it can gate a commit.
+`verify.js` exits non-zero on any failure, so it can gate a commit. Its boss check
+stubs `draw()` (it is a physics crash test), so it cannot see a drawing bug; the
+"dibujado" and "victoria" checks exist because of one: the game froze for good the
+first time anyone finished it, and `frame()` reschedules itself only AFTER `draw()`
+returns, so a single throw there is a dead game, not a console warning.
 
 ## The bot
 
