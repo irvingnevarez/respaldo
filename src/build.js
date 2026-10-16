@@ -96,9 +96,19 @@ console.log('módulos: ' + ORDER.map(n =>
 
 const body = shell + script + '\n' + tail;
 fs.writeFileSync(path.join(ROOT, 'game.html'), body);
-// the artifact form is the same page without the outer html/head wrapper
-fs.writeFileSync(path.join(ROOT, 'artifact.html'),
-  body.replace(/^<!doctype html>.*?<body>\n/is, '').replace(/<\/body><\/html>\s*$/i, ''));
+
+// The artifact form is the same page without the outer html/head wrapper — BUT the
+// head carries the title, the font links and the whole stylesheet, and the artifact
+// host supplies only a bare skeleton (charset, viewport and a small reset). Dropping
+// the head wholesale, which this used to do, published the game with no CSS at all:
+// white page, unstyled buttons, and a tab called "artifact". So the head's own
+// elements travel with the fragment; only what the skeleton already provides is cut.
+const headInner = (shell.match(/<head>([\s\S]*?)<\/head>/i) || [, ''])[1]
+  .replace(/<meta\s+charset[^>]*>\s*/i, '')
+  .replace(/<meta\s+name="viewport"[^>]*>\s*/i, '')
+  .trim();
+const bodyInner = body.replace(/^[\s\S]*?<body[^>]*>\n?/i, '').replace(/<\/body>\s*<\/html>\s*$/i, '');
+fs.writeFileSync(path.join(ROOT, 'artifact.html'), headInner + '\n' + bodyInner);
 
 for (const f of ['game.html', 'artifact.html']) {
   console.log(f.padEnd(14) + (fs.statSync(path.join(ROOT, f)).size / 1024).toFixed(1) + 'KB');
