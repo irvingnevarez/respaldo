@@ -26,7 +26,8 @@
 //  Vertex layout, 16 bytes:
 //    0  x y z code     position inside the chunk (0..16, 0..128); the facade code
 //                      of the column's building (style + window offset), so the
-//                      shader can find the window a glass voxel belongs to
+//                      shader can find the window a glass voxel belongs to, or
+//                      for a billboard voxel its place in the panel (128 + ...)
 //    4  block face moon flags     moon = how much of the moon this vertex sees
 //    8  r g b emit     albedo, and how hard the voxel glows (emit/255*4)
 //   12  sky bR bG bB   sky visibility, and baked lamp light (value/255*2)
@@ -227,10 +228,17 @@ function* BX_bake(cx, cz, env) {
   const op = BX_mesh(), wa = BX_mesh();
   const aoV = [0, 0, 0, 0], skyV = [0, 0, 0, 0], moonV = [0, 0, 0, 0], blR = [0, 0, 0, 0], blG = [0, 0, 0, 0], blB = [0, 0, 0, 0];
   // the facade code of every column: which building style, and where its windows start
-  const fcode = new Uint8Array(256), ci = { kind: 0, top: 0, b: null };
+  // ...and for a column under a billboard, which strip of the panel it is and where the panel starts
+  const fcode = new Uint8Array(256), bbI = new Uint8Array(256).fill(255), bbY = new Uint8Array(256), ci = { kind: 0, top: 0, b: null };
   for (let x = 0; x < 16; x++) for (let z = 0; z < 16; z++) {
     WG_colInfo(ox + x, oz + z, ci);
-    if (ci.kind === WG_K.BUILDING && ci.b) fcode[x * 16 + z] = ((ci.b.st & 15) | ((ci.b.wo & 7) << 4)) + 1;
+    if (ci.kind !== WG_K.BUILDING || !ci.b) continue;
+    fcode[x * 16 + z] = ((ci.b.st & 15) | ((ci.b.wo & 7) << 4)) + 1;
+    const bb = WG_billboard(ci.b);
+    if (bb && (bb.ax ? ox + x : oz + z) === bb.c) {
+      const ia = (bb.ax ? oz + z : ox + x) - bb.a0;
+      if (ia >= 0 && ia < 12) { bbI[x * 16 + z] = ia; bbY[x * 16 + z] = ci.b.base + ci.b.h + 2; }
+    }
   }
   const R1 = 48 * H, R2 = H;           // region strides for x and z
 
@@ -308,7 +316,8 @@ function* BX_bake(cx, cz, env) {
           const albR = BK_RGB[b * 3], albG = BK_RGB[b * 3 + 1], albB = BK_RGB[b * 3 + 2];
           // a glowing voxel keeps its exact colour: a window is one pane, not four tiles
           const vr = BK_EMIT[b] > 0 ? 1 : 0.93 + 0.14 * NZ_f(ox + x, y, oz + z);
-          const fc = (f === 2 || f === 3) ? 0 : fcode[x * 16 + z];
+          let fc = (f === 2 || f === 3) ? 0 : fcode[x * 16 + z];
+          if (b === BK.BILLBOARD && bbI[x * 16 + z] !== 255) fc = 128 + bbI[x * 16 + z] * 6 + Math.max(0, Math.min(5, y - bbY[x * 16 + z]));
           const cr = Math.min(255, albR * vr), cg = Math.min(255, albG * vr), cb = Math.min(255, albB * vr);
           const em = Math.min(255, Math.round(BK_EMIT[b] / 4 * 255));
           const fl = BK_FLAGS[b];

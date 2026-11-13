@@ -113,7 +113,15 @@ class VxFar {
         FR_side(op, f, bx, bz, base, h, wall, wx, wz, c.kind === W.BUILDING);
       }
     }
-    return { tx: tx, tz: tz, o: FR_upload(gl, op), w: FR_upload(gl, wa) };
+    // the tile's street lamps and neon, so the far city can glow in the fog as the near one does
+    const em = WG_emitters(x0, z0, x0 + FR_T, z0 + FR_T), keep = [];
+    for (let i = 0; i < em.length; i++) {
+      const e = em[i];
+      if (e[0] < x0 || e[0] >= x0 + FR_T || e[2] < z0 || e[2] >= z0 + FR_T) continue;
+      if (e[9] === 0) continue;                                     // lights with no glow of their own are not seen from afar
+      keep.push(e);
+    }
+    return { tx: tx, tz: tz, o: FR_upload(gl, op), w: FR_upload(gl, wa), emitters: keep };
   }
 
   draw(prog, planes, camX, camZ, which, maxDist) {

@@ -339,10 +339,13 @@ function WG_facade(b, st, x, y, z, ex) {
   const yy = (y - b.base) - f * st.FH;
   const iu = NZ_mod(u, st.WP);
   const cu = Math.floor(u / st.WP);
-  if (yy === 0) return st.ledge;                      // the floor slab
+  if (yy === 0) {                                     // the floor slab; over an open shop, its sign
+    if (f === 1 && st.store) { const sg = WG_shopSign(b, side, u, st); if (sg) return sg; }
+    return st.ledge;
+  }
   if (iu === 0) return st.pier;                       // the vertical pier between windows
-  // ground floor of shops and offices: tall dark glass instead of small windows
-  if (f === 0 && st.store) return yy <= 3 ? st.win : st.wall;
+  // ground floor of shops and offices: tall glass instead of small windows, lit if the shop is open
+  if (f === 0 && st.store) return yy <= 3 ? (WG_shop(b, side, cu, st) || st.win) : st.wall;
   if (yy < st.wy || yy >= st.wy + st.wr) return st.wall;       // spandrel above/below the window band
   // a window: lit or dark, decided from the building and the window's own address
   if (NZ_f(b.seed + side * 131, f, cu) < st.lit) {
@@ -350,6 +353,67 @@ function WG_facade(b, st, x, y, z, ex) {
     return k < 0.62 ? BK.WIN_WARM : (k < 0.9 ? BK.WIN_COOL : BK.WIN_WHITE);
   }
   return st.win;
+}
+
+// ── shops, signs and billboards ───────────────────────────────────────────
+var WG_SIGNS = [], WG_BLADES = [];
+(function () {
+  for (const c of ['PINK', 'CYAN', 'YELLOW', 'GREEN', 'RED', 'WHITE']) { WG_SIGNS.push(BK['SIGN_' + c]); WG_BLADES.push(BK['BLADE_' + c]); }
+})();
+var WG_SIGN_RGB = [[1.0, 0.22, 0.59], [0.22, 0.86, 1.0], [1.0, 0.82, 0.24], [0.35, 1.0, 0.47], [1.0, 0.19, 0.19], [0.92, 0.94, 1.0]];
+
+// How many window cells one shop takes, so that shops are 8 or 9 blocks wide whatever the style.
+function WG_shopCells(st) { return st.WP <= 2 ? 4 : (st.WP === 3 ? 3 : 2); }
+
+// The shop behind window cell `cu` on one side of a building: 0 when it is shut and
+// dark, else the block its lit glass is made of.
+function WG_shop(b, side, cu, st) {
+  if (!st.store || b.special) return 0;
+  const h = NZ_hash(b.seed + side * 17, Math.floor(cu / WG_shopCells(st)), 77);
+  if ((h & 255) > 122) return 0;
+  const k = (h >>> 8) % 20;
+  return k < 9 ? BK.SHOP_WARM : (k < 15 ? BK.SHOP_COOL : (k < 18 ? BK.SHOP_PINK : BK.SHOP_GREEN));
+}
+
+// The sign band over an open shop: 0, or the block of the band at wall coordinate u.
+function WG_shopSign(b, side, u, st) {
+  const n = WG_shopCells(st) * st.WP, su = Math.floor(u / n);
+  if (!WG_shop(b, side, Math.floor(u / st.WP), st)) return 0;
+  const h = NZ_hash(b.seed + side * 17, su, 79);
+  if ((h & 255) > 175 || u - su * n < 1) return 0;
+  return WG_SIGNS[(h >>> 8) % 6];
+}
+
+// A neon blade standing one voxel out from a side of a building: null, or where along
+// the side it hangs (p), between which heights, and its colour index.
+function WG_blade(b, side) {
+  if (!b.blades) {
+    b.blades = [null, null, null, null];
+    if (WG_STY[b.st].store && !b.special && b.h >= 13) {
+      for (let s = 0; s < 4; s++) {
+        const h = NZ_hash(b.seed, 500 + s, 9), len = s < 2 ? b.z1 - b.z0 : b.x1 - b.x0;
+        if ((h & 255) > 84 || len < 10) continue;
+        b.blades[s] = { p: (s < 2 ? b.z0 : b.x0) + 2 + ((h >>> 8) % (len - 4)), y0: b.base + 6,
+          y1: Math.min(b.base + 11 + ((h >>> 16) % 5), b.base + b.h - 1), k: (h >>> 20) % 6 };
+      }
+    }
+  }
+  return b.blades[side];
+}
+
+// A billboard along one edge of a flat roof, one voxel in from the parapet: null, or
+// its axis (1: it runs along z), the coordinate across, where it starts, and its edge.
+function WG_billboard(b) {
+  if (b.bb === undefined) {
+    b.bb = null;
+    const w = b.x1 - b.x0, d = b.z1 - b.z0, h = NZ_hash(b.seed, 77, 13);
+    if (b.roof === 0 && !b.tiers && !b.special && b.h >= 12 && b.h <= 70 && w >= 17 && d >= 17 && (h & 255) < 56) {
+      const s = (h >>> 8) & 3, ax = s < 2 ? 1 : 0, len = ax ? d : w;
+      b.bb = { ax: ax, s: s, a0: (ax ? b.z0 : b.x0) + 2 + ((h >>> 12) % (len - 15)),
+        c: s === 0 ? b.x0 + 1 : s === 1 ? b.x1 - 2 : s === 2 ? b.z0 + 1 : b.z1 - 2 };
+    }
+  }
+  return b.bb;
 }
 
 // Things standing on a flat roof: tanks, antennas, vents. Deterministic per
@@ -556,6 +620,15 @@ function WG_genChunk(cx, cz) {
             }
           }
         }
+        // a billboard: two legs and a lit panel, twelve wide and six tall
+        const bb = b.roof === 0 ? WG_billboard(b) : null;
+        if (bb && (bb.ax ? x : z) === bb.c && T === b.base + b.h && T + 9 < WG_H) {
+          const ia = (bb.ax ? z : x) - bb.a0;
+          if (ia >= 0 && ia < 12) {
+            if (ia === 1 || ia === 10) { vox[col + T] = BK.STEEL_DK; vox[col + T + 1] = BK.STEEL_DK; }
+            for (let dy = 2; dy < 8; dy++) vox[col + T + dy] = BK.BILLBOARD;
+          }
+        }
         if (b.special === 'gcpd') LM_gcpdColumn(x, z, vox, col, T);
         t = T;
       } else {                                               // plain lot or shore paving
@@ -575,6 +648,18 @@ function WG_genChunk(cx, cz) {
             const cb = WG_carBlock(x, dy, z);
             if (cb) { vox[col + WG_GY + 1 + dy] = cb; t = WG_GY + 2 + dy; }
           }
+        }
+      }
+      // neon blades: a column that touches a building may carry one of its signs
+      if (kd !== WG_K.BUILDING) {
+        for (let q = 0; q < 4; q++) {
+          // q is the side of the neighbouring building that faces this column
+          const nbb = bl[q === 0 ? (i + 2) * 18 + (j + 1) : q === 1 ? i * 18 + (j + 1) : q === 2 ? (i + 1) * 18 + (j + 2) : (i + 1) * 18 + j];
+          if (!nbb) continue;
+          const bd = WG_blade(nbb, q);
+          if (!bd || bd.p !== (q < 2 ? z : x)) continue;
+          for (let y = bd.y0; y < bd.y1; y++) if (!vox[col + y]) vox[col + y] = WG_BLADES[bd.k];
+          if (bd.y1 > t) t = bd.y1;
         }
       }
       // trees and benches in parks
@@ -626,8 +711,14 @@ function WG_genChunk(cx, cz) {
 }
 
 // ── light sources ─────────────────────────────────────────────────────────
-// Every emitter that can matter to the region [x0,x1) x [z0,z1): street lamps,
-// computed from the same rule that places them. [x, y, z, r, g, b, intensity, radius]
+// Every emitter that can matter to the region [x0,x1) x [z0,z1), computed from the
+// same rules that place the things themselves:
+//   [x, y, z, r, g, b, intensity, radius, kind, glow]
+// kind 0 is a hooded street lamp (its glow in the air hangs downward), 1 shines all
+// round; glow is the reach of its halo in the air (0: none, undefined: the default).
+// A record with radius 0 lights nothing and only glows: it marks where a sign IS,
+// while the record that lights the street stands clear of the sign's own voxels.
+// No radius may exceed 17: the baker only looks that far from a vertex.
 function WG_emitters(x0, z0, x1, z1) {
   const out = [];
   const y = WG_GY + 2 + 6 + 0.5;
@@ -654,5 +745,59 @@ function WG_emitters(x0, z0, x1, z1) {
       }
     }
   }
+  WG_signEmitters(x0, z0, x1, z1, out);
+  LM_emitters(x0, z0, x1, z1, out);
   return out;
+}
+
+// Open shops, neon blades and billboards near a region, as light sources.
+function WG_signEmitters(x0, z0, x1, z1, out) {
+  const m = 15;
+  const inR = function (x, z) { return x >= x0 - m && x < x1 + m && z >= z0 - m && z < z1 + m; };
+  for (let bx = Math.floor((x0 - m) / WG_PITCH); bx <= Math.floor((x1 + m) / WG_PITCH); bx++) {
+    for (let bz = Math.floor((z0 - m) / WG_PITCH); bz <= Math.floor((z1 + m) / WG_PITCH); bz++) {
+      const info = WG_blockInfo(bx, bz);
+      for (let i = 0; i < info.bld.length; i++) {
+        const b = info.bld[i], st = WG_STY[b.st];
+        if (b.x1 < x0 - m || b.x0 > x1 + m || b.z1 < z0 - m || b.z0 > z1 + m) continue;
+        for (let s = 0; s < 4; s++) {
+          const a0 = s < 2 ? b.z0 : b.x0, a1 = s < 2 ? b.z1 : b.x1;
+          // the plane of this wall, and the way out of it
+          const wc = s === 0 ? b.x0 : s === 1 ? b.x1 : s === 2 ? b.z0 : b.z1, dir = (s & 1) ? 1 : -1;
+          if (st.store && !b.special) {
+            const nc = WG_shopCells(st), n = nc * st.WP;
+            for (let su = Math.floor((a0 + b.wo) / n); su <= Math.floor((a1 - 1 + b.wo) / n); su++) {
+              const blk = WG_shop(b, s, su * nc, st);
+              if (!blk) continue;
+              const ac = Math.max(a0 + 1.5, Math.min(a1 - 1.5, (su + 0.5) * n - b.wo + 0.5));
+              const px = s < 2 ? wc + dir * 1.6 : ac, pz = s < 2 ? ac : wc + dir * 1.6;
+              if (!inR(px, pz)) continue;
+              const c = blk === BK.SHOP_WARM ? [1.0, 0.72, 0.40] : blk === BK.SHOP_COOL ? [0.55, 0.78, 1.0] : blk === BK.SHOP_PINK ? [1.0, 0.36, 0.66] : [0.40, 1.0, 0.58];
+              out.push([px, b.base + 2.4, pz, c[0], c[1], c[2], 0.55, 9, 1, 0]);
+            }
+          }
+          const bd = WG_blade(b, s);
+          if (bd) {
+            // the light stands clear of the sign so the sign itself cannot shadow it; the glow
+            // in the air belongs on the sign, so it is a second record with no reach
+            const c = WG_SIGN_RGB[bd.k], ym = (bd.y0 + bd.y1) / 2;
+            for (const k of [1.7, 0.5]) {
+              const px = s < 2 ? wc + dir * k : bd.p + 0.5, pz = s < 2 ? bd.p + 0.5 : wc + dir * k;
+              if (inR(px, pz)) out.push([px, ym, pz, c[0], c[1], c[2], 0.85, k > 1 ? 13 : 0, 1, k > 1 ? 0 : 6.5]);
+            }
+          }
+        }
+        const bb = WG_billboard(b);
+        if (bb) {
+          // one light each side of the panel, and its glow in the air on the panel itself
+          const ac = bb.a0 + 6, y = b.base + b.h + 5;
+          for (const k of [2.2, -2.2, 0]) {
+            const cc = bb.c + 0.5 + k;
+            const px = bb.ax ? cc : ac, pz = bb.ax ? ac : cc;
+            if (inR(px, pz)) out.push([px, y, pz, 0.72, 0.80, 1.0, 0.8, k ? 15 : 0, 1, k ? 0 : 9]);
+          }
+        }
+      }
+    }
+  }
 }

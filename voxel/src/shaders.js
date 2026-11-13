@@ -61,7 +61,7 @@ float fogAmt(vec3 p) {
   // Height fog alone leaves the EDGE of the loaded world visible from the air. This
   // term is independent of altitude and climbs steeply to nearly opaque at the load
   // distance, measured horizontally because that is what the loader limits.
-  od += uFogFar * pow(clamp(length(d.xz) / uFarDist, 0.0, 1.5), 3.0);
+  od += uFogFar * pow(clamp(length(d.xz) / uFarDist, 0.0, 1.5), 4.5);
   return 1.0 - exp(-clamp(od, 0.0, 12.0));
 }
 // what the fog looks like along a view direction (camera -> scene)
@@ -112,12 +112,12 @@ vec3 skyColor(vec3 d, float stars) {
   float h = d.y;
   vec3 col = skyGradient(d);
   if (h > 0.0 && stars > 0.0) {
-    vec3 q = d * 110.0, g = floor(q);
+    vec3 q = d * 260.0, g = floor(q);
     float s = h31(g);
     float tw = 0.65 + 0.35 * sin(uTime * 2.0 + s * 40.0);
-    float st = smoothstep(0.9968, 1.0, s) * tw * smoothstep(0.04, 0.3, h);
-    float r = 1.0 - smoothstep(0.0, 0.42, length(fract(q) - 0.5));
-    col += mix(vec3(1.0, 0.86, 0.72), vec3(0.78, 0.88, 1.0), fract(s * 77.0)) * st * r * 3.0 * (1.0 - uStorm) * stars;
+    float st = smoothstep(0.9982, 1.0, s) * tw * smoothstep(0.04, 0.3, h);
+    float r = 1.0 - smoothstep(0.0, 0.40, length(fract(q) - 0.5));
+    col += mix(vec3(1.0, 0.86, 0.72), vec3(0.78, 0.88, 1.0), fract(s * 77.0)) * st * r * 4.0 * (1.0 - uStorm) * stars;
   }
   float md = dot(d, uMoonDir);
   float disc = smoothstep(0.99955, 0.99982, md);
@@ -133,9 +133,13 @@ vec3 skyColor(vec3 d, float stars) {
   float cov = mix(0.50, 0.36, uStorm);
   vec4 hi = cloudDeck(d, uCloudH + 70.0, cov + 0.05, 1.0);
   vec4 lo = cloudDeck(d, uCloudH, cov, 0.0);
-  col = col * (1.0 - hi.a) + hi.rgb;
-  col = col * (1.0 - lo.a) + lo.rgb;
-  return col;
+  // cloud hides what is behind it faster than it shows itself: a thin veil already swallows a star
+  col = col * pow(1.0 - hi.a, 3.0) + hi.rgb;
+  col = col * pow(1.0 - lo.a, 3.0) + lo.rgb;
+  // Low in the sky you look through as much haze as the far city does, so the
+  // horizon takes the colour of the fog and the skyline dissolves into it instead
+  // of standing pale against dark cloud.
+  return mix(col, fogColor(d), exp(-max(h, 0.0) * 6.5) * 0.94);
 }
 vec2 envUV(vec3 d) { return vec2(atan(d.z, d.x) * 0.15915494 + 0.5, d.y * 0.5 + 0.5); }
 `;

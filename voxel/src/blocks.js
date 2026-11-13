@@ -125,6 +125,25 @@ var BK_FLAGS = new Uint8Array(256);
   def('CRANE', 170, 120, 30, 0);
   def('SNOW_ICE', 170, 196, 218, G);
   def('BOLT', 255, 255, 255, 0, 2.0);
+  // what lights a street besides its lamps: shop fronts, sign bands over them,
+  // neon blades standing out from the walls, billboards on the roofs
+  def('SHOP_WARM', 255, 200, 120, 0, 1.3);
+  def('SHOP_COOL', 170, 215, 255, 0, 1.3);
+  def('SHOP_PINK', 255, 120, 190, 0, 1.2);
+  def('SHOP_GREEN', 130, 255, 170, 0, 1.2);
+  def('SIGN_PINK', 255, 56, 150, 0, 2.0);
+  def('SIGN_CYAN', 56, 220, 255, 0, 2.0);
+  def('SIGN_YELLOW', 255, 210, 60, 0, 2.0);
+  def('SIGN_GREEN', 90, 255, 120, 0, 2.0);
+  def('SIGN_RED', 255, 48, 48, 0, 2.0);
+  def('SIGN_WHITE', 235, 240, 255, 0, 2.0);
+  def('BLADE_PINK', 255, 56, 150, 0, 2.0);
+  def('BLADE_CYAN', 56, 220, 255, 0, 2.0);
+  def('BLADE_YELLOW', 255, 210, 60, 0, 2.0);
+  def('BLADE_GREEN', 90, 255, 120, 0, 2.0);
+  def('BLADE_RED', 255, 48, 48, 0, 2.0);
+  def('BLADE_WHITE', 235, 240, 255, 0, 2.0);
+  def('BILLBOARD', 255, 255, 255, 0, 1.2);
 })();
 
 // Convenience predicates for the mesher.

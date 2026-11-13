@@ -1,6 +1,6 @@
 // Physics checks on the real generated city, no browser.  node voxel/demo/phys-test.js
 const { load } = require('./litew');
-const { C, LiteWorld } = load(['noise', 'blocks', 'worldgen', 'jobs', 'phys', 'world'],
+const { C, LiteWorld } = load(['noise', 'blocks', 'worldgen', 'landmarks', 'jobs', 'phys', 'world'],
   'PH_body, PH_move, PH_stick, PH_overlaps, PH_free, PH_GRAV, WG_GY, WG_PITCH, WG_ST, WG_K, WG_colInfo, WG_topMass');
 const w = new LiteWorld();
 let bad = 0;

@@ -436,6 +436,65 @@ function LM_containers(info, x, z, vox, col, sparse) {
   }
 }
 
+// Light from the landmarks' own lamps, neon and molten metal, for the region
+// [x0,x1) x [z0,z1). Same record as WG_emitters; an emitter may sit inside the
+// glowing voxel it stands for, because the baker never lets the end cell block.
+// Where the glowing thing is bigger than one voxel the light stands beside it
+// (glow 0) and a second record with no reach puts the glow on the thing.
+function LM_emitters(x0, z0, x1, z1, out) {
+  const m = 17, y0 = WG_GY + 2;
+  const put = function (x, y, z, c, I, R, glow) {
+    if (x >= x0 - m && x < x1 + m && z >= z0 - m && z < z1 + m) out.push([x, y, z, c[0], c[1], c[2], I, R, 1, glow]);
+  };
+  const WARM = [1.0, 0.66, 0.34], GOLD = [1.0, 0.88, 0.55], LAVA = [1.0, 0.42, 0.12];
+  const PINK = [1.0, 0.25, 0.62], CYAN = [0.25, 0.88, 1.0], YEL = [1.0, 0.84, 0.30], GRN = [0.40, 1.0, 0.50], PUR = [0.68, 0.36, 1.0];
+  for (let bx = Math.floor((x0 - m - 40) / WG_PITCH); bx <= Math.floor((x1 + m) / WG_PITCH); bx++) {
+    for (let bz = Math.floor((z0 - m - 40) / WG_PITCH); bz <= Math.floor((z1 + m) / WG_PITCH); bz++) {
+      const info = WG_blockInfo(bx, bz);
+      if (!info.full || (!info.deco && info.kind !== 'arena' && info.special !== 'gcpd')) continue;
+      const ox = info.ox, oz = info.oz, cx = ox + 19, cz = oz + 19;
+      if (info.kind === 'arena') {
+        const pen = info.arena === 'penguin', c = pen ? CYAN : PINK;
+        // the glow of the four pillars, brought down to where the fight is
+        for (const px of [7.5, 30.5]) for (const pz of [7.5, 30.5]) put(ox + px, y0 + 7.5, oz + pz, c, 1.0, 17, 0);
+        for (const px of [4.5, 33.5]) for (const pz of [4.5, 33.5]) put(ox + px, y0 + (pen ? 12.5 : 13.5), oz + pz, c, 1.0, 0, 9);
+        if (pen) { put(ox + 19, y0 + 2.5, oz + 19, CYAN, 0.7, 12, 0); put(ox + 19, y0 + 0.4, oz + 19, CYAN, 0.6, 0, 6); }
+        else {
+          put(ox + 19, y0 + 2.5, oz + 28.5, GRN, 0.6, 11, 0);
+          put(ox + 12, y0 + 2.5, oz + 12.5, YEL, 0.5, 8, 0); put(ox + 26, y0 + 2.5, oz + 12.5, YEL, 0.5, 8, 0);
+          for (const q of [[19, 6.5], [19, 31.5], [6.5, 19], [31.5, 19]]) put(ox + q[0], y0 + 7.5, oz + q[1], YEL, 0.55, 13, 0);
+        }
+      } else if (info.deco === 'beacon') {
+        for (const sx of [-4, 4]) for (const sz of [-4, 4]) put(cx + sx + 0.5, y0 + 4.5, cz + sz + 0.5, WARM, 0.8, 12, 6);
+        for (const q of [[2.5, 0.5], [-1.5, 0.5], [0.5, 2.5], [0.5, -1.5]]) put(cx + q[0], y0 + 5, cz + q[1], GOLD, 0.6, 10, 0);
+      } else if (info.deco === 'foundry') {
+        for (const q of [[0.5, 0.5], [-3, -3], [4, -3], [-3, 4], [4, 4]]) put(cx + q[0], y0 + 1.6, cz + q[1], LAVA, 1.25, 17, q[0] === 0.5 ? 11 : 0);
+      } else if (info.deco === 'lavaYard') {
+        put(ox + 12.5, y0 + 1.6, oz + 26.5, LAVA, 1.3, 16, 9);
+        put(ox + 12.5, y0 + 4.5, oz + 26.5, LAVA, 0.7, 17, 0);
+      } else if (info.deco === 'ferris') {
+        // lamps round the rims of the wheel, alternating like its sectors
+        for (let k = 0; k < 8; k++) {
+          const th = k * Math.PI / 4;
+          const fy = y0 + 22 + Math.cos(th) * 17, fz = cz + 0.5 + Math.sin(th) * 17, col = k & 1 ? PINK : CYAN;
+          put(cx + (k & 1 ? 4.5 : -3.5), fy, fz, col, 0.75, 14, 0);
+          put(cx + (k & 1 ? 2.5 : -1.5), fy, fz, col, 0.75, 0, 7);
+        }
+      } else if (info.deco === 'carnival') {
+        for (const lx of [6, 18, 30]) for (const lz of [6, 18, 30]) {
+          const k = NZ_hash(ox + lx, oz + lz, 71) % 4;
+          put(ox + lx + 0.5, y0 + 7.5, oz + lz + 0.5, [PINK, YEL, CYAN, PUR][k], 0.7, 11, 5);
+        }
+      } else if (info.special === 'gcpd') {
+        put(LM.gcpd.cx + 0.5, LM.gcpd.roof + 6.5, LM.gcpd.cz + 0.5, GOLD, 0.9, 9, 8);
+      }
+    }
+  }
+  // the red lights on top of the bridge towers
+  const B = LM.bridge;
+  for (const sz of [-1, 1]) for (const px of [1, 9]) put(px, B.ty + 1.5, B.cz + sz * B.tz, [1.0, 0.16, 0.14], 0.6, 9, 5);
+}
+
 // ── glue the worldgen calls ───────────────────────────────────────────────
 // Applies a lot's floor override and decoration to the column at (x, z).
 function LM_lot(x, z, vox, col) {

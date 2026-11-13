@@ -45,6 +45,7 @@ class VxCamera {
 
 var RD_MAXL = 512;            // lamps in the list
 var RD_CELL = 12;             // lamps per grid cell
+var RD_MAXV = 2560;           // glows in the air, near and far
 // sub-pixel offsets, Halton(2,3)
 var RD_JIT = (function () {
   const h = (i, b) => { let f = 1, r = 0; while (i > 0) { f /= b; r += f * (i % b); i = Math.floor(i / b); } return r; };
@@ -89,7 +90,7 @@ class VxRenderer {
     gl.bindBuffer(gl.ARRAY_BUFFER, this.stripVbo);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, 0, 1, 0, -1, 1, 1, 1]), gl.STATIC_DRAW);
 
-    this.glowData = new Float32Array(8 * 640);
+    this.glowData = new Float32Array(8 * RD_MAXV);
     this.glowVbo = gl.createBuffer();
     this.glowVao = gl.createVertexArray();
     gl.bindVertexArray(this.glowVao);
@@ -135,7 +136,7 @@ class VxRenderer {
     this.lightTex = this.floatTex(RD_MAXL, 2, this.lightData);
     this.gridTex = this.floatTex(96, 32, this.gridData);
     this.lightKey = '';
-    this.volStatic = new Float32Array(8 * 560); this.volN = 0;
+    this.volStatic = new Float32Array(8 * (RD_MAXV - 64)); this.volN = 0;
     this.dyn = new Float32Array(32); this.dynC = new Float32Array(32); this.dynN = 0;
     this.caps = [];              // filled by the game: { x, y, z, h, lx, ly, lz, s }
     this.capA = new Float32Array(32); this.capL = new Float32Array(32);
@@ -190,11 +191,11 @@ class VxRenderer {
   static defaults() {
     return {
       skyTint: [0.60, 0.70, 0.90], skyI: 2.1, blockI: 1.0,
-      fog: [0.082, 0.082, 0.092], fogD: 0.020, fogK: 0.045, fogB: 0.0018, fogBase: 22, fogFar: 4.6,
+      fog: [0.082, 0.082, 0.092], fogD: 0.017, fogK: 0.045, fogB: 0.0010, fogBase: 22, fogFar: 4.6,
       horizon: [0.046, 0.058, 0.076], zenith: [0.005, 0.009, 0.019],
       cloudH: 175, storm: 0, flash: 0,
-      bevel: 0.6, wet: 1.0, spec: 0.55, vol: 0.034, rainLit: 0.55,
-      exposure: 2.3, autoExp: 1, expKey: 0.060, bloom: 0.50, streak: 0.5, ca: 0.0011, sharp: 0.45,
+      bevel: 0.6, wet: 1.0, spec: 0.55, vol: 0.16, rainLit: 0.55,
+      exposure: 2.9, autoExp: 1, expKey: 0.060, bloom: 0.50, streak: 0.5, ca: 0.0011, sharp: 0.45,
       bloomThr: 0.95, bloomKnee: 0.55,
       vig: 0.30, sat: 0.96, contrast: 1.06, lift: [0.003, 0.005, 0.009], gain: [1.0, 1.0, 1.02],
       grain: 0.020, rainAlpha: 0.85, rainCount: 5600, wind: 0.5, fade: 1,
@@ -323,16 +324,26 @@ class VxRenderer {
   // ── lamps ───────────────────────────────────────────────────────────────
   // Rebuilt only when chunks arrive or leave, or the camera crosses into another
   // grid cell: a few hundred lamps sorted into a 32 x 32 grid is nothing.
-  updateLights(world, cam) {
+  updateLights(world, cam, far) {
     const ccx = Math.floor(cam.x / 16), ccz = Math.floor(cam.z / 16);
-    const key = (world.lightVer || 0) + ':' + ccx + ':' + ccz;
+    const key = (world.lightVer || 0) + ':' + ccx + ':' + ccz + ':' + (far ? far.stats.built : 0);
     if (key === this.lightKey) return;
     this.lightKey = key;
     const gl = this.gl, L = this.lightData, Gd = this.gridData;
     let list = [];
+    let nv = 0;
+    const VS = this.volStatic;
+    const glow = (e) => {
+      if (nv >= RD_MAXV - 64 || e[9] === 0) return;
+      const q = nv++ * 8, I = e[6], kind = e[8] || 0;
+      VS[q] = e[0]; VS[q + 1] = e[1]; VS[q + 2] = e[2]; VS[q + 3] = e[9] || (kind === 0 ? 10 : 6.5);
+      VS[q + 4] = e[3] * I; VS[q + 5] = e[4] * I; VS[q + 6] = e[5] * I; VS[q + 7] = kind;
+    };
     for (const c of world.chunks.values()) {
       const e = c.emitters;
       for (let i = 0; i < e.length; i++) {
+        glow(e[i]);
+        if (e[i][7] < 1) continue;                      // a glow with no reach lights nothing
         const dx = e[i][0] - cam.x, dz = e[i][2] - cam.z, d2 = dx * dx + dz * dz;
         if (d2 < 236 * 236) list.push({ e: e[i], d2: d2 });
       }
@@ -340,8 +351,6 @@ class VxRenderer {
     if (list.length > RD_MAXL) { list.sort((a, b) => a.d2 - b.d2); list.length = RD_MAXL; }
     const cells = this.cells || (this.cells = Array.from({ length: 1024 }, () => []));
     for (let i = 0; i < 1024; i++) cells[i].length = 0;
-    let nv = 0;
-    const VS = this.volStatic;
     for (let i = 0; i < list.length; i++) {
       const e = list[i].e, I = e[6], R = e[7], kind = e[8] || 0;
       L[i * 4] = e[0]; L[i * 4 + 1] = e[1]; L[i * 4 + 2] = e[2]; L[i * 4 + 3] = R;
@@ -355,11 +364,18 @@ class VxRenderer {
         if (ddx * ddx + ddz * ddz > Rs * Rs) continue;
         cells[(cz & 31) * 32 + (cx & 31)].push(i);
       }
-      // its glow in the air
-      if (nv < 560 && list[i].d2 < 190 * 190 && e[9] !== 0) {
-        const q = nv++ * 8, vr = e[9] || (kind === 0 ? 10 : 6.5);
-        VS[q] = e[0]; VS[q + 1] = e[1]; VS[q + 2] = e[2]; VS[q + 3] = vr;
-        VS[q + 4] = e[3] * I; VS[q + 5] = e[4] * I; VS[q + 6] = e[5] * I; VS[q + 7] = kind;
+    }
+    // beyond the detailed chunks the far city brings its own lamps: glow only, no light list
+    if (far) {
+      const lim = (this.farDist - 30) * (this.farDist - 30);
+      for (const t of far.tiles.values()) {
+        const e = t.emitters;
+        if (!e) continue;
+        for (let i = 0; i < e.length && nv < RD_MAXV - 64; i++) {
+          const dx = e[i][0] - cam.x, dz = e[i][2] - cam.z;
+          if (dx * dx + dz * dz > lim || world.chunks.has(JB_key(Math.floor(e[i][0] / 16), Math.floor(e[i][2] / 16)))) continue;
+          glow(e[i]);
+        }
       }
     }
     this.volN = nv;
@@ -402,7 +418,7 @@ class VxRenderer {
       const o = i * 8, I = D[o + 7] * 0.9;
       D[o + 3] = Math.max(2.5, D[o + 3] * 1.7); D[o + 4] *= I; D[o + 5] *= I; D[o + 6] *= I; D[o + 7] = 1;
     }
-    const room = Math.min(this.volN, 640 - n);
+    const room = Math.min(this.volN, RD_MAXV - n);
     D.set(this.volStatic.subarray(0, room * 8), n * 8);
     return n + room;
   }
@@ -441,7 +457,7 @@ class VxRenderer {
     const vpClean = cam.vp;
     cam.vp = this.vpj;
 
-    this.updateLights(world, cam);
+    this.updateLights(world, cam, far);
     const nVol = this.updateDynamic(cam);
     this.updateEnv(cam);
 

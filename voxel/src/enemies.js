@@ -48,8 +48,8 @@ function EN_lightProbe(x, y, z, L) {
     if (!c) continue;
     for (const e of c.emitters) {
       const dx = e[0] - x, dy = e[1] - (y + 1), dz = e[2] - z, d = Math.hypot(dx, dy, dz);
-      if (d > 17) continue;
-      const f = (1 - d / 17), k = f * f * e[6];
+      if (d > e[7]) continue;
+      const f = (1 - d / e[7]), k = f * f * e[6];
       r += e[3] * k; g += e[4] * k; b += e[5] * k;
     }
   }

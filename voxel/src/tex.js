@@ -13,7 +13,7 @@
 //   LUT       256 x 4, one column per block id:
 //             row 0  class, roughness, metalness, emission boost
 //             row 1  tile size u, tile size v, bond offset, groove width
-//             row 2  grain, tint variation, wet response, spare
+//             row 2  grain, tint variation, wet response, kind (signs: 0 band, 1 billboard, 2 blade)
 //             row 3  facade styles (column = style index): window pitch, floor
 //                    height, window band start, window band rows
 // ═══════════════════════════════════════════════════════════════════════
@@ -33,7 +33,7 @@ var MT_DEF = {
   CONCRETE:  [0.82, 0, 1, 4, 4, 0, 0.022, 0.50, 0.05, 0.6],
   BRICK:     [0.90, 0, 1, 0.5, 0.25, 0.5, 0.030, 0.45, 0.20, 0.3],
   STONE:     [0.84, 0, 1, 1, 0.5, 0.5, 0.028, 0.75, 0.11, 0.4],
-  METAL:     [0.36, 1, 1, 2, 2, 0, 0.012, 0.16, 0.03, 0.5],
+  METAL:     [0.38, 0.6, 1, 2, 2, 0, 0.012, 0.16, 0.03, 0.5],
   RUST:      [0.84, 0.25, 1, 2, 1, 0, 0.012, 0.95, 0.24, 0.3],
   GLASS:     [0.05, 0, 1, 0, 0, 0, 0, 0.0, 0.0, 0.0],
   WINDOW:    [0.05, 0, 1.7, 0, 0, 0, 0, 0.0, 0.0, 0.0],
@@ -54,7 +54,7 @@ var MT_DEF = {
   SIGN:      [0.30, 0, 3, 0, 0, 0, 0, 0.0, 0.0, 0.0],
 };
 
-// block name -> class, with optional overrides { r: roughness, b: boost, tu, tv, g: grain, w: wet, m: metal }
+// block name -> class, with optional overrides { r: roughness, b: boost, tu, tv, g: grain, w: wet, m: metal, k: kind }
 var MT_BLOCK = {
   BEDROCK: ['STONE'], STONE: ['STONE'], DIRT: ['GROUND'], ASPHALT: ['ASPHALT'], ROADLINE: ['PAINT'],
   SIDEWALK: ['PAVER'], CURB: ['PAVER', { tu: 1, tv: 1, r: 0.80 }],
@@ -65,7 +65,7 @@ var MT_BLOCK = {
   WIN_WARM: ['WINDOW'], WIN_COOL: ['WINDOW'], WIN_WHITE: ['WINDOW'],
   ROOF_TAR: ['ROOF', { r: 0.78, g: 0.45 }], ROOF_GRAVEL: ['ROOF', { g: 1.0, w: 0.5 }],
   WATER: ['WATER'], SAND: ['GROUND'], WOOD: ['WOOD'], WOOD_DK: ['WOOD'], GRASS: ['FOLIAGE'],
-  ICE: ['ICE'], SNOW: ['SNOW'], LAMP_POLE: ['METAL', { r: 0.42, tu: 0, tv: 0 }], LAMP_LIGHT: ['EMISSIVE', { b: 9 }],
+  ICE: ['ICE'], SNOW: ['SNOW'], LAMP_POLE: ['METAL', { r: 0.48, tu: 0, tv: 0, m: 0.55 }], LAMP_LIGHT: ['EMISSIVE', { b: 7 }],
   NEON_PINK: ['NEON'], NEON_CYAN: ['NEON'], NEON_GREEN: ['NEON'], NEON_YELLOW: ['NEON'], NEON_RED: ['NEON'], NEON_PURPLE: ['NEON'],
   LAVA: ['LAVA', { b: 2.2 }], HOT_METAL: ['LAVA', { b: 1.6 }], COPPER: ['COPPER'],
   CARN_RED: ['PAINTED'], CARN_WHITE: ['PAINTED'], CARN_YELLOW: ['PAINTED'], CARN_PURPLE: ['PAINTED'], CARN_TEAL: ['PAINTED'],
@@ -81,7 +81,9 @@ var MT_BLOCK = {
   BENCH: ['WOOD'], CRANE: ['PAINTED', { r: 0.5, m: 0.4 }], SNOW_ICE: ['ICE', { r: 0.22 }], BOLT: ['EMISSIVE', { b: 6 }],
   SHOP_WARM: ['WINDOW', { b: 2.2 }], SHOP_COOL: ['WINDOW', { b: 2.2 }], SHOP_PINK: ['WINDOW', { b: 2.0 }], SHOP_GREEN: ['WINDOW', { b: 2.0 }],
   SIGN_PINK: ['SIGN'], SIGN_CYAN: ['SIGN'], SIGN_YELLOW: ['SIGN'], SIGN_GREEN: ['SIGN'], SIGN_RED: ['SIGN'], SIGN_WHITE: ['SIGN'],
-  BILLBOARD: ['SIGN', { b: 2.4 }],
+  BLADE_PINK: ['SIGN', { k: 2 }], BLADE_CYAN: ['SIGN', { k: 2 }], BLADE_YELLOW: ['SIGN', { k: 2 }], BLADE_GREEN: ['SIGN', { k: 2 }],
+  BLADE_RED: ['SIGN', { k: 2 }], BLADE_WHITE: ['SIGN', { k: 2 }],
+  BILLBOARD: ['SIGN', { b: 2.4, k: 1 }],
 };
 
 function TX_lut() {
@@ -103,7 +105,7 @@ function TX_lut() {
     q = (256 + id) * 4;
     d[q] = u8(p[3] * 16); d[q + 1] = u8(p[4] * 16); d[q + 2] = u8(p[5] * 255); d[q + 3] = u8(p[6] * 1000);
     q = (512 + id) * 4;
-    d[q] = u8(p[7] * 255); d[q + 1] = u8(p[8] * 255); d[q + 2] = u8(p[9] * 255); d[q + 3] = 0;
+    d[q] = u8(p[7] * 255); d[q + 1] = u8(p[8] * 255); d[q + 2] = u8(p[9] * 255); d[q + 3] = o.k | 0;
   }
   for (let s = 0; s < WG_STY.length && s < 16; s++) {
     const st = WG_STY[s], q = (768 + s) * 4;

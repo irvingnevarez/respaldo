@@ -305,6 +305,25 @@ var BK_FLAGS = new Uint8Array(256);
   def('CRANE', 170, 120, 30, 0);
   def('SNOW_ICE', 170, 196, 218, G);
   def('BOLT', 255, 255, 255, 0, 2.0);
+  // what lights a street besides its lamps: shop fronts, sign bands over them,
+  // neon blades standing out from the walls, billboards on the roofs
+  def('SHOP_WARM', 255, 200, 120, 0, 1.3);
+  def('SHOP_COOL', 170, 215, 255, 0, 1.3);
+  def('SHOP_PINK', 255, 120, 190, 0, 1.2);
+  def('SHOP_GREEN', 130, 255, 170, 0, 1.2);
+  def('SIGN_PINK', 255, 56, 150, 0, 2.0);
+  def('SIGN_CYAN', 56, 220, 255, 0, 2.0);
+  def('SIGN_YELLOW', 255, 210, 60, 0, 2.0);
+  def('SIGN_GREEN', 90, 255, 120, 0, 2.0);
+  def('SIGN_RED', 255, 48, 48, 0, 2.0);
+  def('SIGN_WHITE', 235, 240, 255, 0, 2.0);
+  def('BLADE_PINK', 255, 56, 150, 0, 2.0);
+  def('BLADE_CYAN', 56, 220, 255, 0, 2.0);
+  def('BLADE_YELLOW', 255, 210, 60, 0, 2.0);
+  def('BLADE_GREEN', 90, 255, 120, 0, 2.0);
+  def('BLADE_RED', 255, 48, 48, 0, 2.0);
+  def('BLADE_WHITE', 235, 240, 255, 0, 2.0);
+  def('BILLBOARD', 255, 255, 255, 0, 1.2);
 })();
 
 // Convenience predicates for the mesher.
@@ -653,10 +672,13 @@ function WG_facade(b, st, x, y, z, ex) {
   const yy = (y - b.base) - f * st.FH;
   const iu = NZ_mod(u, st.WP);
   const cu = Math.floor(u / st.WP);
-  if (yy === 0) return st.ledge;                      // the floor slab
+  if (yy === 0) {                                     // the floor slab; over an open shop, its sign
+    if (f === 1 && st.store) { const sg = WG_shopSign(b, side, u, st); if (sg) return sg; }
+    return st.ledge;
+  }
   if (iu === 0) return st.pier;                       // the vertical pier between windows
-  // ground floor of shops and offices: tall dark glass instead of small windows
-  if (f === 0 && st.store) return yy <= 3 ? st.win : st.wall;
+  // ground floor of shops and offices: tall glass instead of small windows, lit if the shop is open
+  if (f === 0 && st.store) return yy <= 3 ? (WG_shop(b, side, cu, st) || st.win) : st.wall;
   if (yy < st.wy || yy >= st.wy + st.wr) return st.wall;       // spandrel above/below the window band
   // a window: lit or dark, decided from the building and the window's own address
   if (NZ_f(b.seed + side * 131, f, cu) < st.lit) {
@@ -664,6 +686,67 @@ function WG_facade(b, st, x, y, z, ex) {
     return k < 0.62 ? BK.WIN_WARM : (k < 0.9 ? BK.WIN_COOL : BK.WIN_WHITE);
   }
   return st.win;
+}
+
+// ── shops, signs and billboards ───────────────────────────────────────────
+var WG_SIGNS = [], WG_BLADES = [];
+(function () {
+  for (const c of ['PINK', 'CYAN', 'YELLOW', 'GREEN', 'RED', 'WHITE']) { WG_SIGNS.push(BK['SIGN_' + c]); WG_BLADES.push(BK['BLADE_' + c]); }
+})();
+var WG_SIGN_RGB = [[1.0, 0.22, 0.59], [0.22, 0.86, 1.0], [1.0, 0.82, 0.24], [0.35, 1.0, 0.47], [1.0, 0.19, 0.19], [0.92, 0.94, 1.0]];
+
+// How many window cells one shop takes, so that shops are 8 or 9 blocks wide whatever the style.
+function WG_shopCells(st) { return st.WP <= 2 ? 4 : (st.WP === 3 ? 3 : 2); }
+
+// The shop behind window cell `cu` on one side of a building: 0 when it is shut and
+// dark, else the block its lit glass is made of.
+function WG_shop(b, side, cu, st) {
+  if (!st.store || b.special) return 0;
+  const h = NZ_hash(b.seed + side * 17, Math.floor(cu / WG_shopCells(st)), 77);
+  if ((h & 255) > 122) return 0;
+  const k = (h >>> 8) % 20;
+  return k < 9 ? BK.SHOP_WARM : (k < 15 ? BK.SHOP_COOL : (k < 18 ? BK.SHOP_PINK : BK.SHOP_GREEN));
+}
+
+// The sign band over an open shop: 0, or the block of the band at wall coordinate u.
+function WG_shopSign(b, side, u, st) {
+  const n = WG_shopCells(st) * st.WP, su = Math.floor(u / n);
+  if (!WG_shop(b, side, Math.floor(u / st.WP), st)) return 0;
+  const h = NZ_hash(b.seed + side * 17, su, 79);
+  if ((h & 255) > 175 || u - su * n < 1) return 0;
+  return WG_SIGNS[(h >>> 8) % 6];
+}
+
+// A neon blade standing one voxel out from a side of a building: null, or where along
+// the side it hangs (p), between which heights, and its colour index.
+function WG_blade(b, side) {
+  if (!b.blades) {
+    b.blades = [null, null, null, null];
+    if (WG_STY[b.st].store && !b.special && b.h >= 13) {
+      for (let s = 0; s < 4; s++) {
+        const h = NZ_hash(b.seed, 500 + s, 9), len = s < 2 ? b.z1 - b.z0 : b.x1 - b.x0;
+        if ((h & 255) > 84 || len < 10) continue;
+        b.blades[s] = { p: (s < 2 ? b.z0 : b.x0) + 2 + ((h >>> 8) % (len - 4)), y0: b.base + 6,
+          y1: Math.min(b.base + 11 + ((h >>> 16) % 5), b.base + b.h - 1), k: (h >>> 20) % 6 };
+      }
+    }
+  }
+  return b.blades[side];
+}
+
+// A billboard along one edge of a flat roof, one voxel in from the parapet: null, or
+// its axis (1: it runs along z), the coordinate across, where it starts, and its edge.
+function WG_billboard(b) {
+  if (b.bb === undefined) {
+    b.bb = null;
+    const w = b.x1 - b.x0, d = b.z1 - b.z0, h = NZ_hash(b.seed, 77, 13);
+    if (b.roof === 0 && !b.tiers && !b.special && b.h >= 12 && b.h <= 70 && w >= 17 && d >= 17 && (h & 255) < 56) {
+      const s = (h >>> 8) & 3, ax = s < 2 ? 1 : 0, len = ax ? d : w;
+      b.bb = { ax: ax, s: s, a0: (ax ? b.z0 : b.x0) + 2 + ((h >>> 12) % (len - 15)),
+        c: s === 0 ? b.x0 + 1 : s === 1 ? b.x1 - 2 : s === 2 ? b.z0 + 1 : b.z1 - 2 };
+    }
+  }
+  return b.bb;
 }
 
 // Things standing on a flat roof: tanks, antennas, vents. Deterministic per
@@ -870,6 +953,15 @@ function WG_genChunk(cx, cz) {
             }
           }
         }
+        // a billboard: two legs and a lit panel, twelve wide and six tall
+        const bb = b.roof === 0 ? WG_billboard(b) : null;
+        if (bb && (bb.ax ? x : z) === bb.c && T === b.base + b.h && T + 9 < WG_H) {
+          const ia = (bb.ax ? z : x) - bb.a0;
+          if (ia >= 0 && ia < 12) {
+            if (ia === 1 || ia === 10) { vox[col + T] = BK.STEEL_DK; vox[col + T + 1] = BK.STEEL_DK; }
+            for (let dy = 2; dy < 8; dy++) vox[col + T + dy] = BK.BILLBOARD;
+          }
+        }
         if (b.special === 'gcpd') LM_gcpdColumn(x, z, vox, col, T);
         t = T;
       } else {                                               // plain lot or shore paving
@@ -889,6 +981,18 @@ function WG_genChunk(cx, cz) {
             const cb = WG_carBlock(x, dy, z);
             if (cb) { vox[col + WG_GY + 1 + dy] = cb; t = WG_GY + 2 + dy; }
           }
+        }
+      }
+      // neon blades: a column that touches a building may carry one of its signs
+      if (kd !== WG_K.BUILDING) {
+        for (let q = 0; q < 4; q++) {
+          // q is the side of the neighbouring building that faces this column
+          const nbb = bl[q === 0 ? (i + 2) * 18 + (j + 1) : q === 1 ? i * 18 + (j + 1) : q === 2 ? (i + 1) * 18 + (j + 2) : (i + 1) * 18 + j];
+          if (!nbb) continue;
+          const bd = WG_blade(nbb, q);
+          if (!bd || bd.p !== (q < 2 ? z : x)) continue;
+          for (let y = bd.y0; y < bd.y1; y++) if (!vox[col + y]) vox[col + y] = WG_BLADES[bd.k];
+          if (bd.y1 > t) t = bd.y1;
         }
       }
       // trees and benches in parks
@@ -940,8 +1044,14 @@ function WG_genChunk(cx, cz) {
 }
 
 // ── light sources ─────────────────────────────────────────────────────────
-// Every emitter that can matter to the region [x0,x1) x [z0,z1): street lamps,
-// computed from the same rule that places them. [x, y, z, r, g, b, intensity, radius]
+// Every emitter that can matter to the region [x0,x1) x [z0,z1), computed from the
+// same rules that place the things themselves:
+//   [x, y, z, r, g, b, intensity, radius, kind, glow]
+// kind 0 is a hooded street lamp (its glow in the air hangs downward), 1 shines all
+// round; glow is the reach of its halo in the air (0: none, undefined: the default).
+// A record with radius 0 lights nothing and only glows: it marks where a sign IS,
+// while the record that lights the street stands clear of the sign's own voxels.
+// No radius may exceed 17: the baker only looks that far from a vertex.
 function WG_emitters(x0, z0, x1, z1) {
   const out = [];
   const y = WG_GY + 2 + 6 + 0.5;
@@ -968,7 +1078,61 @@ function WG_emitters(x0, z0, x1, z1) {
       }
     }
   }
+  WG_signEmitters(x0, z0, x1, z1, out);
+  LM_emitters(x0, z0, x1, z1, out);
   return out;
+}
+
+// Open shops, neon blades and billboards near a region, as light sources.
+function WG_signEmitters(x0, z0, x1, z1, out) {
+  const m = 15;
+  const inR = function (x, z) { return x >= x0 - m && x < x1 + m && z >= z0 - m && z < z1 + m; };
+  for (let bx = Math.floor((x0 - m) / WG_PITCH); bx <= Math.floor((x1 + m) / WG_PITCH); bx++) {
+    for (let bz = Math.floor((z0 - m) / WG_PITCH); bz <= Math.floor((z1 + m) / WG_PITCH); bz++) {
+      const info = WG_blockInfo(bx, bz);
+      for (let i = 0; i < info.bld.length; i++) {
+        const b = info.bld[i], st = WG_STY[b.st];
+        if (b.x1 < x0 - m || b.x0 > x1 + m || b.z1 < z0 - m || b.z0 > z1 + m) continue;
+        for (let s = 0; s < 4; s++) {
+          const a0 = s < 2 ? b.z0 : b.x0, a1 = s < 2 ? b.z1 : b.x1;
+          // the plane of this wall, and the way out of it
+          const wc = s === 0 ? b.x0 : s === 1 ? b.x1 : s === 2 ? b.z0 : b.z1, dir = (s & 1) ? 1 : -1;
+          if (st.store && !b.special) {
+            const nc = WG_shopCells(st), n = nc * st.WP;
+            for (let su = Math.floor((a0 + b.wo) / n); su <= Math.floor((a1 - 1 + b.wo) / n); su++) {
+              const blk = WG_shop(b, s, su * nc, st);
+              if (!blk) continue;
+              const ac = Math.max(a0 + 1.5, Math.min(a1 - 1.5, (su + 0.5) * n - b.wo + 0.5));
+              const px = s < 2 ? wc + dir * 1.6 : ac, pz = s < 2 ? ac : wc + dir * 1.6;
+              if (!inR(px, pz)) continue;
+              const c = blk === BK.SHOP_WARM ? [1.0, 0.72, 0.40] : blk === BK.SHOP_COOL ? [0.55, 0.78, 1.0] : blk === BK.SHOP_PINK ? [1.0, 0.36, 0.66] : [0.40, 1.0, 0.58];
+              out.push([px, b.base + 2.4, pz, c[0], c[1], c[2], 0.55, 9, 1, 0]);
+            }
+          }
+          const bd = WG_blade(b, s);
+          if (bd) {
+            // the light stands clear of the sign so the sign itself cannot shadow it; the glow
+            // in the air belongs on the sign, so it is a second record with no reach
+            const c = WG_SIGN_RGB[bd.k], ym = (bd.y0 + bd.y1) / 2;
+            for (const k of [1.7, 0.5]) {
+              const px = s < 2 ? wc + dir * k : bd.p + 0.5, pz = s < 2 ? bd.p + 0.5 : wc + dir * k;
+              if (inR(px, pz)) out.push([px, ym, pz, c[0], c[1], c[2], 0.85, k > 1 ? 13 : 0, 1, k > 1 ? 0 : 6.5]);
+            }
+          }
+        }
+        const bb = WG_billboard(b);
+        if (bb) {
+          // one light each side of the panel, and its glow in the air on the panel itself
+          const ac = bb.a0 + 6, y = b.base + b.h + 5;
+          for (const k of [2.2, -2.2, 0]) {
+            const cc = bb.c + 0.5 + k;
+            const px = bb.ax ? cc : ac, pz = bb.ax ? ac : cc;
+            if (inR(px, pz)) out.push([px, y, pz, 0.72, 0.80, 1.0, 0.8, k ? 15 : 0, 1, k ? 0 : 9]);
+          }
+        }
+      }
+    }
+  }
 }
 
 
@@ -1411,6 +1575,65 @@ function LM_containers(info, x, z, vox, col, sparse) {
   }
 }
 
+// Light from the landmarks' own lamps, neon and molten metal, for the region
+// [x0,x1) x [z0,z1). Same record as WG_emitters; an emitter may sit inside the
+// glowing voxel it stands for, because the baker never lets the end cell block.
+// Where the glowing thing is bigger than one voxel the light stands beside it
+// (glow 0) and a second record with no reach puts the glow on the thing.
+function LM_emitters(x0, z0, x1, z1, out) {
+  const m = 17, y0 = WG_GY + 2;
+  const put = function (x, y, z, c, I, R, glow) {
+    if (x >= x0 - m && x < x1 + m && z >= z0 - m && z < z1 + m) out.push([x, y, z, c[0], c[1], c[2], I, R, 1, glow]);
+  };
+  const WARM = [1.0, 0.66, 0.34], GOLD = [1.0, 0.88, 0.55], LAVA = [1.0, 0.42, 0.12];
+  const PINK = [1.0, 0.25, 0.62], CYAN = [0.25, 0.88, 1.0], YEL = [1.0, 0.84, 0.30], GRN = [0.40, 1.0, 0.50], PUR = [0.68, 0.36, 1.0];
+  for (let bx = Math.floor((x0 - m - 40) / WG_PITCH); bx <= Math.floor((x1 + m) / WG_PITCH); bx++) {
+    for (let bz = Math.floor((z0 - m - 40) / WG_PITCH); bz <= Math.floor((z1 + m) / WG_PITCH); bz++) {
+      const info = WG_blockInfo(bx, bz);
+      if (!info.full || (!info.deco && info.kind !== 'arena' && info.special !== 'gcpd')) continue;
+      const ox = info.ox, oz = info.oz, cx = ox + 19, cz = oz + 19;
+      if (info.kind === 'arena') {
+        const pen = info.arena === 'penguin', c = pen ? CYAN : PINK;
+        // the glow of the four pillars, brought down to where the fight is
+        for (const px of [7.5, 30.5]) for (const pz of [7.5, 30.5]) put(ox + px, y0 + 7.5, oz + pz, c, 1.0, 17, 0);
+        for (const px of [4.5, 33.5]) for (const pz of [4.5, 33.5]) put(ox + px, y0 + (pen ? 12.5 : 13.5), oz + pz, c, 1.0, 0, 9);
+        if (pen) { put(ox + 19, y0 + 2.5, oz + 19, CYAN, 0.7, 12, 0); put(ox + 19, y0 + 0.4, oz + 19, CYAN, 0.6, 0, 6); }
+        else {
+          put(ox + 19, y0 + 2.5, oz + 28.5, GRN, 0.6, 11, 0);
+          put(ox + 12, y0 + 2.5, oz + 12.5, YEL, 0.5, 8, 0); put(ox + 26, y0 + 2.5, oz + 12.5, YEL, 0.5, 8, 0);
+          for (const q of [[19, 6.5], [19, 31.5], [6.5, 19], [31.5, 19]]) put(ox + q[0], y0 + 7.5, oz + q[1], YEL, 0.55, 13, 0);
+        }
+      } else if (info.deco === 'beacon') {
+        for (const sx of [-4, 4]) for (const sz of [-4, 4]) put(cx + sx + 0.5, y0 + 4.5, cz + sz + 0.5, WARM, 0.8, 12, 6);
+        for (const q of [[2.5, 0.5], [-1.5, 0.5], [0.5, 2.5], [0.5, -1.5]]) put(cx + q[0], y0 + 5, cz + q[1], GOLD, 0.6, 10, 0);
+      } else if (info.deco === 'foundry') {
+        for (const q of [[0.5, 0.5], [-3, -3], [4, -3], [-3, 4], [4, 4]]) put(cx + q[0], y0 + 1.6, cz + q[1], LAVA, 1.25, 17, q[0] === 0.5 ? 11 : 0);
+      } else if (info.deco === 'lavaYard') {
+        put(ox + 12.5, y0 + 1.6, oz + 26.5, LAVA, 1.3, 16, 9);
+        put(ox + 12.5, y0 + 4.5, oz + 26.5, LAVA, 0.7, 17, 0);
+      } else if (info.deco === 'ferris') {
+        // lamps round the rims of the wheel, alternating like its sectors
+        for (let k = 0; k < 8; k++) {
+          const th = k * Math.PI / 4;
+          const fy = y0 + 22 + Math.cos(th) * 17, fz = cz + 0.5 + Math.sin(th) * 17, col = k & 1 ? PINK : CYAN;
+          put(cx + (k & 1 ? 4.5 : -3.5), fy, fz, col, 0.75, 14, 0);
+          put(cx + (k & 1 ? 2.5 : -1.5), fy, fz, col, 0.75, 0, 7);
+        }
+      } else if (info.deco === 'carnival') {
+        for (const lx of [6, 18, 30]) for (const lz of [6, 18, 30]) {
+          const k = NZ_hash(ox + lx, oz + lz, 71) % 4;
+          put(ox + lx + 0.5, y0 + 7.5, oz + lz + 0.5, [PINK, YEL, CYAN, PUR][k], 0.7, 11, 5);
+        }
+      } else if (info.special === 'gcpd') {
+        put(LM.gcpd.cx + 0.5, LM.gcpd.roof + 6.5, LM.gcpd.cz + 0.5, GOLD, 0.9, 9, 8);
+      }
+    }
+  }
+  // the red lights on top of the bridge towers
+  const B = LM.bridge;
+  for (const sz of [-1, 1]) for (const px of [1, 9]) put(px, B.ty + 1.5, B.cz + sz * B.tz, [1.0, 0.16, 0.14], 0.6, 9, 5);
+}
+
 // ── glue the worldgen calls ───────────────────────────────────────────────
 // Applies a lot's floor override and decoration to the column at (x, z).
 function LM_lot(x, z, vox, col) {
@@ -1472,7 +1695,8 @@ var WG_SPAWN = LM.spawn;
 //  Vertex layout, 16 bytes:
 //    0  x y z code     position inside the chunk (0..16, 0..128); the facade code
 //                      of the column's building (style + window offset), so the
-//                      shader can find the window a glass voxel belongs to
+//                      shader can find the window a glass voxel belongs to, or
+//                      for a billboard voxel its place in the panel (128 + ...)
 //    4  block face moon flags     moon = how much of the moon this vertex sees
 //    8  r g b emit     albedo, and how hard the voxel glows (emit/255*4)
 //   12  sky bR bG bB   sky visibility, and baked lamp light (value/255*2)
@@ -1673,10 +1897,17 @@ function* BX_bake(cx, cz, env) {
   const op = BX_mesh(), wa = BX_mesh();
   const aoV = [0, 0, 0, 0], skyV = [0, 0, 0, 0], moonV = [0, 0, 0, 0], blR = [0, 0, 0, 0], blG = [0, 0, 0, 0], blB = [0, 0, 0, 0];
   // the facade code of every column: which building style, and where its windows start
-  const fcode = new Uint8Array(256), ci = { kind: 0, top: 0, b: null };
+  // ...and for a column under a billboard, which strip of the panel it is and where the panel starts
+  const fcode = new Uint8Array(256), bbI = new Uint8Array(256).fill(255), bbY = new Uint8Array(256), ci = { kind: 0, top: 0, b: null };
   for (let x = 0; x < 16; x++) for (let z = 0; z < 16; z++) {
     WG_colInfo(ox + x, oz + z, ci);
-    if (ci.kind === WG_K.BUILDING && ci.b) fcode[x * 16 + z] = ((ci.b.st & 15) | ((ci.b.wo & 7) << 4)) + 1;
+    if (ci.kind !== WG_K.BUILDING || !ci.b) continue;
+    fcode[x * 16 + z] = ((ci.b.st & 15) | ((ci.b.wo & 7) << 4)) + 1;
+    const bb = WG_billboard(ci.b);
+    if (bb && (bb.ax ? ox + x : oz + z) === bb.c) {
+      const ia = (bb.ax ? oz + z : ox + x) - bb.a0;
+      if (ia >= 0 && ia < 12) { bbI[x * 16 + z] = ia; bbY[x * 16 + z] = ci.b.base + ci.b.h + 2; }
+    }
   }
   const R1 = 48 * H, R2 = H;           // region strides for x and z
 
@@ -1754,7 +1985,8 @@ function* BX_bake(cx, cz, env) {
           const albR = BK_RGB[b * 3], albG = BK_RGB[b * 3 + 1], albB = BK_RGB[b * 3 + 2];
           // a glowing voxel keeps its exact colour: a window is one pane, not four tiles
           const vr = BK_EMIT[b] > 0 ? 1 : 0.93 + 0.14 * NZ_f(ox + x, y, oz + z);
-          const fc = (f === 2 || f === 3) ? 0 : fcode[x * 16 + z];
+          let fc = (f === 2 || f === 3) ? 0 : fcode[x * 16 + z];
+          if (b === BK.BILLBOARD && bbI[x * 16 + z] !== 255) fc = 128 + bbI[x * 16 + z] * 6 + Math.max(0, Math.min(5, y - bbY[x * 16 + z]));
           const cr = Math.min(255, albR * vr), cg = Math.min(255, albG * vr), cb = Math.min(255, albB * vr);
           const em = Math.min(255, Math.round(BK_EMIT[b] / 4 * 255));
           const fl = BK_FLAGS[b];
@@ -2175,6 +2407,25 @@ var BK_FLAGS = new Uint8Array(256);
   def('CRANE', 170, 120, 30, 0);
   def('SNOW_ICE', 170, 196, 218, G);
   def('BOLT', 255, 255, 255, 0, 2.0);
+  // what lights a street besides its lamps: shop fronts, sign bands over them,
+  // neon blades standing out from the walls, billboards on the roofs
+  def('SHOP_WARM', 255, 200, 120, 0, 1.3);
+  def('SHOP_COOL', 170, 215, 255, 0, 1.3);
+  def('SHOP_PINK', 255, 120, 190, 0, 1.2);
+  def('SHOP_GREEN', 130, 255, 170, 0, 1.2);
+  def('SIGN_PINK', 255, 56, 150, 0, 2.0);
+  def('SIGN_CYAN', 56, 220, 255, 0, 2.0);
+  def('SIGN_YELLOW', 255, 210, 60, 0, 2.0);
+  def('SIGN_GREEN', 90, 255, 120, 0, 2.0);
+  def('SIGN_RED', 255, 48, 48, 0, 2.0);
+  def('SIGN_WHITE', 235, 240, 255, 0, 2.0);
+  def('BLADE_PINK', 255, 56, 150, 0, 2.0);
+  def('BLADE_CYAN', 56, 220, 255, 0, 2.0);
+  def('BLADE_YELLOW', 255, 210, 60, 0, 2.0);
+  def('BLADE_GREEN', 90, 255, 120, 0, 2.0);
+  def('BLADE_RED', 255, 48, 48, 0, 2.0);
+  def('BLADE_WHITE', 235, 240, 255, 0, 2.0);
+  def('BILLBOARD', 255, 255, 255, 0, 1.2);
 })();
 
 // Convenience predicates for the mesher.
@@ -2523,10 +2774,13 @@ function WG_facade(b, st, x, y, z, ex) {
   const yy = (y - b.base) - f * st.FH;
   const iu = NZ_mod(u, st.WP);
   const cu = Math.floor(u / st.WP);
-  if (yy === 0) return st.ledge;                      // the floor slab
+  if (yy === 0) {                                     // the floor slab; over an open shop, its sign
+    if (f === 1 && st.store) { const sg = WG_shopSign(b, side, u, st); if (sg) return sg; }
+    return st.ledge;
+  }
   if (iu === 0) return st.pier;                       // the vertical pier between windows
-  // ground floor of shops and offices: tall dark glass instead of small windows
-  if (f === 0 && st.store) return yy <= 3 ? st.win : st.wall;
+  // ground floor of shops and offices: tall glass instead of small windows, lit if the shop is open
+  if (f === 0 && st.store) return yy <= 3 ? (WG_shop(b, side, cu, st) || st.win) : st.wall;
   if (yy < st.wy || yy >= st.wy + st.wr) return st.wall;       // spandrel above/below the window band
   // a window: lit or dark, decided from the building and the window's own address
   if (NZ_f(b.seed + side * 131, f, cu) < st.lit) {
@@ -2534,6 +2788,67 @@ function WG_facade(b, st, x, y, z, ex) {
     return k < 0.62 ? BK.WIN_WARM : (k < 0.9 ? BK.WIN_COOL : BK.WIN_WHITE);
   }
   return st.win;
+}
+
+// ── shops, signs and billboards ───────────────────────────────────────────
+var WG_SIGNS = [], WG_BLADES = [];
+(function () {
+  for (const c of ['PINK', 'CYAN', 'YELLOW', 'GREEN', 'RED', 'WHITE']) { WG_SIGNS.push(BK['SIGN_' + c]); WG_BLADES.push(BK['BLADE_' + c]); }
+})();
+var WG_SIGN_RGB = [[1.0, 0.22, 0.59], [0.22, 0.86, 1.0], [1.0, 0.82, 0.24], [0.35, 1.0, 0.47], [1.0, 0.19, 0.19], [0.92, 0.94, 1.0]];
+
+// How many window cells one shop takes, so that shops are 8 or 9 blocks wide whatever the style.
+function WG_shopCells(st) { return st.WP <= 2 ? 4 : (st.WP === 3 ? 3 : 2); }
+
+// The shop behind window cell `cu` on one side of a building: 0 when it is shut and
+// dark, else the block its lit glass is made of.
+function WG_shop(b, side, cu, st) {
+  if (!st.store || b.special) return 0;
+  const h = NZ_hash(b.seed + side * 17, Math.floor(cu / WG_shopCells(st)), 77);
+  if ((h & 255) > 122) return 0;
+  const k = (h >>> 8) % 20;
+  return k < 9 ? BK.SHOP_WARM : (k < 15 ? BK.SHOP_COOL : (k < 18 ? BK.SHOP_PINK : BK.SHOP_GREEN));
+}
+
+// The sign band over an open shop: 0, or the block of the band at wall coordinate u.
+function WG_shopSign(b, side, u, st) {
+  const n = WG_shopCells(st) * st.WP, su = Math.floor(u / n);
+  if (!WG_shop(b, side, Math.floor(u / st.WP), st)) return 0;
+  const h = NZ_hash(b.seed + side * 17, su, 79);
+  if ((h & 255) > 175 || u - su * n < 1) return 0;
+  return WG_SIGNS[(h >>> 8) % 6];
+}
+
+// A neon blade standing one voxel out from a side of a building: null, or where along
+// the side it hangs (p), between which heights, and its colour index.
+function WG_blade(b, side) {
+  if (!b.blades) {
+    b.blades = [null, null, null, null];
+    if (WG_STY[b.st].store && !b.special && b.h >= 13) {
+      for (let s = 0; s < 4; s++) {
+        const h = NZ_hash(b.seed, 500 + s, 9), len = s < 2 ? b.z1 - b.z0 : b.x1 - b.x0;
+        if ((h & 255) > 84 || len < 10) continue;
+        b.blades[s] = { p: (s < 2 ? b.z0 : b.x0) + 2 + ((h >>> 8) % (len - 4)), y0: b.base + 6,
+          y1: Math.min(b.base + 11 + ((h >>> 16) % 5), b.base + b.h - 1), k: (h >>> 20) % 6 };
+      }
+    }
+  }
+  return b.blades[side];
+}
+
+// A billboard along one edge of a flat roof, one voxel in from the parapet: null, or
+// its axis (1: it runs along z), the coordinate across, where it starts, and its edge.
+function WG_billboard(b) {
+  if (b.bb === undefined) {
+    b.bb = null;
+    const w = b.x1 - b.x0, d = b.z1 - b.z0, h = NZ_hash(b.seed, 77, 13);
+    if (b.roof === 0 && !b.tiers && !b.special && b.h >= 12 && b.h <= 70 && w >= 17 && d >= 17 && (h & 255) < 56) {
+      const s = (h >>> 8) & 3, ax = s < 2 ? 1 : 0, len = ax ? d : w;
+      b.bb = { ax: ax, s: s, a0: (ax ? b.z0 : b.x0) + 2 + ((h >>> 12) % (len - 15)),
+        c: s === 0 ? b.x0 + 1 : s === 1 ? b.x1 - 2 : s === 2 ? b.z0 + 1 : b.z1 - 2 };
+    }
+  }
+  return b.bb;
 }
 
 // Things standing on a flat roof: tanks, antennas, vents. Deterministic per
@@ -2740,6 +3055,15 @@ function WG_genChunk(cx, cz) {
             }
           }
         }
+        // a billboard: two legs and a lit panel, twelve wide and six tall
+        const bb = b.roof === 0 ? WG_billboard(b) : null;
+        if (bb && (bb.ax ? x : z) === bb.c && T === b.base + b.h && T + 9 < WG_H) {
+          const ia = (bb.ax ? z : x) - bb.a0;
+          if (ia >= 0 && ia < 12) {
+            if (ia === 1 || ia === 10) { vox[col + T] = BK.STEEL_DK; vox[col + T + 1] = BK.STEEL_DK; }
+            for (let dy = 2; dy < 8; dy++) vox[col + T + dy] = BK.BILLBOARD;
+          }
+        }
         if (b.special === 'gcpd') LM_gcpdColumn(x, z, vox, col, T);
         t = T;
       } else {                                               // plain lot or shore paving
@@ -2759,6 +3083,18 @@ function WG_genChunk(cx, cz) {
             const cb = WG_carBlock(x, dy, z);
             if (cb) { vox[col + WG_GY + 1 + dy] = cb; t = WG_GY + 2 + dy; }
           }
+        }
+      }
+      // neon blades: a column that touches a building may carry one of its signs
+      if (kd !== WG_K.BUILDING) {
+        for (let q = 0; q < 4; q++) {
+          // q is the side of the neighbouring building that faces this column
+          const nbb = bl[q === 0 ? (i + 2) * 18 + (j + 1) : q === 1 ? i * 18 + (j + 1) : q === 2 ? (i + 1) * 18 + (j + 2) : (i + 1) * 18 + j];
+          if (!nbb) continue;
+          const bd = WG_blade(nbb, q);
+          if (!bd || bd.p !== (q < 2 ? z : x)) continue;
+          for (let y = bd.y0; y < bd.y1; y++) if (!vox[col + y]) vox[col + y] = WG_BLADES[bd.k];
+          if (bd.y1 > t) t = bd.y1;
         }
       }
       // trees and benches in parks
@@ -2810,8 +3146,14 @@ function WG_genChunk(cx, cz) {
 }
 
 // ── light sources ─────────────────────────────────────────────────────────
-// Every emitter that can matter to the region [x0,x1) x [z0,z1): street lamps,
-// computed from the same rule that places them. [x, y, z, r, g, b, intensity, radius]
+// Every emitter that can matter to the region [x0,x1) x [z0,z1), computed from the
+// same rules that place the things themselves:
+//   [x, y, z, r, g, b, intensity, radius, kind, glow]
+// kind 0 is a hooded street lamp (its glow in the air hangs downward), 1 shines all
+// round; glow is the reach of its halo in the air (0: none, undefined: the default).
+// A record with radius 0 lights nothing and only glows: it marks where a sign IS,
+// while the record that lights the street stands clear of the sign's own voxels.
+// No radius may exceed 17: the baker only looks that far from a vertex.
 function WG_emitters(x0, z0, x1, z1) {
   const out = [];
   const y = WG_GY + 2 + 6 + 0.5;
@@ -2838,7 +3180,61 @@ function WG_emitters(x0, z0, x1, z1) {
       }
     }
   }
+  WG_signEmitters(x0, z0, x1, z1, out);
+  LM_emitters(x0, z0, x1, z1, out);
   return out;
+}
+
+// Open shops, neon blades and billboards near a region, as light sources.
+function WG_signEmitters(x0, z0, x1, z1, out) {
+  const m = 15;
+  const inR = function (x, z) { return x >= x0 - m && x < x1 + m && z >= z0 - m && z < z1 + m; };
+  for (let bx = Math.floor((x0 - m) / WG_PITCH); bx <= Math.floor((x1 + m) / WG_PITCH); bx++) {
+    for (let bz = Math.floor((z0 - m) / WG_PITCH); bz <= Math.floor((z1 + m) / WG_PITCH); bz++) {
+      const info = WG_blockInfo(bx, bz);
+      for (let i = 0; i < info.bld.length; i++) {
+        const b = info.bld[i], st = WG_STY[b.st];
+        if (b.x1 < x0 - m || b.x0 > x1 + m || b.z1 < z0 - m || b.z0 > z1 + m) continue;
+        for (let s = 0; s < 4; s++) {
+          const a0 = s < 2 ? b.z0 : b.x0, a1 = s < 2 ? b.z1 : b.x1;
+          // the plane of this wall, and the way out of it
+          const wc = s === 0 ? b.x0 : s === 1 ? b.x1 : s === 2 ? b.z0 : b.z1, dir = (s & 1) ? 1 : -1;
+          if (st.store && !b.special) {
+            const nc = WG_shopCells(st), n = nc * st.WP;
+            for (let su = Math.floor((a0 + b.wo) / n); su <= Math.floor((a1 - 1 + b.wo) / n); su++) {
+              const blk = WG_shop(b, s, su * nc, st);
+              if (!blk) continue;
+              const ac = Math.max(a0 + 1.5, Math.min(a1 - 1.5, (su + 0.5) * n - b.wo + 0.5));
+              const px = s < 2 ? wc + dir * 1.6 : ac, pz = s < 2 ? ac : wc + dir * 1.6;
+              if (!inR(px, pz)) continue;
+              const c = blk === BK.SHOP_WARM ? [1.0, 0.72, 0.40] : blk === BK.SHOP_COOL ? [0.55, 0.78, 1.0] : blk === BK.SHOP_PINK ? [1.0, 0.36, 0.66] : [0.40, 1.0, 0.58];
+              out.push([px, b.base + 2.4, pz, c[0], c[1], c[2], 0.55, 9, 1, 0]);
+            }
+          }
+          const bd = WG_blade(b, s);
+          if (bd) {
+            // the light stands clear of the sign so the sign itself cannot shadow it; the glow
+            // in the air belongs on the sign, so it is a second record with no reach
+            const c = WG_SIGN_RGB[bd.k], ym = (bd.y0 + bd.y1) / 2;
+            for (const k of [1.7, 0.5]) {
+              const px = s < 2 ? wc + dir * k : bd.p + 0.5, pz = s < 2 ? bd.p + 0.5 : wc + dir * k;
+              if (inR(px, pz)) out.push([px, ym, pz, c[0], c[1], c[2], 0.85, k > 1 ? 13 : 0, 1, k > 1 ? 0 : 6.5]);
+            }
+          }
+        }
+        const bb = WG_billboard(b);
+        if (bb) {
+          // one light each side of the panel, and its glow in the air on the panel itself
+          const ac = bb.a0 + 6, y = b.base + b.h + 5;
+          for (const k of [2.2, -2.2, 0]) {
+            const cc = bb.c + 0.5 + k;
+            const px = bb.ax ? cc : ac, pz = bb.ax ? ac : cc;
+            if (inR(px, pz)) out.push([px, y, pz, 0.72, 0.80, 1.0, 0.8, k ? 15 : 0, 1, k ? 0 : 9]);
+          }
+        }
+      }
+    }
+  }
 }
 
 
@@ -3281,6 +3677,65 @@ function LM_containers(info, x, z, vox, col, sparse) {
   }
 }
 
+// Light from the landmarks' own lamps, neon and molten metal, for the region
+// [x0,x1) x [z0,z1). Same record as WG_emitters; an emitter may sit inside the
+// glowing voxel it stands for, because the baker never lets the end cell block.
+// Where the glowing thing is bigger than one voxel the light stands beside it
+// (glow 0) and a second record with no reach puts the glow on the thing.
+function LM_emitters(x0, z0, x1, z1, out) {
+  const m = 17, y0 = WG_GY + 2;
+  const put = function (x, y, z, c, I, R, glow) {
+    if (x >= x0 - m && x < x1 + m && z >= z0 - m && z < z1 + m) out.push([x, y, z, c[0], c[1], c[2], I, R, 1, glow]);
+  };
+  const WARM = [1.0, 0.66, 0.34], GOLD = [1.0, 0.88, 0.55], LAVA = [1.0, 0.42, 0.12];
+  const PINK = [1.0, 0.25, 0.62], CYAN = [0.25, 0.88, 1.0], YEL = [1.0, 0.84, 0.30], GRN = [0.40, 1.0, 0.50], PUR = [0.68, 0.36, 1.0];
+  for (let bx = Math.floor((x0 - m - 40) / WG_PITCH); bx <= Math.floor((x1 + m) / WG_PITCH); bx++) {
+    for (let bz = Math.floor((z0 - m - 40) / WG_PITCH); bz <= Math.floor((z1 + m) / WG_PITCH); bz++) {
+      const info = WG_blockInfo(bx, bz);
+      if (!info.full || (!info.deco && info.kind !== 'arena' && info.special !== 'gcpd')) continue;
+      const ox = info.ox, oz = info.oz, cx = ox + 19, cz = oz + 19;
+      if (info.kind === 'arena') {
+        const pen = info.arena === 'penguin', c = pen ? CYAN : PINK;
+        // the glow of the four pillars, brought down to where the fight is
+        for (const px of [7.5, 30.5]) for (const pz of [7.5, 30.5]) put(ox + px, y0 + 7.5, oz + pz, c, 1.0, 17, 0);
+        for (const px of [4.5, 33.5]) for (const pz of [4.5, 33.5]) put(ox + px, y0 + (pen ? 12.5 : 13.5), oz + pz, c, 1.0, 0, 9);
+        if (pen) { put(ox + 19, y0 + 2.5, oz + 19, CYAN, 0.7, 12, 0); put(ox + 19, y0 + 0.4, oz + 19, CYAN, 0.6, 0, 6); }
+        else {
+          put(ox + 19, y0 + 2.5, oz + 28.5, GRN, 0.6, 11, 0);
+          put(ox + 12, y0 + 2.5, oz + 12.5, YEL, 0.5, 8, 0); put(ox + 26, y0 + 2.5, oz + 12.5, YEL, 0.5, 8, 0);
+          for (const q of [[19, 6.5], [19, 31.5], [6.5, 19], [31.5, 19]]) put(ox + q[0], y0 + 7.5, oz + q[1], YEL, 0.55, 13, 0);
+        }
+      } else if (info.deco === 'beacon') {
+        for (const sx of [-4, 4]) for (const sz of [-4, 4]) put(cx + sx + 0.5, y0 + 4.5, cz + sz + 0.5, WARM, 0.8, 12, 6);
+        for (const q of [[2.5, 0.5], [-1.5, 0.5], [0.5, 2.5], [0.5, -1.5]]) put(cx + q[0], y0 + 5, cz + q[1], GOLD, 0.6, 10, 0);
+      } else if (info.deco === 'foundry') {
+        for (const q of [[0.5, 0.5], [-3, -3], [4, -3], [-3, 4], [4, 4]]) put(cx + q[0], y0 + 1.6, cz + q[1], LAVA, 1.25, 17, q[0] === 0.5 ? 11 : 0);
+      } else if (info.deco === 'lavaYard') {
+        put(ox + 12.5, y0 + 1.6, oz + 26.5, LAVA, 1.3, 16, 9);
+        put(ox + 12.5, y0 + 4.5, oz + 26.5, LAVA, 0.7, 17, 0);
+      } else if (info.deco === 'ferris') {
+        // lamps round the rims of the wheel, alternating like its sectors
+        for (let k = 0; k < 8; k++) {
+          const th = k * Math.PI / 4;
+          const fy = y0 + 22 + Math.cos(th) * 17, fz = cz + 0.5 + Math.sin(th) * 17, col = k & 1 ? PINK : CYAN;
+          put(cx + (k & 1 ? 4.5 : -3.5), fy, fz, col, 0.75, 14, 0);
+          put(cx + (k & 1 ? 2.5 : -1.5), fy, fz, col, 0.75, 0, 7);
+        }
+      } else if (info.deco === 'carnival') {
+        for (const lx of [6, 18, 30]) for (const lz of [6, 18, 30]) {
+          const k = NZ_hash(ox + lx, oz + lz, 71) % 4;
+          put(ox + lx + 0.5, y0 + 7.5, oz + lz + 0.5, [PINK, YEL, CYAN, PUR][k], 0.7, 11, 5);
+        }
+      } else if (info.special === 'gcpd') {
+        put(LM.gcpd.cx + 0.5, LM.gcpd.roof + 6.5, LM.gcpd.cz + 0.5, GOLD, 0.9, 9, 8);
+      }
+    }
+  }
+  // the red lights on top of the bridge towers
+  const B = LM.bridge;
+  for (const sz of [-1, 1]) for (const px of [1, 9]) put(px, B.ty + 1.5, B.cz + sz * B.tz, [1.0, 0.16, 0.14], 0.6, 9, 5);
+}
+
 // ── glue the worldgen calls ───────────────────────────────────────────────
 // Applies a lot's floor override and decoration to the column at (x, z).
 function LM_lot(x, z, vox, col) {
@@ -3342,7 +3797,8 @@ var WG_SPAWN = LM.spawn;
 //  Vertex layout, 16 bytes:
 //    0  x y z code     position inside the chunk (0..16, 0..128); the facade code
 //                      of the column's building (style + window offset), so the
-//                      shader can find the window a glass voxel belongs to
+//                      shader can find the window a glass voxel belongs to, or
+//                      for a billboard voxel its place in the panel (128 + ...)
 //    4  block face moon flags     moon = how much of the moon this vertex sees
 //    8  r g b emit     albedo, and how hard the voxel glows (emit/255*4)
 //   12  sky bR bG bB   sky visibility, and baked lamp light (value/255*2)
@@ -3543,10 +3999,17 @@ function* BX_bake(cx, cz, env) {
   const op = BX_mesh(), wa = BX_mesh();
   const aoV = [0, 0, 0, 0], skyV = [0, 0, 0, 0], moonV = [0, 0, 0, 0], blR = [0, 0, 0, 0], blG = [0, 0, 0, 0], blB = [0, 0, 0, 0];
   // the facade code of every column: which building style, and where its windows start
-  const fcode = new Uint8Array(256), ci = { kind: 0, top: 0, b: null };
+  // ...and for a column under a billboard, which strip of the panel it is and where the panel starts
+  const fcode = new Uint8Array(256), bbI = new Uint8Array(256).fill(255), bbY = new Uint8Array(256), ci = { kind: 0, top: 0, b: null };
   for (let x = 0; x < 16; x++) for (let z = 0; z < 16; z++) {
     WG_colInfo(ox + x, oz + z, ci);
-    if (ci.kind === WG_K.BUILDING && ci.b) fcode[x * 16 + z] = ((ci.b.st & 15) | ((ci.b.wo & 7) << 4)) + 1;
+    if (ci.kind !== WG_K.BUILDING || !ci.b) continue;
+    fcode[x * 16 + z] = ((ci.b.st & 15) | ((ci.b.wo & 7) << 4)) + 1;
+    const bb = WG_billboard(ci.b);
+    if (bb && (bb.ax ? ox + x : oz + z) === bb.c) {
+      const ia = (bb.ax ? oz + z : ox + x) - bb.a0;
+      if (ia >= 0 && ia < 12) { bbI[x * 16 + z] = ia; bbY[x * 16 + z] = ci.b.base + ci.b.h + 2; }
+    }
   }
   const R1 = 48 * H, R2 = H;           // region strides for x and z
 
@@ -3624,7 +4087,8 @@ function* BX_bake(cx, cz, env) {
           const albR = BK_RGB[b * 3], albG = BK_RGB[b * 3 + 1], albB = BK_RGB[b * 3 + 2];
           // a glowing voxel keeps its exact colour: a window is one pane, not four tiles
           const vr = BK_EMIT[b] > 0 ? 1 : 0.93 + 0.14 * NZ_f(ox + x, y, oz + z);
-          const fc = (f === 2 || f === 3) ? 0 : fcode[x * 16 + z];
+          let fc = (f === 2 || f === 3) ? 0 : fcode[x * 16 + z];
+          if (b === BK.BILLBOARD && bbI[x * 16 + z] !== 255) fc = 128 + bbI[x * 16 + z] * 6 + Math.max(0, Math.min(5, y - bbY[x * 16 + z]));
           const cr = Math.min(255, albR * vr), cg = Math.min(255, albG * vr), cb = Math.min(255, albB * vr);
           const em = Math.min(255, Math.round(BK_EMIT[b] / 4 * 255));
           const fl = BK_FLAGS[b];
@@ -3836,7 +4300,7 @@ function GL_freeFbo(gl, f) {
 //   LUT       256 x 4, one column per block id:
 //             row 0  class, roughness, metalness, emission boost
 //             row 1  tile size u, tile size v, bond offset, groove width
-//             row 2  grain, tint variation, wet response, spare
+//             row 2  grain, tint variation, wet response, kind (signs: 0 band, 1 billboard, 2 blade)
 //             row 3  facade styles (column = style index): window pitch, floor
 //                    height, window band start, window band rows
 // ═══════════════════════════════════════════════════════════════════════
@@ -3856,7 +4320,7 @@ var MT_DEF = {
   CONCRETE:  [0.82, 0, 1, 4, 4, 0, 0.022, 0.50, 0.05, 0.6],
   BRICK:     [0.90, 0, 1, 0.5, 0.25, 0.5, 0.030, 0.45, 0.20, 0.3],
   STONE:     [0.84, 0, 1, 1, 0.5, 0.5, 0.028, 0.75, 0.11, 0.4],
-  METAL:     [0.36, 1, 1, 2, 2, 0, 0.012, 0.16, 0.03, 0.5],
+  METAL:     [0.38, 0.6, 1, 2, 2, 0, 0.012, 0.16, 0.03, 0.5],
   RUST:      [0.84, 0.25, 1, 2, 1, 0, 0.012, 0.95, 0.24, 0.3],
   GLASS:     [0.05, 0, 1, 0, 0, 0, 0, 0.0, 0.0, 0.0],
   WINDOW:    [0.05, 0, 1.7, 0, 0, 0, 0, 0.0, 0.0, 0.0],
@@ -3877,7 +4341,7 @@ var MT_DEF = {
   SIGN:      [0.30, 0, 3, 0, 0, 0, 0, 0.0, 0.0, 0.0],
 };
 
-// block name -> class, with optional overrides { r: roughness, b: boost, tu, tv, g: grain, w: wet, m: metal }
+// block name -> class, with optional overrides { r: roughness, b: boost, tu, tv, g: grain, w: wet, m: metal, k: kind }
 var MT_BLOCK = {
   BEDROCK: ['STONE'], STONE: ['STONE'], DIRT: ['GROUND'], ASPHALT: ['ASPHALT'], ROADLINE: ['PAINT'],
   SIDEWALK: ['PAVER'], CURB: ['PAVER', { tu: 1, tv: 1, r: 0.80 }],
@@ -3888,7 +4352,7 @@ var MT_BLOCK = {
   WIN_WARM: ['WINDOW'], WIN_COOL: ['WINDOW'], WIN_WHITE: ['WINDOW'],
   ROOF_TAR: ['ROOF', { r: 0.78, g: 0.45 }], ROOF_GRAVEL: ['ROOF', { g: 1.0, w: 0.5 }],
   WATER: ['WATER'], SAND: ['GROUND'], WOOD: ['WOOD'], WOOD_DK: ['WOOD'], GRASS: ['FOLIAGE'],
-  ICE: ['ICE'], SNOW: ['SNOW'], LAMP_POLE: ['METAL', { r: 0.42, tu: 0, tv: 0 }], LAMP_LIGHT: ['EMISSIVE', { b: 9 }],
+  ICE: ['ICE'], SNOW: ['SNOW'], LAMP_POLE: ['METAL', { r: 0.48, tu: 0, tv: 0, m: 0.55 }], LAMP_LIGHT: ['EMISSIVE', { b: 7 }],
   NEON_PINK: ['NEON'], NEON_CYAN: ['NEON'], NEON_GREEN: ['NEON'], NEON_YELLOW: ['NEON'], NEON_RED: ['NEON'], NEON_PURPLE: ['NEON'],
   LAVA: ['LAVA', { b: 2.2 }], HOT_METAL: ['LAVA', { b: 1.6 }], COPPER: ['COPPER'],
   CARN_RED: ['PAINTED'], CARN_WHITE: ['PAINTED'], CARN_YELLOW: ['PAINTED'], CARN_PURPLE: ['PAINTED'], CARN_TEAL: ['PAINTED'],
@@ -3904,7 +4368,9 @@ var MT_BLOCK = {
   BENCH: ['WOOD'], CRANE: ['PAINTED', { r: 0.5, m: 0.4 }], SNOW_ICE: ['ICE', { r: 0.22 }], BOLT: ['EMISSIVE', { b: 6 }],
   SHOP_WARM: ['WINDOW', { b: 2.2 }], SHOP_COOL: ['WINDOW', { b: 2.2 }], SHOP_PINK: ['WINDOW', { b: 2.0 }], SHOP_GREEN: ['WINDOW', { b: 2.0 }],
   SIGN_PINK: ['SIGN'], SIGN_CYAN: ['SIGN'], SIGN_YELLOW: ['SIGN'], SIGN_GREEN: ['SIGN'], SIGN_RED: ['SIGN'], SIGN_WHITE: ['SIGN'],
-  BILLBOARD: ['SIGN', { b: 2.4 }],
+  BLADE_PINK: ['SIGN', { k: 2 }], BLADE_CYAN: ['SIGN', { k: 2 }], BLADE_YELLOW: ['SIGN', { k: 2 }], BLADE_GREEN: ['SIGN', { k: 2 }],
+  BLADE_RED: ['SIGN', { k: 2 }], BLADE_WHITE: ['SIGN', { k: 2 }],
+  BILLBOARD: ['SIGN', { b: 2.4, k: 1 }],
 };
 
 function TX_lut() {
@@ -3926,7 +4392,7 @@ function TX_lut() {
     q = (256 + id) * 4;
     d[q] = u8(p[3] * 16); d[q + 1] = u8(p[4] * 16); d[q + 2] = u8(p[5] * 255); d[q + 3] = u8(p[6] * 1000);
     q = (512 + id) * 4;
-    d[q] = u8(p[7] * 255); d[q + 1] = u8(p[8] * 255); d[q + 2] = u8(p[9] * 255); d[q + 3] = 0;
+    d[q] = u8(p[7] * 255); d[q + 1] = u8(p[8] * 255); d[q + 2] = u8(p[9] * 255); d[q + 3] = o.k | 0;
   }
   for (let s = 0; s < WG_STY.length && s < 16; s++) {
     const st = WG_STY[s], q = (768 + s) * 4;
@@ -4085,7 +4551,7 @@ float fogAmt(vec3 p) {
   // Height fog alone leaves the EDGE of the loaded world visible from the air. This
   // term is independent of altitude and climbs steeply to nearly opaque at the load
   // distance, measured horizontally because that is what the loader limits.
-  od += uFogFar * pow(clamp(length(d.xz) / uFarDist, 0.0, 1.5), 3.0);
+  od += uFogFar * pow(clamp(length(d.xz) / uFarDist, 0.0, 1.5), 4.5);
   return 1.0 - exp(-clamp(od, 0.0, 12.0));
 }
 // what the fog looks like along a view direction (camera -> scene)
@@ -4136,12 +4602,12 @@ vec3 skyColor(vec3 d, float stars) {
   float h = d.y;
   vec3 col = skyGradient(d);
   if (h > 0.0 && stars > 0.0) {
-    vec3 q = d * 110.0, g = floor(q);
+    vec3 q = d * 260.0, g = floor(q);
     float s = h31(g);
     float tw = 0.65 + 0.35 * sin(uTime * 2.0 + s * 40.0);
-    float st = smoothstep(0.9968, 1.0, s) * tw * smoothstep(0.04, 0.3, h);
-    float r = 1.0 - smoothstep(0.0, 0.42, length(fract(q) - 0.5));
-    col += mix(vec3(1.0, 0.86, 0.72), vec3(0.78, 0.88, 1.0), fract(s * 77.0)) * st * r * 3.0 * (1.0 - uStorm) * stars;
+    float st = smoothstep(0.9982, 1.0, s) * tw * smoothstep(0.04, 0.3, h);
+    float r = 1.0 - smoothstep(0.0, 0.40, length(fract(q) - 0.5));
+    col += mix(vec3(1.0, 0.86, 0.72), vec3(0.78, 0.88, 1.0), fract(s * 77.0)) * st * r * 4.0 * (1.0 - uStorm) * stars;
   }
   float md = dot(d, uMoonDir);
   float disc = smoothstep(0.99955, 0.99982, md);
@@ -4157,9 +4623,13 @@ vec3 skyColor(vec3 d, float stars) {
   float cov = mix(0.50, 0.36, uStorm);
   vec4 hi = cloudDeck(d, uCloudH + 70.0, cov + 0.05, 1.0);
   vec4 lo = cloudDeck(d, uCloudH, cov, 0.0);
-  col = col * (1.0 - hi.a) + hi.rgb;
-  col = col * (1.0 - lo.a) + lo.rgb;
-  return col;
+  // cloud hides what is behind it faster than it shows itself: a thin veil already swallows a star
+  col = col * pow(1.0 - hi.a, 3.0) + hi.rgb;
+  col = col * pow(1.0 - lo.a, 3.0) + lo.rgb;
+  // Low in the sky you look through as much haze as the far city does, so the
+  // horizon takes the colour of the fog and the skyline dissolves into it instead
+  // of standing pale against dark cloud.
+  return mix(col, fogColor(d), exp(-max(h, 0.0) * 6.5) * 0.94);
 }
 vec2 envUV(vec3 d) { return vec2(atan(d.z, d.x) * 0.15915494 + 0.5, d.y * 0.5 + 0.5); }
 `;
@@ -4469,7 +4939,7 @@ float glyphs(vec2 p, float seed) {
 // offset in the vertex), so each opening gets a frame and, when it is lit, a room:
 // a box intersected by the view ray, with a lamp on the ceiling, something against
 // the back wall, and blinds or curtains by a throw of the dice.
-void facade(int cls, vec3 wp, vec3 N0, vec3 T, vec3 V, float code, float fw, float emit, float boost, float kind,
+void facade(int cls, vec3 wp, vec3 N0, vec3 T, vec3 V, float code, float fw, float fwd, float emit, float boost, float kind,
             inout vec3 alb, inout float rough, inout float f0, inout vec3 emitCol, inout float metal) {
   vec3 base = alb;
   vec3 lc = mix(base, vec3(lum(base)), 0.30);                     // the colour of the light in the room
@@ -4482,7 +4952,7 @@ void facade(int cls, vec3 wp, vec3 N0, vec3 T, vec3 V, float code, float fw, flo
     vec2 q = vec2(ua * 0.5, wp.y / 3.0);
     float on = h21(floor(q) + N0.xz * 3.0);
     float pane = smoothstep(0.0, 0.12 + fw, min(fract(q.x), 1.0 - fract(q.x)));
-    if (lit) emitCol = base * emit * boost * pane * step(0.30, on) * (0.55 + 0.6 * fract(on * 7.0));
+    if (lit) emitCol = base * emit * boost * pane * step(0.30, on) * (0.85 + 0.9 * fract(on * 7.0));
     else emitCol = vec3(1.0, 0.62, 0.30) * step(0.93, on) * pane * 0.45;
     return;
   }
@@ -4555,7 +5025,7 @@ void facade(int cls, vec3 wp, vec3 N0, vec3 T, vec3 V, float code, float fw, flo
       }
     }
     // too far to make out a room: its average
-    room = mix(room, lc * emit * boost * 0.62, smoothstep(0.10, 0.45, fw));
+    room = mix(room, lc * emit * boost * 0.62, smoothstep(0.07, 0.30, fwd));
     emitCol = room * (1.0 - frame);
   } else {
     // an unlit window: dark glass, sometimes closed blinds, now and then a night light
@@ -4572,31 +5042,38 @@ void facade(int cls, vec3 wp, vec3 N0, vec3 T, vec3 V, float code, float fw, flo
   rough = mix(rough, 0.45, frame);
 }
 
-// A lit sign: blocky lettering, or a billboard with an advert on a loop.
-vec3 signFace(vec3 wp, vec3 N0, vec2 uv, float fw, vec3 base, float kind) {
-  if (kind > 0.5) {
-    vec2 q = uv / vec2(12.0, 6.0);
-    vec2 cell = floor(q);
-    float ad = floor(uTime * 0.12 + h21(cell) * 9.0);
-    vec2 r = h22(cell * 3.1 + ad * 1.7);
-    vec2 f = q - cell;
-    vec3 a = 0.5 + 0.5 * cos(6.2831853 * (r.x + vec3(0.0, 0.33, 0.67)));
-    vec3 b = 0.5 + 0.5 * cos(6.2831853 * (r.y + vec3(0.5, 0.1, 0.8)));
-    float band = smoothstep(0.45, 0.55, fract((f.x * 2.0 + f.y) * 2.0 + uTime * 0.05));
-    vec3 c = mix(a, b, band * 0.6) * (0.35 + 0.65 * smoothstep(0.9, 0.2, length(f - vec2(0.3 + 0.4 * r.x, 0.55))));
-    c += glyphs(vec2(f.x * 9.0, f.y * 3.0 - 0.3) + ad, r.x * 31.0) * step(0.1, f.y) * step(f.y, 0.45) * 1.4;
+// A lit sign. kind 0: the band over a shop, two glyphs to the block. kind 2: a neon
+// blade, one glyph to the block. kind 1: a billboard, an LED wall running adverts;
+// The code says which part of the panel this voxel is, so the picture spans it whole.
+vec3 signFace(vec3 wp, vec3 N0, vec2 uv, float fw, vec3 base, float kind, float code) {
+  if (kind > 0.5 && kind < 1.5) {
+    float lc = max(code - 128.0, 0.0), ia = floor(lc / 6.0 + 0.01);
+    vec2 p = vec2(ia + fract(uv.x), lc - ia * 6.0 + fract(uv.y)) / vec2(12.0, 6.0);
+    // one advert per panel: every voxel of it agrees on where the panel starts
+    vec2 sd = h22(vec2(floor(uv.x) - ia, floor(dot(wp - N0 * 0.5, abs(N0)))) + 7.0);
+    float clock = uTime * 0.09 + sd.x * 9.0, ad = floor(clock);
+    vec2 r = h22(vec2(ad, sd.y * 31.0) + 0.5);
+    vec3 ca = 0.5 + 0.5 * cos(6.2831853 * (r.x + vec3(0.0, 0.33, 0.67)));
+    vec3 cb = 0.5 + 0.5 * cos(6.2831853 * (r.y + vec3(0.55, 0.15, 0.80)));
+    vec3 c = mix(ca * 0.30, cb * 0.55, smoothstep(0.0, 1.0, p.x * 0.6 + p.y * 0.4 + 0.15 * sin(uTime * 0.5 + r.x * 6.0)));
+    // a mark on the left: a disc or a ring
+    float dl = length((p - vec2(0.22, 0.5)) * vec2(2.0, 1.0));
+    c = mix(c, vec3(1.0, 0.98, 0.92), (smoothstep(0.34, 0.31, dl) - smoothstep(0.21, 0.18, dl) * step(0.5, r.x)) * 0.9);
+    // and two lines of lettering beside it
+    if (p.x > 0.46 && p.x < 0.96) {
+      if (p.y > 0.50 && p.y < 0.82) c = mix(c, vec3(1.0, 0.98, 0.90), glyphs(vec2((p.x - 0.46) * 14.0, (p.y - 0.50) * 3.1), ad * 3.0 + 1.0));
+      else if (p.y > 0.20 && p.y < 0.38 && p.x < 0.88) c = mix(c, ca + 0.35, glyphs(vec2((p.x - 0.46) * 24.0, (p.y - 0.20) * 5.5), ad * 5.0 + 2.0) * 0.85);
+    }
     // the LED grid, until it is too fine to see
-    vec2 led = abs(fract(uv * 6.0) - 0.5);
-    c *= mix(1.0, smoothstep(0.48, 0.30, max(led.x, led.y)) * 1.35, clamp(0.05 / (fw + 1e-4), 0.0, 1.0));
-    return c * 0.9;
+    vec2 led = abs(fract(uv * 8.0) - 0.5);
+    c *= mix(1.0, smoothstep(0.50, 0.28, max(led.x, led.y)) * 1.35, clamp(0.035 / (fw + 1e-4), 0.0, 1.0));
+    return c * smoothstep(0.0, 0.05, fract(clock)) * 0.85;
   }
-  bool vertical = abs(N0.y) < 0.5 && h21(floor(wp.xz - N0.xz * 0.5) + 5.0) < 2.0;
-  vec2 p = abs(N0.y) > 0.5 ? uv : vec2(uv.x, uv.y);
-  // one glyph per block when the sign is a column, two when it is a band
-  float g = glyphs(vec2(p.x * 1.0, p.y) + 0.0, floor(wp.y * 0.0) + 7.0);
+  vec2 p = kind > 1.5 ? uv : vec2(uv.x * 2.0, uv.y);
+  float g = mix(glyphs(p, 7.0), 0.40, smoothstep(0.03, 0.14, fw));
   vec2 f = abs(fract(uv) - 0.5);
-  float edge = smoothstep(0.5, 0.42, max(f.x, f.y));
-  return base * (0.10 + 1.25 * g) * mix(1.0, edge, 0.35);
+  float casing = kind > 1.5 ? smoothstep(0.50, 0.44, max(f.x, f.y)) : smoothstep(0.50, 0.44, f.y);
+  return (base * (0.07 + 1.20 * g) + vec3(0.35) * g * g) * casing;
 }
 #endif
 
@@ -4765,12 +5242,12 @@ void main() {
       } else if (cls == MC_PAINTED) {
         alb *= 1.0 - 0.22 * smoothstep(0.55, 0.85, nc.a);
       } else if (cls == MC_GLASS || cls == MC_WINDOW) {
-        facade(cls, wp, N0, T, V, g3.g * 255.0, fw, emit, boost, kind, alb, rough, f0, emitCol, metal);
+        facade(cls, wp, N0, T, V, g3.g * 255.0, fw, dist * uPix, emit, boost, kind, alb, rough, f0, emitCol, metal);
         N = N0; cavity = 1.0;
         // rain running down the pane
         if (!upF) rough = clamp(rough + 0.10 * uWet * smoothstep(0.55, 0.8, noiseA(vec2(uv.x * 2.2, uv.y * 0.18 + uTime * 0.05), 3.0, fw).r), 0.03, 1.0);
       } else if (cls == MC_SIGN) {
-        emitCol = signFace(wp, N0, uv, fw, alb, kind) * emit * boost;
+        emitCol = signFace(wp, N0, uv, fw, alb, kind, g3.g * 255.0) * emit * boost;
         alb = vec3(0.012); N = N0; rough = 0.25; cavity = 1.0;
       }
 #else
@@ -4778,9 +5255,12 @@ void main() {
       else if (cls == MC_WINDOW || cls == MC_SIGN) { emitCol = alb * emit * boost * 0.7; alb = vec3(0.012); N = N0; }
 #endif
       if (cls == MC_EMISSIVE) {
+        // a lens: ribbed glass with a hot middle, not a flat white square
         vec2 f = abs(fract(uv) - 0.5);
-        emitCol = alb * emit * boost * (0.55 + 0.75 * smoothstep(0.5, 0.15, max(f.x, f.y)));
-        alb *= 0.2;
+        float m = max(f.x, f.y);
+        float rib = 0.82 + 0.18 * cos(fract(uv.x) * 37.7) * clamp(0.04 / (fw + 1e-4), 0.0, 1.0);
+        emitCol = alb * emit * boost * (0.10 + 1.25 * smoothstep(0.50, 0.05, m) * smoothstep(0.50, 0.05, m)) * rib;
+        alb *= 0.2; rough = 0.2;
       } else if (cls == MC_NEON) {
         float fk = 0.88 + 0.12 * sin(uTime * 26.0 + wp.x * 3.1 + wp.z * 1.7) - step(0.985, h21(vec2(floor(uTime * 9.0), floor(wp.x + wp.z)))) * 0.6;
         vec2 f = abs(fract(uv) - 0.5);
@@ -5912,7 +6392,15 @@ class VxFar {
         FR_side(op, f, bx, bz, base, h, wall, wx, wz, c.kind === W.BUILDING);
       }
     }
-    return { tx: tx, tz: tz, o: FR_upload(gl, op), w: FR_upload(gl, wa) };
+    // the tile's street lamps and neon, so the far city can glow in the fog as the near one does
+    const em = WG_emitters(x0, z0, x0 + FR_T, z0 + FR_T), keep = [];
+    for (let i = 0; i < em.length; i++) {
+      const e = em[i];
+      if (e[0] < x0 || e[0] >= x0 + FR_T || e[2] < z0 || e[2] >= z0 + FR_T) continue;
+      if (e[9] === 0) continue;                                     // lights with no glow of their own are not seen from afar
+      keep.push(e);
+    }
+    return { tx: tx, tz: tz, o: FR_upload(gl, op), w: FR_upload(gl, wa), emitters: keep };
   }
 
   draw(prog, planes, camX, camZ, which, maxDist) {
@@ -6071,6 +6559,7 @@ class VxCamera {
 
 var RD_MAXL = 512;            // lamps in the list
 var RD_CELL = 12;             // lamps per grid cell
+var RD_MAXV = 2560;           // glows in the air, near and far
 // sub-pixel offsets, Halton(2,3)
 var RD_JIT = (function () {
   const h = (i, b) => { let f = 1, r = 0; while (i > 0) { f /= b; r += f * (i % b); i = Math.floor(i / b); } return r; };
@@ -6115,7 +6604,7 @@ class VxRenderer {
     gl.bindBuffer(gl.ARRAY_BUFFER, this.stripVbo);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, 0, 1, 0, -1, 1, 1, 1]), gl.STATIC_DRAW);
 
-    this.glowData = new Float32Array(8 * 640);
+    this.glowData = new Float32Array(8 * RD_MAXV);
     this.glowVbo = gl.createBuffer();
     this.glowVao = gl.createVertexArray();
     gl.bindVertexArray(this.glowVao);
@@ -6161,7 +6650,7 @@ class VxRenderer {
     this.lightTex = this.floatTex(RD_MAXL, 2, this.lightData);
     this.gridTex = this.floatTex(96, 32, this.gridData);
     this.lightKey = '';
-    this.volStatic = new Float32Array(8 * 560); this.volN = 0;
+    this.volStatic = new Float32Array(8 * (RD_MAXV - 64)); this.volN = 0;
     this.dyn = new Float32Array(32); this.dynC = new Float32Array(32); this.dynN = 0;
     this.caps = [];              // filled by the game: { x, y, z, h, lx, ly, lz, s }
     this.capA = new Float32Array(32); this.capL = new Float32Array(32);
@@ -6216,11 +6705,11 @@ class VxRenderer {
   static defaults() {
     return {
       skyTint: [0.60, 0.70, 0.90], skyI: 2.1, blockI: 1.0,
-      fog: [0.082, 0.082, 0.092], fogD: 0.020, fogK: 0.045, fogB: 0.0018, fogBase: 22, fogFar: 4.6,
+      fog: [0.082, 0.082, 0.092], fogD: 0.017, fogK: 0.045, fogB: 0.0010, fogBase: 22, fogFar: 4.6,
       horizon: [0.046, 0.058, 0.076], zenith: [0.005, 0.009, 0.019],
       cloudH: 175, storm: 0, flash: 0,
-      bevel: 0.6, wet: 1.0, spec: 0.55, vol: 0.034, rainLit: 0.55,
-      exposure: 2.3, autoExp: 1, expKey: 0.060, bloom: 0.50, streak: 0.5, ca: 0.0011, sharp: 0.45,
+      bevel: 0.6, wet: 1.0, spec: 0.55, vol: 0.16, rainLit: 0.55,
+      exposure: 2.9, autoExp: 1, expKey: 0.060, bloom: 0.50, streak: 0.5, ca: 0.0011, sharp: 0.45,
       bloomThr: 0.95, bloomKnee: 0.55,
       vig: 0.30, sat: 0.96, contrast: 1.06, lift: [0.003, 0.005, 0.009], gain: [1.0, 1.0, 1.02],
       grain: 0.020, rainAlpha: 0.85, rainCount: 5600, wind: 0.5, fade: 1,
@@ -6349,16 +6838,26 @@ class VxRenderer {
   // ── lamps ───────────────────────────────────────────────────────────────
   // Rebuilt only when chunks arrive or leave, or the camera crosses into another
   // grid cell: a few hundred lamps sorted into a 32 x 32 grid is nothing.
-  updateLights(world, cam) {
+  updateLights(world, cam, far) {
     const ccx = Math.floor(cam.x / 16), ccz = Math.floor(cam.z / 16);
-    const key = (world.lightVer || 0) + ':' + ccx + ':' + ccz;
+    const key = (world.lightVer || 0) + ':' + ccx + ':' + ccz + ':' + (far ? far.stats.built : 0);
     if (key === this.lightKey) return;
     this.lightKey = key;
     const gl = this.gl, L = this.lightData, Gd = this.gridData;
     let list = [];
+    let nv = 0;
+    const VS = this.volStatic;
+    const glow = (e) => {
+      if (nv >= RD_MAXV - 64 || e[9] === 0) return;
+      const q = nv++ * 8, I = e[6], kind = e[8] || 0;
+      VS[q] = e[0]; VS[q + 1] = e[1]; VS[q + 2] = e[2]; VS[q + 3] = e[9] || (kind === 0 ? 10 : 6.5);
+      VS[q + 4] = e[3] * I; VS[q + 5] = e[4] * I; VS[q + 6] = e[5] * I; VS[q + 7] = kind;
+    };
     for (const c of world.chunks.values()) {
       const e = c.emitters;
       for (let i = 0; i < e.length; i++) {
+        glow(e[i]);
+        if (e[i][7] < 1) continue;                      // a glow with no reach lights nothing
         const dx = e[i][0] - cam.x, dz = e[i][2] - cam.z, d2 = dx * dx + dz * dz;
         if (d2 < 236 * 236) list.push({ e: e[i], d2: d2 });
       }
@@ -6366,8 +6865,6 @@ class VxRenderer {
     if (list.length > RD_MAXL) { list.sort((a, b) => a.d2 - b.d2); list.length = RD_MAXL; }
     const cells = this.cells || (this.cells = Array.from({ length: 1024 }, () => []));
     for (let i = 0; i < 1024; i++) cells[i].length = 0;
-    let nv = 0;
-    const VS = this.volStatic;
     for (let i = 0; i < list.length; i++) {
       const e = list[i].e, I = e[6], R = e[7], kind = e[8] || 0;
       L[i * 4] = e[0]; L[i * 4 + 1] = e[1]; L[i * 4 + 2] = e[2]; L[i * 4 + 3] = R;
@@ -6381,11 +6878,18 @@ class VxRenderer {
         if (ddx * ddx + ddz * ddz > Rs * Rs) continue;
         cells[(cz & 31) * 32 + (cx & 31)].push(i);
       }
-      // its glow in the air
-      if (nv < 560 && list[i].d2 < 190 * 190 && e[9] !== 0) {
-        const q = nv++ * 8, vr = e[9] || (kind === 0 ? 10 : 6.5);
-        VS[q] = e[0]; VS[q + 1] = e[1]; VS[q + 2] = e[2]; VS[q + 3] = vr;
-        VS[q + 4] = e[3] * I; VS[q + 5] = e[4] * I; VS[q + 6] = e[5] * I; VS[q + 7] = kind;
+    }
+    // beyond the detailed chunks the far city brings its own lamps: glow only, no light list
+    if (far) {
+      const lim = (this.farDist - 30) * (this.farDist - 30);
+      for (const t of far.tiles.values()) {
+        const e = t.emitters;
+        if (!e) continue;
+        for (let i = 0; i < e.length && nv < RD_MAXV - 64; i++) {
+          const dx = e[i][0] - cam.x, dz = e[i][2] - cam.z;
+          if (dx * dx + dz * dz > lim || world.chunks.has(JB_key(Math.floor(e[i][0] / 16), Math.floor(e[i][2] / 16)))) continue;
+          glow(e[i]);
+        }
       }
     }
     this.volN = nv;
@@ -6428,7 +6932,7 @@ class VxRenderer {
       const o = i * 8, I = D[o + 7] * 0.9;
       D[o + 3] = Math.max(2.5, D[o + 3] * 1.7); D[o + 4] *= I; D[o + 5] *= I; D[o + 6] *= I; D[o + 7] = 1;
     }
-    const room = Math.min(this.volN, 640 - n);
+    const room = Math.min(this.volN, RD_MAXV - n);
     D.set(this.volStatic.subarray(0, room * 8), n * 8);
     return n + room;
   }
@@ -6467,7 +6971,7 @@ class VxRenderer {
     const vpClean = cam.vp;
     cam.vp = this.vpj;
 
-    this.updateLights(world, cam);
+    this.updateLights(world, cam, far);
     const nVol = this.updateDynamic(cam);
     this.updateEnv(cam);
 
@@ -7928,8 +8432,8 @@ function EN_lightProbe(x, y, z, L) {
     if (!c) continue;
     for (const e of c.emitters) {
       const dx = e[0] - x, dy = e[1] - (y + 1), dz = e[2] - z, d = Math.hypot(dx, dy, dz);
-      if (d > 17) continue;
-      const f = (1 - d / 17), k = f * f * e[6];
+      if (d > e[7]) continue;
+      const f = (1 - d / e[7]), k = f * f * e[6];
       r += e[3] * k; g += e[4] * k; b += e[5] * k;
     }
   }

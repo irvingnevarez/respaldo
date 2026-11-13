@@ -181,7 +181,7 @@ float glyphs(vec2 p, float seed) {
 // offset in the vertex), so each opening gets a frame and, when it is lit, a room:
 // a box intersected by the view ray, with a lamp on the ceiling, something against
 // the back wall, and blinds or curtains by a throw of the dice.
-void facade(int cls, vec3 wp, vec3 N0, vec3 T, vec3 V, float code, float fw, float emit, float boost, float kind,
+void facade(int cls, vec3 wp, vec3 N0, vec3 T, vec3 V, float code, float fw, float fwd, float emit, float boost, float kind,
             inout vec3 alb, inout float rough, inout float f0, inout vec3 emitCol, inout float metal) {
   vec3 base = alb;
   vec3 lc = mix(base, vec3(lum(base)), 0.30);                     // the colour of the light in the room
@@ -194,7 +194,7 @@ void facade(int cls, vec3 wp, vec3 N0, vec3 T, vec3 V, float code, float fw, flo
     vec2 q = vec2(ua * 0.5, wp.y / 3.0);
     float on = h21(floor(q) + N0.xz * 3.0);
     float pane = smoothstep(0.0, 0.12 + fw, min(fract(q.x), 1.0 - fract(q.x)));
-    if (lit) emitCol = base * emit * boost * pane * step(0.30, on) * (0.55 + 0.6 * fract(on * 7.0));
+    if (lit) emitCol = base * emit * boost * pane * step(0.30, on) * (0.85 + 0.9 * fract(on * 7.0));
     else emitCol = vec3(1.0, 0.62, 0.30) * step(0.93, on) * pane * 0.45;
     return;
   }
@@ -267,7 +267,7 @@ void facade(int cls, vec3 wp, vec3 N0, vec3 T, vec3 V, float code, float fw, flo
       }
     }
     // too far to make out a room: its average
-    room = mix(room, lc * emit * boost * 0.62, smoothstep(0.10, 0.45, fw));
+    room = mix(room, lc * emit * boost * 0.62, smoothstep(0.07, 0.30, fwd));
     emitCol = room * (1.0 - frame);
   } else {
     // an unlit window: dark glass, sometimes closed blinds, now and then a night light
@@ -284,31 +284,38 @@ void facade(int cls, vec3 wp, vec3 N0, vec3 T, vec3 V, float code, float fw, flo
   rough = mix(rough, 0.45, frame);
 }
 
-// A lit sign: blocky lettering, or a billboard with an advert on a loop.
-vec3 signFace(vec3 wp, vec3 N0, vec2 uv, float fw, vec3 base, float kind) {
-  if (kind > 0.5) {
-    vec2 q = uv / vec2(12.0, 6.0);
-    vec2 cell = floor(q);
-    float ad = floor(uTime * 0.12 + h21(cell) * 9.0);
-    vec2 r = h22(cell * 3.1 + ad * 1.7);
-    vec2 f = q - cell;
-    vec3 a = 0.5 + 0.5 * cos(6.2831853 * (r.x + vec3(0.0, 0.33, 0.67)));
-    vec3 b = 0.5 + 0.5 * cos(6.2831853 * (r.y + vec3(0.5, 0.1, 0.8)));
-    float band = smoothstep(0.45, 0.55, fract((f.x * 2.0 + f.y) * 2.0 + uTime * 0.05));
-    vec3 c = mix(a, b, band * 0.6) * (0.35 + 0.65 * smoothstep(0.9, 0.2, length(f - vec2(0.3 + 0.4 * r.x, 0.55))));
-    c += glyphs(vec2(f.x * 9.0, f.y * 3.0 - 0.3) + ad, r.x * 31.0) * step(0.1, f.y) * step(f.y, 0.45) * 1.4;
+// A lit sign. kind 0: the band over a shop, two glyphs to the block. kind 2: a neon
+// blade, one glyph to the block. kind 1: a billboard, an LED wall running adverts;
+// The code says which part of the panel this voxel is, so the picture spans it whole.
+vec3 signFace(vec3 wp, vec3 N0, vec2 uv, float fw, vec3 base, float kind, float code) {
+  if (kind > 0.5 && kind < 1.5) {
+    float lc = max(code - 128.0, 0.0), ia = floor(lc / 6.0 + 0.01);
+    vec2 p = vec2(ia + fract(uv.x), lc - ia * 6.0 + fract(uv.y)) / vec2(12.0, 6.0);
+    // one advert per panel: every voxel of it agrees on where the panel starts
+    vec2 sd = h22(vec2(floor(uv.x) - ia, floor(dot(wp - N0 * 0.5, abs(N0)))) + 7.0);
+    float clock = uTime * 0.09 + sd.x * 9.0, ad = floor(clock);
+    vec2 r = h22(vec2(ad, sd.y * 31.0) + 0.5);
+    vec3 ca = 0.5 + 0.5 * cos(6.2831853 * (r.x + vec3(0.0, 0.33, 0.67)));
+    vec3 cb = 0.5 + 0.5 * cos(6.2831853 * (r.y + vec3(0.55, 0.15, 0.80)));
+    vec3 c = mix(ca * 0.30, cb * 0.55, smoothstep(0.0, 1.0, p.x * 0.6 + p.y * 0.4 + 0.15 * sin(uTime * 0.5 + r.x * 6.0)));
+    // a mark on the left: a disc or a ring
+    float dl = length((p - vec2(0.22, 0.5)) * vec2(2.0, 1.0));
+    c = mix(c, vec3(1.0, 0.98, 0.92), (smoothstep(0.34, 0.31, dl) - smoothstep(0.21, 0.18, dl) * step(0.5, r.x)) * 0.9);
+    // and two lines of lettering beside it
+    if (p.x > 0.46 && p.x < 0.96) {
+      if (p.y > 0.50 && p.y < 0.82) c = mix(c, vec3(1.0, 0.98, 0.90), glyphs(vec2((p.x - 0.46) * 14.0, (p.y - 0.50) * 3.1), ad * 3.0 + 1.0));
+      else if (p.y > 0.20 && p.y < 0.38 && p.x < 0.88) c = mix(c, ca + 0.35, glyphs(vec2((p.x - 0.46) * 24.0, (p.y - 0.20) * 5.5), ad * 5.0 + 2.0) * 0.85);
+    }
     // the LED grid, until it is too fine to see
-    vec2 led = abs(fract(uv * 6.0) - 0.5);
-    c *= mix(1.0, smoothstep(0.48, 0.30, max(led.x, led.y)) * 1.35, clamp(0.05 / (fw + 1e-4), 0.0, 1.0));
-    return c * 0.9;
+    vec2 led = abs(fract(uv * 8.0) - 0.5);
+    c *= mix(1.0, smoothstep(0.50, 0.28, max(led.x, led.y)) * 1.35, clamp(0.035 / (fw + 1e-4), 0.0, 1.0));
+    return c * smoothstep(0.0, 0.05, fract(clock)) * 0.85;
   }
-  bool vertical = abs(N0.y) < 0.5 && h21(floor(wp.xz - N0.xz * 0.5) + 5.0) < 2.0;
-  vec2 p = abs(N0.y) > 0.5 ? uv : vec2(uv.x, uv.y);
-  // one glyph per block when the sign is a column, two when it is a band
-  float g = glyphs(vec2(p.x * 1.0, p.y) + 0.0, floor(wp.y * 0.0) + 7.0);
+  vec2 p = kind > 1.5 ? uv : vec2(uv.x * 2.0, uv.y);
+  float g = mix(glyphs(p, 7.0), 0.40, smoothstep(0.03, 0.14, fw));
   vec2 f = abs(fract(uv) - 0.5);
-  float edge = smoothstep(0.5, 0.42, max(f.x, f.y));
-  return base * (0.10 + 1.25 * g) * mix(1.0, edge, 0.35);
+  float casing = kind > 1.5 ? smoothstep(0.50, 0.44, max(f.x, f.y)) : smoothstep(0.50, 0.44, f.y);
+  return (base * (0.07 + 1.20 * g) + vec3(0.35) * g * g) * casing;
 }
 #endif
 
@@ -477,12 +484,12 @@ void main() {
       } else if (cls == MC_PAINTED) {
         alb *= 1.0 - 0.22 * smoothstep(0.55, 0.85, nc.a);
       } else if (cls == MC_GLASS || cls == MC_WINDOW) {
-        facade(cls, wp, N0, T, V, g3.g * 255.0, fw, emit, boost, kind, alb, rough, f0, emitCol, metal);
+        facade(cls, wp, N0, T, V, g3.g * 255.0, fw, dist * uPix, emit, boost, kind, alb, rough, f0, emitCol, metal);
         N = N0; cavity = 1.0;
         // rain running down the pane
         if (!upF) rough = clamp(rough + 0.10 * uWet * smoothstep(0.55, 0.8, noiseA(vec2(uv.x * 2.2, uv.y * 0.18 + uTime * 0.05), 3.0, fw).r), 0.03, 1.0);
       } else if (cls == MC_SIGN) {
-        emitCol = signFace(wp, N0, uv, fw, alb, kind) * emit * boost;
+        emitCol = signFace(wp, N0, uv, fw, alb, kind, g3.g * 255.0) * emit * boost;
         alb = vec3(0.012); N = N0; rough = 0.25; cavity = 1.0;
       }
 #else
@@ -490,9 +497,12 @@ void main() {
       else if (cls == MC_WINDOW || cls == MC_SIGN) { emitCol = alb * emit * boost * 0.7; alb = vec3(0.012); N = N0; }
 #endif
       if (cls == MC_EMISSIVE) {
+        // a lens: ribbed glass with a hot middle, not a flat white square
         vec2 f = abs(fract(uv) - 0.5);
-        emitCol = alb * emit * boost * (0.55 + 0.75 * smoothstep(0.5, 0.15, max(f.x, f.y)));
-        alb *= 0.2;
+        float m = max(f.x, f.y);
+        float rib = 0.82 + 0.18 * cos(fract(uv.x) * 37.7) * clamp(0.04 / (fw + 1e-4), 0.0, 1.0);
+        emitCol = alb * emit * boost * (0.10 + 1.25 * smoothstep(0.50, 0.05, m) * smoothstep(0.50, 0.05, m)) * rib;
+        alb *= 0.2; rough = 0.2;
       } else if (cls == MC_NEON) {
         float fk = 0.88 + 0.12 * sin(uTime * 26.0 + wp.x * 3.1 + wp.z * 1.7) - step(0.985, h21(vec2(floor(uTime * 9.0), floor(wp.x + wp.z)))) * 0.6;
         vec2 f = abs(fract(uv) - 0.5);
