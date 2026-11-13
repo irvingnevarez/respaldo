@@ -100,7 +100,7 @@ class VxFar {
       else if (c.kind === W.BUILDING && c.b) { const st = WG_STY[c.b.st]; wall = st.wall; roof = st.roof; blk = roof; }
       const rnd = NZ_f(wx, wz, 3);
       // the top of the column
-      FR_quad(op, 2, bx, h, bz, FR_CELL, 0, FR_CELL, blk, 0.93 + 0.14 * rnd, 0, 0.62);
+      FR_quad(op, 2, bx, h, bz, FR_CELL, 0, FR_CELL, blk, 0.93 + 0.14 * rnd, 0, 0.80, 0.80, 0);
       // side faces where the neighbour is lower
       const nb = [hgt[(i + 1) * G + j], hgt[(i - 1) * G + j], hgt[i * G + j + 1], hgt[i * G + j - 1]];
       const fc = [0, 1, 4, 5];
@@ -108,10 +108,9 @@ class VxFar {
         const lo = nb[q];
         if (lo >= h) continue;
         const f = fc[q];
-        const sky = 0.08 + 0.28 * Math.max(0, (f === 0 ? 0.43 : f === 1 ? -0.43 : f === 4 ? 0.60 : -0.60));
         // water or ground below: stop at the waterline or the street
         const base = Math.max(lo, c.kind === W.BUILDING ? WG_GY + 2 : 0);
-        FR_side(op, f, bx, bz, base, h, wall, sky, wx, wz, c.kind === W.BUILDING);
+        FR_side(op, f, bx, bz, base, h, wall, wx, wz, c.kind === W.BUILDING);
       }
     }
     return { tx: tx, tz: tz, o: FR_upload(gl, op), w: FR_upload(gl, wa) };
@@ -139,18 +138,19 @@ class VxFar {
 }
 
 // One face of a box, in the terrain vertex format. For a +y face (f=2) the box is
-// the cell's top plane at height y; w,d are the cell footprint.
-function FR_quad(m, f, x, y, z, w, hh, d, blk, vr, emit, sky) {
+// the cell's top plane at height y; w,d are the cell footprint. `sky` and `moon`
+// are visibilities, as the baker stores them; `code` 255 marks a far window band.
+function FR_quad(m, f, x, y, z, w, hh, d, blk, vr, emit, sky, moon, code) {
   BX_ensure(m, 4);
   const F = BX_FACE[f];
   const x1 = x + w, y1 = y + hh, z1 = z + d;
   const r = BK_RGB[blk * 3] * vr, g = BK_RGB[blk * 3 + 1] * vr, b = BK_RGB[blk * 3 + 2] * vr;
   const v0 = m.nv, fl = BK_FLAGS[blk];
-  const s = Math.min(255, sky * 255), em = Math.min(255, Math.round(emit / 4 * 255));
+  const s = Math.min(255, sky * 255), mo = Math.min(255, moon * 255), em = Math.min(255, Math.round(emit / 4 * 255));
   for (let c = 0; c < 4; c++) {
     const p = F.verts[c].p, o = (v0 + c) * 16, dd = m.v;
-    dd[o] = p[0] ? x1 : x; dd[o + 1] = p[1] ? y1 : y; dd[o + 2] = p[2] ? z1 : z; dd[o + 3] = 0;
-    dd[o + 4] = blk; dd[o + 5] = f; dd[o + 6] = 3; dd[o + 7] = fl;
+    dd[o] = p[0] ? x1 : x; dd[o + 1] = p[1] ? y1 : y; dd[o + 2] = p[2] ? z1 : z; dd[o + 3] = code;
+    dd[o + 4] = blk; dd[o + 5] = f; dd[o + 6] = mo; dd[o + 7] = fl;
     dd[o + 8] = Math.min(255, r); dd[o + 9] = Math.min(255, g); dd[o + 10] = Math.min(255, b); dd[o + 11] = em;
     dd[o + 12] = s; dd[o + 13] = 0; dd[o + 14] = 0; dd[o + 15] = 0;
   }
@@ -162,16 +162,17 @@ function FR_quad(m, f, x, y, z, w, hh, d, blk, vr, emit, sky) {
 // A vertical wall of a column, from `y0` to `y1`, in floors: a wall band and a
 // window band, the window picked lit or dark by hash. From far away these read as
 // rows of lit windows, which is the whole look of a skyline at night.
-function FR_side(m, f, bx, bz, y0, y1, wall, sky, wx, wz, windows) {
+function FR_side(m, f, bx, bz, y0, y1, wall, wx, wz, windows) {
   const FH = 6;
   for (let y = y0; y < y1; ) {
     const fl = Math.floor((y - WG_BASE) / FH);
     const rel = (y - WG_BASE) - fl * FH;
-    let h, blk, em = 0;
+    let h, blk, em = 0, code = 0;
     if (windows && y >= WG_BASE + FH) {
       if (rel < 3) { h = Math.min(3 - rel, y1 - y); blk = wall; }
       else {
         h = Math.min(FH - rel, y1 - y);
+        code = 255;
         const k = NZ_f(wx * 7 + f, fl, wz * 3 + 5);
         if (k < 0.34) { blk = k < 0.20 ? BK.WIN_WARM : (k < 0.30 ? BK.WIN_COOL : BK.WIN_WHITE); em = BK_EMIT[blk]; }
         else blk = BK.GLASS_BLUE;
@@ -184,7 +185,7 @@ function FR_side(m, f, bx, bz, y0, y1, wall, sky, wx, wz, windows) {
     else if (f === 1) { w = 0; }
     else if (f === 4) { z = bz + FR_CELL; d = 0; }
     else { d = 0; }
-    FR_quad(m, f, x, y, z, w, h, d, blk, 0.92 + 0.16 * NZ_f(wx + y, wz, f), em, em ? 0 : sky);
+    FR_quad(m, f, x, y, z, w, h, d, blk, em ? 1 : 0.92 + 0.16 * NZ_f(wx + y, wz, f), em, 0.33, 0.45, code);
     y += h;
   }
 }
@@ -196,9 +197,9 @@ function FR_water(m, bx, bz) {
   for (let c = 0; c < 4; c++) {
     const p = F.verts[c].p, o = (v0 + c) * 16, dd = m.v;
     dd[o] = bx + (p[0] ? FR_CELL : 0); dd[o + 1] = WG_SEA + 1; dd[o + 2] = bz + (p[2] ? FR_CELL : 0); dd[o + 3] = 0;
-    dd[o + 4] = BK.WATER; dd[o + 5] = 2; dd[o + 6] = 3; dd[o + 7] = 4;
+    dd[o + 4] = BK.WATER; dd[o + 5] = 2; dd[o + 6] = 200; dd[o + 7] = 4;
     dd[o + 8] = 16; dd[o + 9] = 42; dd[o + 10] = 62; dd[o + 11] = 0;
-    dd[o + 12] = 150; dd[o + 13] = 0; dd[o + 14] = 0; dd[o + 15] = 0;
+    dd[o + 12] = 215; dd[o + 13] = 0; dd[o + 14] = 0; dd[o + 15] = 0;
   }
   const I = m.i, ni = m.ni;
   I[ni] = v0; I[ni + 1] = v0 + 1; I[ni + 2] = v0 + 2; I[ni + 3] = v0; I[ni + 4] = v0 + 2; I[ni + 5] = v0 + 3;

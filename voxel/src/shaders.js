@@ -1,19 +1,34 @@
 // ═══════════════════════════════════════════════════════════════════════
-//  SHADERS — every GLSL program in the game, as strings.
+//  SHADERS — shared GLSL and the geometry programs.
 //
-//  Lighting arrives pre-baked in the vertices (see bake.js), so the terrain
-//  shader does very little: it multiplies albedo by that light, adds the few
-//  things that have to be per-pixel (voxel bevel, wet sheen, emission, fog) and
-//  writes linear HDR. Everything is tone-mapped and graded afterwards, in
-//  display space, in the composite pass.
+//  The renderer is deferred. Geometry is drawn once into a G-buffer and carries
+//  no lighting code at all: it writes what the surface IS (colour, normal, block
+//  id) and the light the baker stored in its vertices. Everything expensive —
+//  materials, lamps, reflections, fog — happens once per visible pixel in the
+//  lighting pass (sh_light.js), so a wall hidden behind another costs nothing.
+//
+//  G-buffer, four RGBA8 targets and a depth texture:
+//    0  albedo rgb (as authored, sRGB)        a  emission / 4
+//    1  normal * 0.5 + 0.5                    a  block id / 255   (255 entity, 254 particle)
+//    2  baked lamp rgb / 2                    a  baked sky visibility
+//    3  r baked moon visibility   g facade code / 255   b rim   a 1 for things that move
 // ═══════════════════════════════════════════════════════════════════════
 
-// Shared by every fragment shader that needs the sky: the sky pass itself, and
-// anything that reflects it (water, wet streets, glass).
+var SH_HEAD = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
+`;
+
+// Shared by everything that needs the air and the sky.
 var SH_COMMON = `
-const vec3 VXN[6] = vec3[6](vec3(1.,0.,0.), vec3(-1.,0.,0.), vec3(0.,1.,0.), vec3(0.,-1.,0.), vec3(0.,0.,1.), vec3(0.,0.,-1.));
+  const vec3 VXN[6] = vec3[6](vec3(1.,0.,0.), vec3(-1.,0.,0.), vec3(0.,1.,0.), vec3(0.,-1.,0.), vec3(0.,0.,1.), vec3(0.,0.,-1.));
 float h31(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
 float h21(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+vec2 h22(vec2 p) { vec3 q = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973)); q += dot(q, q.yzx + 33.33); return fract((q.xx + q.yz) * q.zy); }
+// interleaved gradient noise: a cheap screen-space dither that TAA averages away
+float ign(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }
+float lum(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 
 uniform vec3 uCam;
 uniform vec3 uMoonDir;
@@ -22,13 +37,12 @@ uniform vec3 uZenith;
 uniform float uTime;
 uniform float uCloudH;
 uniform float uStorm;
+uniform float uBolt;      // lightning, 0..1
 
 // Exponential height fog, integrated along the ray from the camera to p. Fog pools
 // near the street and thins with altitude, so a ray that spends its length in clean
 // air high above the city is barely fogged, while one that runs along a canyon
-// floor is swallowed. Using only the fragment's own height — which this did at
-// first — fogged an aerial view as heavily as a street, and from a rooftop the city
-// vanished. Closed form: od = a e^{-k h0} (1 - e^{-k dy}) / (k dy / dist).
+// floor is swallowed. Closed form: od = a e^{-k h0} (1 - e^{-k dy}) / (k dy / dist).
 uniform vec3 uFog;
 uniform float uFogD;      // density at the baseline height
 uniform float uFogK;      // how fast it thins with altitude
@@ -44,363 +58,147 @@ float fogAmt(vec3 p) {
   // a level ray has no altitude change to integrate over
   float od = abs(kdy) > 1e-3 ? base * (1.0 - exp(-kdy)) * dist / kdy : base * dist;
   od += uFogB * dist;
-  // Height fog alone leaves the EDGE of the loaded world visible from the air: look
-  // down from a rooftop and the city simply stops, a floating island. This term is
-  // independent of altitude and climbs steeply to nearly opaque at the load
-  // distance, so the world always dissolves before it ends.
-  // measured on the HORIZONTAL distance, because that is what the loader limits: from
-  // 150 blocks up even a street directly below is far away in 3D and would be fogged out
+  // Height fog alone leaves the EDGE of the loaded world visible from the air. This
+  // term is independent of altitude and climbs steeply to nearly opaque at the load
+  // distance, measured horizontally because that is what the loader limits.
   od += uFogFar * pow(clamp(length(d.xz) / uFarDist, 0.0, 1.5), 3.0);
   return 1.0 - exp(-clamp(od, 0.0, 12.0));
 }
-
-vec3 skyColor(vec3 d) {
-  float h = d.y;
-  vec3 col = mix(uHorizon, uZenith, pow(clamp(h, 0.0, 1.0), 0.5));
-  // sodium glow of the city hugging the horizon
-  col += vec3(0.050, 0.028, 0.012) * exp(-abs(h) * 9.0) * 0.8;
-  col = mix(col, uFog, clamp(-h * 5.0, 0.0, 1.0));
-  if (h > 0.0) {                                     // stars
-    vec3 q = d * 90.0, g = floor(q);
-    float s = h31(g);
-    float tw = 0.65 + 0.35 * sin(uTime * 2.0 + s * 40.0);
-    float st = smoothstep(0.9965, 1.0, s) * tw * smoothstep(0.04, 0.3, h);
-    float r = 1.0 - smoothstep(0.0, 0.45, length(fract(q) - 0.5));
-    col += vec3(0.85, 0.9, 1.0) * st * r * 2.5 * (1.0 - uStorm);
-  }
-  float md = dot(d, uMoonDir);                       // the moon: disc, halo, glare
-  col += vec3(1.0, 0.96, 0.88) * smoothstep(0.99962, 0.99985, md) * 7.0;
-  col += vec3(0.55, 0.65, 0.90) * pow(max(md, 0.0), 220.0) * 0.9;
-  col += vec3(0.28, 0.38, 0.62) * pow(max(md, 0.0), 18.0) * 0.35;
-  if (h > 0.02) {                                    // blocky clouds on a plane
-    float t = (uCloudH - uCam.y) / h;
-    vec3 p = uCam + d * t;
-    vec2 uv = p.xz * 0.012 + vec2(uTime * 0.006, uTime * 0.002);
-    float n = 0.55 * h21(floor(uv * 3.0)) + 0.30 * h21(floor(uv * 7.0) + 11.0) + 0.15 * h21(floor(uv * 15.0) + 23.0);
-    float cov = smoothstep(0.57, 0.74, n) * smoothstep(0.03, 0.28, h);
-    float lit = 0.25 + 0.75 * pow(max(dot(normalize(vec3(d.x, 0.0, d.z) + 1e-4), normalize(vec3(uMoonDir.x, 0.0, uMoonDir.z))), 0.0), 3.0);
-    vec3 cc = mix(vec3(0.011, 0.014, 0.020), vec3(0.075, 0.085, 0.108), lit * (0.5 + 0.5 * h21(floor(uv * 7.0) + 3.0)));
-    cc += vec3(0.030, 0.018, 0.009) * (1.0 - h);
-    col = mix(col, cc, cov * 0.80);
-  }
-  return col;
-}
+// what the fog looks like along a view direction (camera -> scene)
+vec3 fogColor(vec3 rd) { return uFog * (1.0 + 0.8 * pow(max(dot(rd, uMoonDir), 0.0), 6.0)); }
+// local fog density at a height, relative to street level (for light scattering)
+float fogDensityAt(float y) { return exp(-uFogK * max(y - uFogBase, -8.0)); }
 `;
 
-var SH_SKY_VS = `#version 300 es
-precision highp float;
-out vec2 vNdc;
-void main() {
-  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
-  vNdc = p * 2.0 - 1.0;
-  gl_Position = vec4(vNdc, 1.0, 1.0);
-}`;
+// The sky: gradient, stars, moon and two decks of cloud lit by the moon from
+// above and by the city from below. Needs noise A.
+var SH_SKY = `
+uniform sampler2D uNoiseA;
+vec3 skyGradient(vec3 d) {
+  float h = d.y;
+  vec3 col = mix(uHorizon, uZenith, pow(clamp(h, 0.0, 1.0), 0.5));
+  col += vec3(0.050, 0.028, 0.012) * exp(-abs(h) * 9.0) * 0.8;      // sodium glow hugging the horizon
+  return mix(col, uFog, clamp(-h * 5.0, 0.0, 1.0));
+}
+float cloudDensity(vec2 p, float cov) {
+  float n = textureLod(uNoiseA, p * 0.00042, 0.0).r * 0.60;
+  n += textureLod(uNoiseA, p * 0.00131 + vec2(0.37, 0.11), 0.0).a * 0.27;
+  n += textureLod(uNoiseA, p * 0.0047 + vec2(0.71, 0.53), 0.0).r * 0.13;
+  return smoothstep(cov, cov + 0.20, n);
+}
+// rgb premultiplied by coverage, coverage
+vec4 cloudDeck(vec3 d, float height, float cov, float seed) {
+  float t = (height - uCam.y) / max(d.y, 1e-3);
+  if (d.y < 0.012 || t < 0.0) return vec4(0.0);
+  vec2 p = uCam.xz + d.xz * t + uTime * vec2(3.6, 1.4) * (1.0 + seed) + seed * 731.0;
+  float dens = cloudDensity(p, cov);
+  if (dens < 0.004) return vec4(0.0);
+  // how much cloud lies between this point and the moon
+  float toMoon = cloudDensity(p + normalize(uMoonDir.xz) * 60.0, cov);
+  float shade = exp(-toMoon * 1.7);
+  float mu = max(dot(d, uMoonDir), 0.0);
+  float fwd = 0.30 + 2.4 * pow(mu, 5.0) + 16.0 * pow(mu, 40.0) * (1.0 - dens * 0.55);
+  vec3 c = vec3(0.48, 0.58, 0.86) * 0.075 * shade * fwd;
+  // the city lights the underside, in the colour of the district's air
+  c += (uFog * 1.05 + vec3(0.016, 0.010, 0.004)) * (0.50 + 0.50 * dens) * (1.0 - 0.62 * d.y);
+  c *= 1.0 - 0.45 * uStorm;
+  // lightning inside the deck
+  float cell = textureLod(uNoiseA, p * 0.0009 + floor(uTime * 7.0) * 0.37, 0.0).a;
+  c += vec3(0.70, 0.82, 1.0) * uBolt * dens * (0.6 + 5.0 * smoothstep(0.55, 0.85, cell));
+  float a = dens * smoothstep(0.012, 0.15, d.y) * 0.94;
+  return vec4(c * a, a);
+}
+vec3 skyColor(vec3 d, float stars) {
+  float h = d.y;
+  vec3 col = skyGradient(d);
+  if (h > 0.0 && stars > 0.0) {
+    vec3 q = d * 110.0, g = floor(q);
+    float s = h31(g);
+    float tw = 0.65 + 0.35 * sin(uTime * 2.0 + s * 40.0);
+    float st = smoothstep(0.9968, 1.0, s) * tw * smoothstep(0.04, 0.3, h);
+    float r = 1.0 - smoothstep(0.0, 0.42, length(fract(q) - 0.5));
+    col += mix(vec3(1.0, 0.86, 0.72), vec3(0.78, 0.88, 1.0), fract(s * 77.0)) * st * r * 3.0 * (1.0 - uStorm) * stars;
+  }
+  float md = dot(d, uMoonDir);
+  float disc = smoothstep(0.99955, 0.99982, md);
+  if (disc > 0.0) {
+    // a little relief on the disc, so it is a moon and not a lamp
+    vec3 mx = normalize(cross(uMoonDir, vec3(0.0, 1.0, 0.0))), my = cross(mx, uMoonDir);
+    vec2 mp = vec2(dot(d, mx), dot(d, my)) * 34.0;
+    float mare = textureLod(uNoiseA, mp * 0.5 + 0.3, 0.0).r;
+    col += vec3(1.0, 0.96, 0.88) * disc * (5.0 + 5.0 * smoothstep(0.35, 0.7, mare));
+  }
+  col += vec3(0.55, 0.65, 0.90) * pow(max(md, 0.0), 220.0) * 0.9;
+  col += vec3(0.28, 0.38, 0.62) * pow(max(md, 0.0), 18.0) * 0.35;
+  float cov = mix(0.50, 0.36, uStorm);
+  vec4 hi = cloudDeck(d, uCloudH + 70.0, cov + 0.05, 1.0);
+  vec4 lo = cloudDeck(d, uCloudH, cov, 0.0);
+  col = col * (1.0 - hi.a) + hi.rgb;
+  col = col * (1.0 - lo.a) + lo.rgb;
+  return col;
+}
+vec2 envUV(vec3 d) { return vec2(atan(d.z, d.x) * 0.15915494 + 0.5, d.y * 0.5 + 0.5); }
+`;
 
-var SH_SKY_FS = `#version 300 es
-precision highp float;
-precision highp int;
-in vec2 vNdc;
-uniform mat4 uInvVP;
-${SH_COMMON}
-out vec4 oColor;
-void main() {
-  vec4 w = uInvVP * vec4(vNdc, 1.0, 1.0);
-  vec3 d = normalize(w.xyz / w.w - uCam);
-  oColor = vec4(skyColor(d), 1.0);
-}`;
-
-// ── terrain ───────────────────────────────────────────────────────────────
-var SH_TERRAIN_VS = `#version 300 es
-precision highp float;
-precision highp int;
-layout(location = 0) in vec4 aPos;
-layout(location = 1) in uvec4 aIds;     // block, face, ao, flags
+// ── terrain into the G-buffer ─────────────────────────────────────────────
+var SH_GBUF_VS = SH_HEAD + `
+layout(location = 0) in vec4 aPos;      // xyz inside the chunk, facade code
+layout(location = 1) in uvec4 aIds;     // block, face, baked moon visibility, flags
 layout(location = 2) in vec4 aCol;      // albedo rgb, emission
-layout(location = 3) in vec4 aLit;      // baked sky, baked lamp rgb
+layout(location = 3) in vec4 aLit;      // baked sky visibility, baked lamp rgb
 uniform mat4 uVP;
 uniform vec3 uOrg;
 out vec3 vW;
 out vec4 vCol;
 out vec4 vLit;
-flat out uvec4 vIds;
+out float vMoon;
+flat out vec3 vInfo;                    // block, face, facade code
 void main() {
   vec3 p = uOrg + aPos.xyz;
-  vW = p; vCol = aCol; vLit = aLit; vIds = aIds;
+  if ((aIds.w & 4u) != 0u) p.y -= 0.14;           // a liquid's surface sits a little below the brim
+  vW = p; vCol = aCol; vLit = aLit; vMoon = float(aIds.z) / 255.0;
+  vInfo = vec3(float(aIds.x), float(aIds.y), aPos.w);
   gl_Position = uVP * vec4(p, 1.0);
 }`;
 
-var SH_TERRAIN_FS = `#version 300 es
-precision highp float;
-precision highp int;
+function SH_gbufFS(cut) {
+  return SH_HEAD + (cut ? '#define CUT 1\n' : '') + `
 in vec3 vW;
 in vec4 vCol;
 in vec4 vLit;
-flat in uvec4 vIds;
-uniform vec3 uSkyTint;
-uniform float uSkyI;
-uniform float uBlockI;
-uniform float uFlash;
-uniform float uBevel;
-uniform float uWet;
+in float vMoon;
+flat in vec3 vInfo;
+uniform vec3 uCam;
 uniform float uCut;       // the far pass discards everything inside this radius
-${SH_COMMON}
-layout(location = 0) out vec4 oColor;
-
+layout(location = 0) out vec4 o0;
+layout(location = 1) out vec4 o1;
+layout(location = 2) out vec4 o2;
+layout(location = 3) out vec4 o3;
+  const vec3 VXN[6] = vec3[6](vec3(1.,0.,0.), vec3(-1.,0.,0.), vec3(0.,1.,0.), vec3(0.,-1.,0.), vec3(0.,0.,1.), vec3(0.,0.,-1.));
 void main() {
-  if (uCut > 0.0 && dot(vW.xz - uCam.xz, vW.xz - uCam.xz) < uCut * uCut) discard;
-  uint face = vIds.y;
-  uint fl = vIds.w;
-  vec3 N = VXN[face];
-  vec3 albedo = pow(vCol.rgb, vec3(2.2));
-  float emit = vCol.a * 4.0;
-  vec3 V = uCam - vW;
-  float dist = length(V);
-  V /= dist;
-
-  // The voxel bevel: each face darkens a little toward its edges, which is what
-  // makes a wall of cubes read as cubes. It fades with distance, or it turns
-  // into moire on far facades.
-  vec2 uv = face < 2u ? fract(vW.zy) : (face < 4u ? fract(vW.xz) : fract(vW.xy));
-  float e = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
-  float bev = mix(1.0 - 0.30 * uBevel, 1.0, smoothstep(0.0, 0.17, e));
-  bev = mix(bev, 1.0, smoothstep(36.0, 120.0, dist));
-
-  vec3 light = uSkyTint * (vLit.x * uSkyI) + vLit.yzw * (2.0 * uBlockI);
-  vec3 col = albedo * light * bev;
-
-  bool wet = (fl & 1u) != 0u;
-  bool gloss = (fl & 8u) != 0u;
-  if ((wet || gloss) && emit == 0.0) {
-    float ndv = clamp(dot(N, V), 0.0, 1.0);
-    float fr = pow(1.0 - ndv, 5.0);
-    vec3 R = reflect(-V, N);
-    // puddles: wet ground is patchy, and the patches are mirrors
-    float pud = smoothstep(0.35, 0.65, h21(floor(vW.xz * 0.5) + 7.0)) * 0.7 + 0.3;
-    float k = wet ? (N.y > 0.5 ? 1.0 * uWet * pud : 0.15 * uWet) : 0.35;
-    vec3 refl = skyColor(R);
-    col += refl * (0.03 + 0.95 * fr) * k;
-    // lamp light smeared along the view direction on wet ground
-    col += vLit.yzw * (2.0 * uBlockI) * fr * 2.2 * k * albedo.r * 4.0;
-  }
-
-  if (emit > 0.0) {
-    float fk = 1.0;
-    if ((fl & 32u) != 0u) fk = 0.82 + 0.18 * sin(uTime * 26.0 + vW.x * 3.1 + vW.z * 1.7) - step(0.985, h21(vec2(floor(uTime * 9.0), vW.x + vW.z))) * 0.7;
-    if ((fl & 16u) != 0u) fk = 0.78 + 0.22 * sin(uTime * 1.7 + vW.x * 0.9 + vW.z * 1.3 + vW.y * 0.5);
-    col = albedo * emit * fk * mix(1.0, bev, 0.35);
-  }
-
-  col += uFlash * uSkyTint * vLit.x * albedo * 6.0;
-
-  float fog = fogAmt(vW);
-  vec3 fogc = uFog * (1.0 + 0.8 * pow(max(dot(-V, uMoonDir), 0.0), 6.0));
-  col = mix(col, fogc, fog);
-  oColor = vec4(col, 1.0);
+#ifdef CUT
+  vec2 dc = vW.xz - uCam.xz;
+  if (dot(dc, dc) < uCut * uCut) discard;
+#endif
+  o0 = vCol;
+  o1 = vec4(VXN[int(vInfo.y + 0.5)] * 0.5 + 0.5, vInfo.x / 255.0);
+  o2 = vec4(vLit.yzw, vLit.x);
+  o3 = vec4(vMoon, vInfo.z / 255.0, 0.0, 0.0);
 }`;
+}
 
-// ── water ─────────────────────────────────────────────────────────────────
-var SH_WATER_VS = `#version 300 es
-precision highp float;
-precision highp int;
-layout(location = 0) in vec4 aPos;
-layout(location = 3) in vec4 aLit;
-uniform mat4 uVP;
-uniform vec3 uOrg;
-uniform float uTime;
-out vec3 vW;
-out float vSky;
-void main() {
-  vec3 p = uOrg + aPos.xyz;
-  p.y -= 0.14;
-  p.y += 0.05 * sin(p.x * 0.7 + uTime * 1.1) * cos(p.z * 0.6 - uTime * 0.9);
-  vW = p; vSky = aLit.x;
-  gl_Position = uVP * vec4(p, 1.0);
-}`;
-
-var SH_WATER_FS = `#version 300 es
-precision highp float;
-precision highp int;
-in vec3 vW;
-in float vSky;
-uniform float uCut;
-${SH_COMMON}
-layout(location = 0) out vec4 oColor;
-void main() {
-  if (uCut > 0.0 && dot(vW.xz - uCam.xz, vW.xz - uCam.xz) < uCut * uCut) discard;
-  float t = uTime;
-  vec2 g = vec2(cos(vW.x * 0.7 + t * 1.1) * 0.7, cos(vW.z * 0.6 - t * 0.9) * 0.6) * 0.07;
-  g += vec2(cos((vW.x + vW.z) * 1.9 + t * 2.3), cos((vW.x - vW.z) * 1.7 - t * 2.0)) * 0.035;
-  g += vec2(h21(floor(vW.xz * 2.0 + t * 0.5)) - 0.5, h21(floor(vW.xz * 2.0 - t * 0.4) + 5.0) - 0.5) * 0.025;
-  vec3 N = normalize(vec3(-g.x, 1.0, -g.y));
-  vec3 V = uCam - vW;
-  float dist = length(V);
-  V /= dist;
-  float fr = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0);
-  vec3 refl = skyColor(reflect(-V, N));
-  vec3 deep = vec3(0.004, 0.012, 0.020) * (0.4 + vSky);
-  vec3 col = mix(deep, refl, clamp(fr * 0.92 + 0.07, 0.0, 1.0));
-  col = mix(col, uFog, fogAmt(vW));
-  oColor = vec4(col, mix(0.80, 0.97, fr));
-}`;
-
-// ── glow sprites: lamp heads, neon, the bat-signal lamp ───────────────────
-var SH_GLOW_VS = `#version 300 es
-precision highp float;
-layout(location = 0) in vec2 aCorner;       // -1..1
-layout(location = 1) in vec4 aPosSize;      // xyz, radius
-layout(location = 2) in vec4 aColI;         // rgb, intensity
-uniform mat4 uVP;
-uniform vec3 uRight;
-uniform vec3 uUp;
-out vec2 vC;
-out vec4 vColI;
-out vec3 vWp;
-void main() {
-  vC = aCorner; vColI = aColI; vWp = aPosSize.xyz;
-  vec3 p = aPosSize.xyz + (uRight * aCorner.x + uUp * aCorner.y) * aPosSize.w;
-  gl_Position = uVP * vec4(p, 1.0);
-}`;
-
-var SH_GLOW_FS = `#version 300 es
-precision highp float;
-in vec2 vC;
-in vec4 vColI;
-in vec3 vWp;
-${SH_COMMON}
-layout(location = 0) out vec4 oColor;
-void main() {
-  float r2 = dot(vC, vC);
-  if (r2 > 1.0) discard;
-  float core = exp(-r2 * 14.0);
-  float halo = exp(-r2 * 3.2) * 0.35;
-  oColor = vec4(vColI.rgb * (core * 3.0 + halo) * vColI.a * (1.0 - 0.85 * fogAmt(vWp)), 1.0);
-}`;
-
-// ── rain: a volume of streaks around the camera, animated entirely on the GPU ─
-var SH_RAIN_VS = `#version 300 es
-precision highp float;
-layout(location = 0) in vec2 aCorner;       // x: -1..1 across, y: 0..1 along
-uniform mat4 uVP;
-uniform vec3 uCam;
-uniform float uTime;
-uniform float uCount;
-uniform float uWind;
-out float vA;
-float hh(float n) { return fract(sin(n * 127.1) * 43758.5453); }
-void main() {
-  float id = float(gl_InstanceID);
-  float W = 70.0, Hh = 46.0;
-  vec3 base = vec3(hh(id) * W, hh(id + 11.3) * Hh, hh(id + 27.7) * W);
-  float speed = 26.0 + hh(id + 3.1) * 10.0;
-  vec3 p;
-  p.y = Hh - mod(base.y + uTime * speed, Hh);
-  float slant = uWind * (0.25 + hh(id + 5.5) * 0.15);
-  p.x = base.x + (Hh - p.y) * slant;
-  p.z = base.z;
-  // wrap into a box centred on the camera
-  p.x = uCam.x + mod(p.x - uCam.x + W * 0.5, W) - W * 0.5;
-  p.z = uCam.z + mod(p.z - uCam.z + W * 0.5, W) - W * 0.5;
-  p.y += uCam.y - 14.0;
-  float len = 1.1 + hh(id + 8.8) * 0.9;
-  vec3 dir = normalize(vec3(slant, 1.0, 0.0)) * len;
-  vec3 toCam = normalize(uCam - p);
-  float dc = length(p - uCam);
-  vec3 side = normalize(cross(dir, toCam)) * (0.012 + dc * 0.0011);
-  vec3 pos = p + dir * aCorner.y + side * aCorner.x;
-  // a streak a metre from the lens is as long as the screen and reads as a scratch:
-  // fade it in over the first few metres, and out again at the far edge of the box
-  float fade = smoothstep(2.5, 11.0, dc) * (1.0 - smoothstep(24.0, 58.0, dc));
-  vA = (1.0 - aCorner.y * 0.85) * (0.35 + hh(id + 1.9) * 0.65) * fade;
-  gl_Position = uVP * vec4(pos, 1.0);
-}`;
-
-var SH_RAIN_FS = `#version 300 es
-precision highp float;
-in float vA;
-uniform float uAlpha;
-layout(location = 0) out vec4 oColor;
-void main() { oColor = vec4(vec3(0.52, 0.62, 0.80) * vA * uAlpha * 0.55, 1.0); }`;
-
-// ── a light beam: the bat-signal ──────────────────────────────────────────
-var SH_BEAM_VS = `#version 300 es
-precision highp float;
-layout(location = 0) in vec2 aCorner;       // x: -1..1 across, y: 0..1 along
-uniform mat4 uVP;
-uniform vec3 uCam;
-uniform vec3 uP0;
-uniform vec3 uP1;
-uniform vec2 uWidth;                        // radius at base, at tip
-out vec2 vUV;
-void main() {
-  vec3 axis = uP1 - uP0;
-  vec3 p = uP0 + axis * aCorner.y;
-  vec3 toCam = normalize(uCam - p);
-  vec3 side = normalize(cross(axis, toCam));
-  float w = mix(uWidth.x, uWidth.y, aCorner.y);
-  vUV = aCorner;
-  gl_Position = uVP * vec4(p + side * aCorner.x * w, 1.0);
-}`;
-
-var SH_BEAM_FS = `#version 300 es
-precision highp float;
-in vec2 vUV;
-uniform float uTime;
-uniform float uPulse;
-uniform vec3 uTint;
-layout(location = 0) out vec4 oColor;
-void main() {
-  float across = 1.0 - abs(vUV.x);
-  float edge = pow(across, 1.6);
-  float along = pow(1.0 - vUV.y, 0.8) * smoothstep(0.0, 0.03, vUV.y);
-  float a = edge * along * uPulse;
-  oColor = vec4(uTint * a * 0.55, 1.0);
-}`;
-
-// ── the bat emblem the signal throws on the clouds ─────────────────────────
-var SH_EMB_VS = `#version 300 es
-precision highp float;
-layout(location = 0) in vec2 aCorner;
-uniform mat4 uVP;
-uniform vec3 uCenter;
-uniform float uHalf;
-out vec2 vUV;
-void main() {
-  vec2 q = vec2(aCorner.x, aCorner.y * 2.0 - 1.0);
-  vUV = q;
-  // lies flat in the cloud deck; "up" on the emblem is north (-z)
-  gl_Position = uVP * vec4(uCenter + vec3(q.x * uHalf, 0.0, q.y * uHalf * 0.52), 1.0);
-}`;
-var SH_EMB_FS = `#version 300 es
-precision highp float;
-in vec2 vUV;
-uniform sampler2D uBat;
-uniform float uPulse;
-layout(location = 0) out vec4 oColor;
-void main() {
-  float r = length(vUV);
-  float disc = smoothstep(1.0, 0.72, r);
-  float bat = texture(uBat, vec2(vUV.x * 0.5 + 0.5, 0.5 - vUV.y * 0.5)).r;
-  float a = disc * (1.0 - bat * 0.97) * 0.55 * uPulse;
-  // a faint ring of halo outside the disc
-  a += smoothstep(1.0, 0.8, r) * smoothstep(0.55, 1.0, r) * 0.18 * uPulse;
-  oColor = vec4(vec3(1.0, 0.92, 0.6) * a, 1.0);
-}`;
-
-// ── entities: voxel models with their own light ───────────────────────────
-var SH_ENT_VS = `#version 300 es
-precision highp float;
-precision highp int;
+// ── entities: voxel models, lit by a probe the game keeps per character ────
+var SH_ENT_VS = SH_HEAD + `
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec4 aCol;          // rgb, emission
 layout(location = 2) in vec4 aNrm;          // face id, ao, 0, 0 (unnormalised bytes)
 uniform mat4 uVP;
 uniform mat4 uModel;
-out vec3 vW;
 out vec4 vCol;
 out vec3 vN;
 void main() {
   vec4 w = uModel * vec4(aPos, 1.0);
-  vW = w.xyz; vCol = aCol;
+  vCol = aCol;
   int f = int(aNrm.x + 0.5);
   vec3 n = f == 0 ? vec3(1.,0.,0.) : f == 1 ? vec3(-1.,0.,0.) : f == 2 ? vec3(0.,1.,0.) : f == 3 ? vec3(0.,-1.,0.) : f == 4 ? vec3(0.,0.,1.) : vec3(0.,0.,-1.);
   vN = normalize(mat3(uModel) * n);
@@ -408,176 +206,56 @@ void main() {
   gl_Position = uVP * w;
 }`;
 
-var SH_ENT_FS = `#version 300 es
-precision highp float;
-precision highp int;
-in vec3 vW;
+var SH_ENT_FS = SH_HEAD + `
 in vec4 vCol;
 in vec3 vN;
-uniform vec3 uSkyTint;
-uniform float uSkyI;
-uniform float uBlockI;
-uniform vec3 uELight;                       // x: ambient sky, y: moonlit, z: unused
+uniform vec3 uELight;                       // x: sky visibility, y: moon visibility
 uniform vec3 uEBlock;                       // lamp light on this entity
 uniform vec4 uFlash;                        // rgb tint, amount
 uniform float uEmitMul;
 uniform vec3 uRim;
-${SH_COMMON}
-layout(location = 0) out vec4 oColor;
+layout(location = 0) out vec4 o0;
+layout(location = 1) out vec4 o1;
+layout(location = 2) out vec4 o2;
+layout(location = 3) out vec4 o3;
 void main() {
   vec3 N = normalize(vN);
-  vec3 albedo = pow(vCol.rgb, vec3(2.2));
-  float emit = vCol.a * 4.0 * uEmitMul;
-  vec3 V = uCam - vW;
-  float dist = length(V);
-  V /= dist;
-  float hemi = 0.55 + 0.45 * N.y;
-  float moon = max(dot(N, uMoonDir), 0.0);
-  vec3 light = uSkyTint * uSkyI * (0.36 * uELight.x * hemi + 0.62 * uELight.y * moon) + uEBlock * (2.0 * uBlockI) * (0.45 + 0.55 * max(N.y * 0.5 + 0.5, 0.0));
-  vec3 col = albedo * light;
-  // a cold rim: it is what keeps a dark character readable against a dark city
-  float rim = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.0);
-  col += uRim * rim * (0.35 + 0.65 * uELight.y) * 0.55;
-  if (emit > 0.0) col = albedo * emit;
-  col = mix(col, uFlash.rgb * 2.0, uFlash.a);
-  col = mix(col, uFog, fogAmt(vW));
-  oColor = vec4(col, 1.0);
+  o0 = vec4(mix(vCol.rgb, uFlash.rgb, uFlash.a * 0.75), clamp(vCol.a * uEmitMul + uFlash.a * 0.45, 0.0, 1.0));
+  o1 = vec4(N * 0.5 + 0.5, 1.0);
+  o2 = vec4(uEBlock * (0.45 + 0.55 * max(N.y * 0.5 + 0.5, 0.0)), uELight.x);
+  o3 = vec4(uELight.y, 0.0, clamp(uRim.b * 1.6, 0.0, 1.0), 1.0);
 }`;
 
-// ── post-processing ───────────────────────────────────────────────────────
-var SH_FS_VS = `#version 300 es
-precision highp float;
+// ── fullscreen passes ─────────────────────────────────────────────────────
+// One triangle that covers the screen. vRay points from the camera to the far
+// plane through each pixel, which is all a pass needs to turn depth into position.
+var SH_FS_VS = SH_HEAD + `
+uniform mat4 uInvVP;
+uniform vec3 uCam;
 out vec2 vUV;
+out vec3 vRay;
 void main() {
   vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
   vUV = p;
+  vec4 w = uInvVP * vec4(p * 2.0 - 1.0, 1.0, 1.0);
+  vRay = w.xyz / w.w - uCam;
   gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
 }`;
 
-// Bright pass, with a soft knee so bloom fades in instead of switching on.
-var SH_BRIGHT_FS = `#version 300 es
-precision highp float;
+// The sky as a small panorama, refreshed every few frames: what glossy surfaces
+// reflect when the screen has nothing better to offer. A band of lit windows along
+// the horizon stands in for the far city, so the river has a skyline to mirror.
+var SH_ENV_FS = SH_HEAD + `
 in vec2 vUV;
-uniform sampler2D uTex;
-uniform float uThr;
-uniform float uKnee;
+${SH_COMMON}
+${SH_SKY}
 layout(location = 0) out vec4 oColor;
 void main() {
-  vec3 c = texture(uTex, vUV).rgb;
-  float l = max(c.r, max(c.g, c.b));
-  float k = clamp(l - uThr + uKnee, 0.0, 2.0 * uKnee);
-  k = k * k / (4.0 * uKnee + 1e-4);
-  float w = max(k, l - uThr) / max(l, 1e-4);
-  oColor = vec4(min(c * w, vec3(24.0)), 1.0);
-}`;
-
-var SH_DOWN_FS = `#version 300 es
-precision highp float;
-in vec2 vUV;
-uniform sampler2D uTex;
-uniform vec2 uTexel;
-layout(location = 0) out vec4 oColor;
-void main() {
-  vec3 c = texture(uTex, vUV).rgb * 4.0;
-  c += texture(uTex, vUV + uTexel * vec2(-1.0, -1.0)).rgb;
-  c += texture(uTex, vUV + uTexel * vec2( 1.0, -1.0)).rgb;
-  c += texture(uTex, vUV + uTexel * vec2(-1.0,  1.0)).rgb;
-  c += texture(uTex, vUV + uTexel * vec2( 1.0,  1.0)).rgb;
-  oColor = vec4(c / 8.0, 1.0);
-}`;
-
-var SH_UP_FS = `#version 300 es
-precision highp float;
-in vec2 vUV;
-uniform sampler2D uTex;
-uniform vec2 uTexel;
-uniform float uMix;
-layout(location = 0) out vec4 oColor;
-void main() {
-  vec3 c = texture(uTex, vUV + uTexel * vec2(-1.0, 0.0)).rgb;
-  c += texture(uTex, vUV + uTexel * vec2(1.0, 0.0)).rgb;
-  c += texture(uTex, vUV + uTexel * vec2(0.0, -1.0)).rgb;
-  c += texture(uTex, vUV + uTexel * vec2(0.0, 1.0)).rgb;
-  c += texture(uTex, vUV + uTexel * vec2(-1.0, -1.0)).rgb * 0.5;
-  c += texture(uTex, vUV + uTexel * vec2(1.0, -1.0)).rgb * 0.5;
-  c += texture(uTex, vUV + uTexel * vec2(-1.0, 1.0)).rgb * 0.5;
-  c += texture(uTex, vUV + uTexel * vec2(1.0, 1.0)).rgb * 0.5;
-  oColor = vec4(c / 6.0 * uMix, 1.0);
-}`;
-
-// Composite: scene + bloom, exposure, tone map, THEN the grade, in display space.
-// Grading before the gamma encode is how the 2D game's contrast control ended up
-// crushing everything under 51/255 to black: its pivot of 0.5 means mid-grey on a
-// screen, but ~0.18 in linear light.
-var SH_COMP_FS = `#version 300 es
-precision highp float;
-in vec2 vUV;
-uniform sampler2D uScene;
-uniform sampler2D uBloom;
-uniform float uExposure;
-uniform float uBloomAmt;
-uniform float uVig;
-uniform float uSat;
-uniform float uContrast;
-uniform vec3 uLift;
-uniform vec3 uGain;
-uniform float uFade;
-uniform vec4 uHurt;
-layout(location = 0) out vec4 oColor;
-
-vec3 aces(vec3 x) {
-  const float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14;
-  return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
-}
-void main() {
-  vec3 c = texture(uScene, vUV).rgb + texture(uBloom, vUV).rgb * uBloomAmt;
-  c *= uExposure;
-  c = aces(c);
-  c = pow(c, vec3(1.0 / 2.2));
-  c = c * uGain + uLift;
-  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-  c = mix(vec3(l), c, uSat);
-  c = clamp((c - 0.5) * uContrast + 0.5, 0.0, 1.0);
-  vec2 q = vUV * 2.0 - 1.0;
-  float v = 1.0 - dot(q * vec2(0.92, 1.0), q * vec2(0.92, 1.0)) * uVig;
-  c *= clamp(v, 0.0, 1.0);
-  c = mix(c, uHurt.rgb, uHurt.a * smoothstep(0.35, 1.45, length(q)));
-  c *= uFade;
+  float az = (vUV.x - 0.5) * 6.2831853, y = vUV.y * 2.0 - 1.0, r = sqrt(max(1.0 - y * y, 0.0));
+  vec3 d = vec3(cos(az) * r, y, sin(az) * r);
+  vec3 c = skyColor(d, 0.0);
+  float band = smoothstep(0.10, 0.0, y) * smoothstep(-0.04, 0.0, y);
+  float k = step(0.80, h21(floor(vec2(az * 150.0, y * 260.0))));
+  c += vec3(1.0, 0.62, 0.30) * k * band * 0.55;
   oColor = vec4(c, 1.0);
-}`;
-
-// FXAA (lite) on the display-space image, plus film grain and an ordered dither,
-// without which a dark gradient bands hard at 8 bits.
-var SH_FXAA_FS = `#version 300 es
-precision highp float;
-in vec2 vUV;
-uniform sampler2D uTex;
-uniform vec2 uTexel;
-uniform float uGrain;
-uniform float uTime;
-layout(location = 0) out vec4 oColor;
-float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
-void main() {
-  vec3 m = texture(uTex, vUV).rgb;
-  float lM = luma(m);
-  float lN = luma(texture(uTex, vUV + uTexel * vec2(0.0, -1.0)).rgb);
-  float lS = luma(texture(uTex, vUV + uTexel * vec2(0.0, 1.0)).rgb);
-  float lW = luma(texture(uTex, vUV + uTexel * vec2(-1.0, 0.0)).rgb);
-  float lE = luma(texture(uTex, vUV + uTexel * vec2(1.0, 0.0)).rgb);
-  float lo = min(lM, min(min(lN, lS), min(lW, lE)));
-  float hi = max(lM, max(max(lN, lS), max(lW, lE)));
-  vec3 col = m;
-  if (hi - lo > max(0.045, hi * 0.12)) {
-    vec2 dir = vec2(-((lN + lE) - (lS + lW)), (lW + lN) - (lE + lS));
-    float red = 1.0 / (min(abs(dir.x), abs(dir.y)) + max((lN + lS + lW + lE) * 0.03, 0.0078));
-    dir = clamp(dir * red, -8.0, 8.0) * uTexel;
-    vec3 a = 0.5 * (texture(uTex, vUV + dir * (1.0 / 3.0 - 0.5)).rgb + texture(uTex, vUV + dir * (2.0 / 3.0 - 0.5)).rgb);
-    vec3 b = a * 0.5 + 0.25 * (texture(uTex, vUV + dir * -0.5).rgb + texture(uTex, vUV + dir * 0.5).rgb);
-    float lb = luma(b);
-    col = (lb < lo || lb > hi) ? a : b;
-  }
-  float n = fract(sin(dot(gl_FragCoord.xy + fract(uTime) * 91.7, vec2(12.9898, 78.233))) * 43758.5453);
-  col += (n - 0.5) * uGrain;
-  col += (fract(sin(dot(gl_FragCoord.xy, vec2(4.1, 7.3))) * 9371.7) - 0.5) / 255.0;
-  oColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }`;

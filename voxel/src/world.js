@@ -31,6 +31,16 @@ class VxWorld {
     this.stats = { baked: 0, ms: 0, drawn: 0, tris: 0, upload: 0 };
     this.workerFailed = false;
     this.readyAt = 0;
+    this.lightVer = 0;               // bumped whenever the set of loaded lamps changes
+    this.order = [];                 // scratch: visible chunks, nearest first
+    // Rain shelter: for every column near the player, the height under which it is
+    // dry. 256 x 256, addressed by world x,z modulo 256, so a chunk always lands on
+    // the same texels and nothing ever has to be shifted.
+    this.topTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.topTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 256, 256, 0, gl.RED, gl.UNSIGNED_BYTE, new Uint8Array(65536));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
   }
 
   // Try to start a pool of workers from the source text embedded in the page. Any
@@ -137,6 +147,12 @@ class VxWorld {
       const c = { cx: m.cx, cz: m.cz, key: k, vox: m.vox, top: m.top, maxY: m.maxY, emitters: m.emitters,
                   o: this.upload(m.opaque), w: this.upload(m.water) };
       this.chunks.set(k, c);
+      if (m.rain) {
+        gl.bindTexture(gl.TEXTURE_2D, this.topTex);
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, (m.cx * 16) & 255, (m.cz * 16) & 255, 16, 16, gl.RED, gl.UNSIGNED_BYTE, m.rain);
+      }
+      this.lightVer++;
       n++; this.stats.upload++;
     }
   }
@@ -169,7 +185,7 @@ class VxWorld {
     const lim = (this.radius + 2) * (this.radius + 2);
     for (const [k, c] of this.chunks) {
       const dx = c.cx - pcx, dz = c.cz - pcz;
-      if (dx * dx + dz * dz > lim) { this.freeChunk(c); this.chunks.delete(k); }
+      if (dx * dx + dz * dz > lim) { this.freeChunk(c); this.chunks.delete(k); this.lightVer++; }
     }
   }
 
@@ -235,13 +251,22 @@ class VxWorld {
     const gl = this.gl, org = prog.u('uOrg');
     const lim = maxDist * maxDist;
     let drawn = 0, tris = 0;
+    // nearest first: what is drawn later is mostly hidden and rejected by depth
+    const order = this.order;
+    order.length = 0;
     for (const c of this.chunks.values()) {
-      const m = c[which];
-      if (!m) continue;
+      if (!c[which]) continue;
       const x0 = c.cx * 16, z0 = c.cz * 16;
       const dx = x0 + 8 - camX, dz = z0 + 8 - camZ;
-      if (dx * dx + dz * dz > lim) continue;
+      c.d2 = dx * dx + dz * dz;
+      if (c.d2 > lim) continue;
       if (!M4_boxVisible(planes, x0, 0, z0, x0 + 16, c.maxY + 2, z0 + 16)) continue;
+      order.push(c);
+    }
+    order.sort(function (a, b) { return a.d2 - b.d2; });
+    for (let i = 0; i < order.length; i++) {
+      const c = order[i], m = c[which];
+      const x0 = c.cx * 16, z0 = c.cz * 16;
       gl.uniform3f(org, x0, 0, z0);
       gl.bindVertexArray(m.vao);
       gl.drawElements(gl.TRIANGLES, m.n, m.wide ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);

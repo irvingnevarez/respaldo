@@ -6,38 +6,32 @@
 //  simulated on the CPU in fixed-size arrays, so a firefight allocates nothing.
 // ═══════════════════════════════════════════════════════════════════════
 
-var FX_VS = `#version 300 es
-precision highp float;
+var FX_VS = SH_HEAD + `
 layout(location = 0) in vec3 aCorner;        // cube corner, -0.5..0.5
 layout(location = 1) in vec3 aNrm;
 layout(location = 2) in vec4 aPosSize;       // centre, size
 layout(location = 3) in vec4 aColE;          // rgb, emission
 uniform mat4 uVP;
-out vec3 vW;
 out vec4 vCol;
 out vec3 vN;
 void main() {
-  vec3 p = aPosSize.xyz + aCorner * aPosSize.w;
-  vW = p; vCol = aColE; vN = aNrm;
-  gl_Position = uVP * vec4(p, 1.0);
+  vCol = aColE; vN = aNrm;
+  gl_Position = uVP * vec4(aPosSize.xyz + aCorner * aPosSize.w, 1.0);
 }`;
 
-var FX_FS = `#version 300 es
-precision highp float;
-in vec3 vW;
+// Particles go into the G-buffer like everything else and are lit by the same pass.
+var FX_FS = SH_HEAD + `
 in vec4 vCol;
 in vec3 vN;
-uniform vec3 uSkyTint;
-uniform float uSkyI;
-${SH_COMMON}
-layout(location = 0) out vec4 oColor;
+layout(location = 0) out vec4 o0;
+layout(location = 1) out vec4 o1;
+layout(location = 2) out vec4 o2;
+layout(location = 3) out vec4 o3;
 void main() {
-  vec3 albedo = pow(vCol.rgb, vec3(2.2));
-  float shade = 0.55 + 0.45 * vN.y * 0.5 + 0.25 * max(dot(vN, uMoonDir), 0.0);
-  vec3 col = albedo * uSkyTint * uSkyI * 0.45 * shade;
-  col += albedo * vCol.a * 4.0;
-  col = mix(col, uFog, fogAmt(vW) * (1.0 - min(vCol.a, 1.0)));
-  oColor = vec4(col, 1.0);
+  o0 = vec4(vCol.rgb, clamp(vCol.a, 0.0, 1.0));
+  o1 = vec4(vN * 0.5 + 0.5, 254.0 / 255.0);
+  o2 = vec4(0.0, 0.0, 0.0, 0.85);
+  o3 = vec4(0.6, 0.0, 0.0, 1.0);
 }`;
 
 var FX_MAX = 900;
@@ -191,9 +185,6 @@ class VxFx {
     const p = this.prog;
     gl.useProgram(p.id);
     gl.uniformMatrix4fv(p.u('uVP'), false, cam.vp);
-    r.common(p, cam);
-    gl.uniform3f(p.u('uSkyTint'), r.P.skyTint[0], r.P.skyTint[1], r.P.skyTint[2]);
-    gl.uniform1f(p.u('uSkyI'), r.P.skyI);
     gl.bindVertexArray(this.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.ib);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, I, 0, m * 8);

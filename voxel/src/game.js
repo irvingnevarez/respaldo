@@ -35,42 +35,61 @@ var VX_air = { fog: VX_AIR[WG_D.AZOTEAS].fog.slice(), hor: VX_AIR[WG_D.AZOTEAS].
 
 var VX_STEP = 1 / 120;
 
-// The quality ladder. The frame rate decides, not the player: if the picture cannot
-// keep up, resolution, view distance, rain and bloom come down a rung at a time, and
-// come back up if there is plenty of room. Nothing here changes how the game plays.
+// The quality ladder. Left to itself the frame rate decides: if the picture cannot
+// keep up, resolution, view distance and the costly passes (reflections, light in
+// the air, temporal anti-aliasing) come down a rung at a time, and come back up if
+// there is room. The player can also pin a rung from the pause screen; ULTRA is
+// only ever chosen by hand. Nothing here changes how the game plays.
 var VX_Q = [
-  { name: 'MÍNIMA', scale: 0.55, radius: 5, rain: 1100, bloom: 0.0 },
-  { name: 'BAJA', scale: 0.70, radius: 6, rain: 2200, bloom: 0.25 },
-  { name: 'MEDIA', scale: 0.85, radius: 7, rain: 3600, bloom: 0.40 },
-  { name: 'ALTA', scale: 1.00, radius: 8, rain: 5600, bloom: 0.50 },
+  { name: 'MÍNIMA', scale: 0.55, radius: 5, rain: 1100, g: { taa: 0, ssr: 0, vol: 0, lights: 4, detail: 0, caps: 0, splash: 0, streak: 0 } },
+  { name: 'BAJA', scale: 0.70, radius: 6, rain: 2200, g: { taa: 0, ssr: 0, vol: 2, lights: 8, detail: 1, caps: 1, splash: 300, streak: 0 } },
+  { name: 'MEDIA', scale: 0.85, radius: 7, rain: 3600, g: { taa: 1, ssr: 14, vol: 3, lights: 8, detail: 1, caps: 1, splash: 600, streak: 1 } },
+  { name: 'ALTA', scale: 1.00, radius: 8, rain: 5600, g: { taa: 1, ssr: 28, vol: 4, lights: 12, detail: 1, caps: 1, splash: 900, streak: 1 } },
+  { name: 'ULTRA', scale: 1.00, radius: 8, rain: 8000, dpr: 2.0, g: { taa: 1, ssr: 44, vol: 6, lights: 12, detail: 1, caps: 1, splash: 1500, streak: 1 } },
 ];
+var VX_GFX_KEY = 'gotham-voxel-gfx';
 function VX_setQuality(q) {
   q = Math.max(0, Math.min(VX_Q.length - 1, q));
   const Q = VX_Q[q];
-  VX.quality = q; VX.scale = Q.scale; VX.radius = Q.radius;
+  VX.quality = q; VX.scale = Q.scale; VX.radius = Q.radius; VX.dprMax = Q.dpr || 1.75;
   if (VX.world) {
     VX.world.radius = Q.radius; VX.world.dirty = true;
     VX.rend.nearDist = (Q.radius - 1) * 16 + 6;
-    VX.rend.P.rainCount = Q.rain; VX.rend.P.bloom = Q.bloom;
+    VX.rend.P.rainCount = Q.rain;
+    VX.rend.Q = Object.assign({}, Q.g);
     VX_resize();
   }
+}
+// AUTO -> MÍNIMA -> ... -> ULTRA -> AUTO
+function VX_cycleQuality() {
+  if (VX.manualQ === undefined || VX.manualQ < 0) VX.manualQ = 0;
+  else if (VX.manualQ >= VX_Q.length - 1) VX.manualQ = -1;
+  else VX.manualQ++;
+  try { localStorage.setItem(VX_GFX_KEY, String(VX.manualQ)); } catch (e) { }
+  if (VX.manualQ >= 0) VX_setQuality(VX.manualQ);
+  else { VX_setQuality(Math.min(VX.quality, 3)); VX_ft.n = 0; VX_ft.cool = 2; VX_ft.bad = VX_ft.good = 0; }
 }
 var VX_ft = { avg: 16.7, bad: 0, good: 0, cool: 3, n: 0 };
 function VX_adapt(dt) {
   const f = VX_ft;
   f.n++;
-  if (f.n < 90 || VX.state === 'boot') return;                // let the first seconds settle
+  if (VX.manualQ >= 0 || f.n < 90 || VX.state === 'boot') return;      // pinned, or still settling
   f.avg += (dt * 1000 - f.avg) * 0.05;
   f.cool -= dt;
-  if (f.avg > 25) { f.bad += dt; f.good = 0; } else if (f.avg < 14.5) { f.good += dt; f.bad = 0; } else { f.bad = Math.max(0, f.bad - dt); f.good = Math.max(0, f.good - dt); }
-  if (f.cool <= 0 && f.bad > 1.6 && VX.quality > 0) { VX_setQuality(VX.quality - 1); f.bad = 0; f.cool = 4; f.avg = 18; }
-  else if (f.cool <= 0 && f.good > 9 && VX.quality < 3) { VX_setQuality(VX.quality + 1); f.good = 0; f.cool = 8; }
+  // Where the browser can time the GPU, that is the better signal: the frame time
+  // is capped by the display, so on its own it can say "too slow" but never "room to spare".
+  const g = VX.rend.gpuMs;
+  let bad = f.avg > 25, good = f.avg < 14.5;
+  if (g > 0) { bad = bad || g > 15; good = g < 6.5 && f.avg < 19; }
+  if (bad) { f.bad += dt; f.good = 0; } else if (good) { f.good += dt; f.bad = 0; } else { f.bad = Math.max(0, f.bad - dt); f.good = Math.max(0, f.good - dt); }
+  if (f.cool <= 0 && f.bad > 1.6 && VX.quality > 0) { VX_setQuality(VX.quality - 1); f.bad = 0; f.cool = 4; f.avg = 18; VX.rend.gpuMs = 0; }
+  else if (f.cool <= 0 && f.good > (g > 0 ? 4 : 9) && VX.quality < 3) { VX_setQuality(VX.quality + 1); f.good = 0; f.cool = 8; VX.rend.gpuMs = 0; }
 }
 
 function VX_size() {
   const stage = document.getElementById('stage');
   const r = stage.getBoundingClientRect();
-  const dpr = Math.min(window.devicePixelRatio || 1, 1.75);
+  const dpr = Math.min(window.devicePixelRatio || 1, VX.dprMax || 1.75);
   return { w: Math.max(64, Math.round(r.width * dpr)), h: Math.max(64, Math.round(r.height * dpr)), cssW: r.width, cssH: r.height, dpr: dpr };
 }
 
@@ -98,7 +117,8 @@ function VX_boot() {
   try { if (document.fonts && document.fonts.load) { document.fonts.load('600 20px Oswald'); document.fonts.load('700 20px Oswald'); document.fonts.load('700 12px "JetBrains Mono"'); } } catch (e) { }
   const cores = navigator.hardwareConcurrency || 4;
   VX.quality = coarse ? 1 : (cores <= 2 ? 1 : (cores <= 4 ? 2 : 3));
-  VX.scale = VX_Q[VX.quality].scale; VX.radius = VX_Q[VX.quality].radius;
+  try { const m = localStorage.getItem(VX_GFX_KEY); if (m !== null && +m >= 0 && +m < VX_Q.length) { VX.manualQ = +m; VX.quality = +m; } } catch (e) { }
+  VX.scale = VX_Q[VX.quality].scale; VX.radius = VX_Q[VX.quality].radius; VX.dprMax = VX_Q[VX.quality].dpr || 1.75;
   const canvas = document.getElementById('gl');
   VX.hud = document.getElementById('hud');
   VX.hudCtx = VX.hud.getContext('2d');
@@ -118,7 +138,7 @@ function VX_boot() {
   VX.world.startWorkers(document.getElementById('vx-worker-src').textContent, nw);
 
   GS.world = VX.world; GS.rend = VX.rend; GS.far = VX.far; GS.cam = VX.cam;
-  VX.rend.P.rainCount = VX_Q[VX.quality].rain; VX.rend.P.bloom = VX_Q[VX.quality].bloom;
+  VX.rend.P.rainCount = VX_Q[VX.quality].rain; VX.rend.Q = Object.assign({}, VX_Q[VX.quality].g);
   GS.fx = new VxFx(VX.rend);
   VX_buildModels(gl);
   GS.tcam = new ThirdCam();
@@ -353,6 +373,7 @@ function VX_update(dtReal) {
   VX.rend.P.hurt[3] = Math.max(0, VX.rend.P.hurt[3] - dtReal * 1.6);
   UI_update(dtReal);
   if (typeof AU_update === 'function') AU_update(dtReal);
+  if (IN.gfxEdge && VX.state !== 'boot') VX_cycleQuality();
   VX_adapt(dtReal);
   IN_clearEdges();
 }
@@ -421,7 +442,49 @@ function PL_ropes() {
   return PL_rp;
 }
 
+// Every character near the camera, as an upright capsule and the one light whose
+// shadow it should throw: the lamp that lights it most, or failing that the moon.
+var VX_capPool = [];
+function VX_caps() {
+  const R = VX.rend, out = R.caps, cam = VX.cam, w = GS.world;
+  out.length = 0;
+  if (!R.Q.caps) return;
+  const cand = [];
+  const pl = GS.player;
+  if (!VX.noPlayer && (GS.tcam.dist > 1.5 || VX.state !== 'play')) cand.push({ b: pl.b, h: pl.b.h, d: 0, L: pl.light });
+  for (const e of GS.enemies) {
+    if (e.gone || (e.dead && e.deadT > 0.6)) continue;
+    const d = Math.hypot(e.b.x - cam.x, e.b.z - cam.z);
+    if (d < 46) cand.push({ b: e.b, h: e.b.h, d: d + 1, L: e.light });
+  }
+  if (GS.boss && GS.boss.b) cand.push({ b: GS.boss.b, h: GS.boss.b.h, d: 0.5, L: GS.boss.light });
+  cand.sort(function (a, b) { return a.d - b.d; });
+  for (let i = 0; i < cand.length && i < 8; i++) {
+    const c = cand[i], b = c.b;
+    const o = VX_capPool[i] || (VX_capPool[i] = {});
+    o.x = b.x; o.y = b.y; o.z = b.z; o.h = Math.max(0.8, c.h);
+    // the strongest lamp at the character's chest
+    let best = 0, bx = 0, by = 0, bz = 0;
+    const cx = Math.floor(b.x / 16), cz = Math.floor(b.z / 16);
+    for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) {
+      const ch = w.chunks.get(JB_key(cx + di, cz + dj));
+      if (!ch) continue;
+      for (const e of ch.emitters) {
+        const dx = e[0] - b.x, dy = e[1] - (b.y + c.h * 0.6), dz = e[2] - b.z, d = Math.hypot(dx, dy, dz);
+        if (d >= e[7] || dy < 0.5) continue;
+        const f = 1 - d / e[7], k = f * f * e[6];
+        if (k > best) { best = k; bx = e[0]; by = e[1]; bz = e[2]; }
+      }
+    }
+    if (best > 0.05) { o.lx = bx; o.ly = by; o.lz = bz; o.s = Math.min(0.85, 0.35 + best * 1.6); }
+    else if (c.L && c.L.moon > 0.5) { o.lx = b.x + BX_MOON.x * 300; o.ly = b.y + BX_MOON.y * 300; o.lz = b.z + BX_MOON.z * 300; o.s = -0.8; }
+    else { o.lx = b.x; o.ly = b.y + 50; o.lz = b.z; o.s = 0; }
+    out.push(o);
+  }
+}
+
 function VX_draw() {
+  VX_caps();
   VX.rend.beams = WD_beams(); VX.rend.emblem = GS.emblem || null;
   VX.rend.render(VX.cam, VX.world, VX.far, VX_extra);
   if (VX.hideHud) VX.hudCtx.clearRect(0, 0, VX.hud.width, VX.hud.height); else UI_draw(VX.hudCtx, VX.hud.width, VX.hud.height);
@@ -458,11 +521,15 @@ window.__vx = {
   setCam: function (x, y, z, yaw, pitch) { const c = VX.cam; c.x = x; c.y = y; c.z = z; c.yaw = yaw; c.pitch = pitch; VX.world.dirty = true; VX.freeCam = true; VX.world.update(x, z, 0); VX.far.update(x, z, 0); },
   set: function (k, v) { VX.rend.P[k] = v; },
   setBeam: function (a, b) { VX.rend.beam.p0 = a; VX.rend.beam.p1 = b; },
-  render: function (t) {
+  // draw on demand. With temporal anti-aliasing one frame is one sample: `n` frames
+  // of the same instant let a still settle the way it does in play.
+  render: function (t, n) {
     if (t !== undefined) { VX.time = t; VX.rend.time = t; }
     const boot = document.getElementById('boot'); if (boot) boot.hidden = true;
-    VX_resize(); VX_draw();
+    VX_resize();
+    for (let i = 0; i < (n || 1); i++) VX_draw();
   },
+  quality: function (q) { VX.manualQ = q; VX_setQuality(q); return VX_Q[VX.quality].name; },
   // advance the simulation by n fixed steps with the camera driven as in play
   step: function (n, dt) {
     for (let i = 0; i < n; i++) {

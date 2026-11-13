@@ -335,19 +335,21 @@ function UI_dead(ctx, w, h, u) {
 
 function UI_pause(ctx, w, h, u) {
   ctx.fillStyle = 'rgba(4,6,12,0.66)'; ctx.fillRect(0, 0, w, h);
-  UI_spacedText(ctx, 'PAUSA', w / 2, h * 0.30, 52 * u, '#e8c34a', 12 * u, 'center', 600);
+  UI_spacedText(ctx, 'PAUSA', w / 2, h * 0.28, 52 * u, '#e8c34a', 12 * u, 'center', 600);
   const rows = [['WASD', 'Mover'], ['Ratón / arrastrar', 'Cámara'], ['Espacio', 'Saltar · en el aire: planear'], ['Shift', 'Correr'], ['E', 'Garfio: apunta a un muro'],
-    ['Clic / J', 'Golpear (combo de 3)'], ['F / clic der.', 'Batarang'], ['Q / Ctrl', 'Esquivar'], ['M', 'Mapa y viaje rápido'], ['N', 'Sonido'], ['P / Esc', 'Reanudar']];
+    ['Clic / J', 'Golpear (combo de 3)'], ['F / clic der.', 'Batarang'], ['Q / Ctrl', 'Esquivar'], ['M', 'Mapa y viaje rápido'], ['N', 'Sonido'], ['G', 'Calidad gráfica'], ['P / Esc', 'Reanudar']];
   const x0 = w / 2 - 230 * u;
   rows.forEach(function (r, i) {
-    const y = h * 0.30 + 52 * u + i * 27 * u;
+    const y = h * 0.28 + 50 * u + i * 26 * u;
     UI_text(ctx, r[0], x0 + 160 * u, y, 15 * u, '#e8c34a', 'right', 600, false, '"JetBrains Mono", monospace');
     UI_text(ctx, r[1], x0 + 180 * u, y, 15 * u, '#b8c6d8', 'left', 500, false);
   });
 }
 
 function UI_pauseFoot(ctx, w, h, u) {
-  UI_spacedText(ctx, 'CALIDAD GRÁFICA: ' + VX_Q[VX.quality].name + ' (AUTOMÁTICA)', w / 2, h - 28 * u, 11 * u, '#6c7a92', 3 * u, 'center', 500);
+  const auto = !(VX.manualQ >= 0);
+  UI_spacedText(ctx, 'CALIDAD GRÁFICA: ' + VX_Q[VX.quality].name + (auto ? ' (AUTOMÁTICA)' : ' (FIJA)'), w / 2, h - 40 * u, 12 * u, auto ? '#8a98b0' : '#e8c34a', 3 * u, 'center', 600);
+  UI_spacedText(ctx, IN.touch ? 'TOCA AQUÍ PARA CAMBIARLA' : 'G O CLIC AQUÍ PARA CAMBIARLA', w / 2, h - 22 * u, 9.5 * u, '#5d6b82', 3 * u, 'center', 500);
 }
 function UI_title(ctx, w, h, u, win) {
   const t = VX.stateT;

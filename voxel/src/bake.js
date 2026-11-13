@@ -18,11 +18,22 @@
 //             not light the far side of a wall.
 //   AO        The classic per-corner voxel occlusion, multiplied in last.
 //
+//  The sky and the moon are stored as VISIBILITIES, not as light: how much of the
+//  sky a vertex sees, and how much of the moon. The shader multiplies them by the
+//  colour of the night and, because it has them apart, can bend each around the
+//  detail normal of the material.
+//
 //  Vertex layout, 16 bytes:
-//    0  x y z .        position inside the chunk (0..16, 0..128)
-//    4  block face ao flags
+//    0  x y z code     position inside the chunk (0..16, 0..128); the facade code
+//                      of the column's building (style + window offset), so the
+//                      shader can find the window a glass voxel belongs to
+//    4  block face moon flags     moon = how much of the moon this vertex sees
 //    8  r g b emit     albedo, and how hard the voxel glows (emit/255*4)
-//   12  sky bR bG bB   baked sky light, and baked lamp light (value/255*2)
+//   12  sky bR bG bB   sky visibility, and baked lamp light (value/255*2)
+//
+//  It also returns, per column, the height below which the column is sheltered
+//  from the rain: the top of the highest voxel that is part of something wider
+//  than a pole or a cable.
 // ═══════════════════════════════════════════════════════════════════════
 
 var BX_H = WG_H;
@@ -214,7 +225,13 @@ function* BX_bake(cx, cz, env) {
   }
 
   const op = BX_mesh(), wa = BX_mesh();
-  const aoV = [0, 0, 0, 0], skyV = [0, 0, 0, 0], blR = [0, 0, 0, 0], blG = [0, 0, 0, 0], blB = [0, 0, 0, 0];
+  const aoV = [0, 0, 0, 0], skyV = [0, 0, 0, 0], moonV = [0, 0, 0, 0], blR = [0, 0, 0, 0], blG = [0, 0, 0, 0], blB = [0, 0, 0, 0];
+  // the facade code of every column: which building style, and where its windows start
+  const fcode = new Uint8Array(256), ci = { kind: 0, top: 0, b: null };
+  for (let x = 0; x < 16; x++) for (let z = 0; z < 16; z++) {
+    WG_colInfo(ox + x, oz + z, ci);
+    if (ci.kind === WG_K.BUILDING && ci.b) fcode[x * 16 + z] = ((ci.b.st & 15) | ((ci.b.wo & 7) << 4)) + 1;
+  }
   const R1 = 48 * H, R2 = H;           // region strides for x and z
 
   // 3. mesh
@@ -253,8 +270,6 @@ function* BX_bake(cx, cz, env) {
             if (!o3 && !(o1 && o2)) { const i3 = cell(cx3, cy3, cz3); a += cAmb[i3]; m += cMoon[i3]; k++; }
             if (k === 0) { const i0 = cell(fx, fy, fz); a = cAmb[i0]; m = cMoon[i0]; k = 1; }
             a /= k; m /= k;
-            const ndl = n[0] * BX_MOON.x + n[1] * BX_MOON.y + n[2] * BX_MOON.z;
-            let sky = BX_AMB * BX_HEMI[f] * a + BX_MOONK * (ndl > 0 ? ndl : 0) * m;
             // lamps, ray-marched through the real voxels
             let lr = 0, lg = 0, lb = 0;
             if (!isWater) {
@@ -285,21 +300,23 @@ function* BX_bake(cx, cz, env) {
               }
             }
             const aoF = BX_AOF[aoV[c]];
-            skyV[c] = sky * aoF;
+            skyV[c] = a * aoF; moonV[c] = m * aoF;
             const al = 0.55 + 0.45 * aoF;
             blR[c] = lr * al; blG[c] = lg * al; blB[c] = lb * al;
           }
           // write the four vertices
           const albR = BK_RGB[b * 3], albG = BK_RGB[b * 3 + 1], albB = BK_RGB[b * 3 + 2];
-          const vr = 0.93 + 0.14 * NZ_f(ox + x, y, oz + z);
+          // a glowing voxel keeps its exact colour: a window is one pane, not four tiles
+          const vr = BK_EMIT[b] > 0 ? 1 : 0.93 + 0.14 * NZ_f(ox + x, y, oz + z);
+          const fc = (f === 2 || f === 3) ? 0 : fcode[x * 16 + z];
           const cr = Math.min(255, albR * vr), cg = Math.min(255, albG * vr), cb = Math.min(255, albB * vr);
           const em = Math.min(255, Math.round(BK_EMIT[b] / 4 * 255));
           const fl = BK_FLAGS[b];
           const v0 = mesh.nv;
           for (let c = 0; c < 4; c++) {
             const V = F.verts[c], o = (v0 + c) * 16, d = mesh.v;
-            d[o] = x + V.p[0]; d[o + 1] = y + V.p[1]; d[o + 2] = z + V.p[2]; d[o + 3] = 0;
-            d[o + 4] = b; d[o + 5] = f; d[o + 6] = aoV[c]; d[o + 7] = fl;
+            d[o] = x + V.p[0]; d[o + 1] = y + V.p[1]; d[o + 2] = z + V.p[2]; d[o + 3] = fc;
+            d[o + 4] = b; d[o + 5] = f; d[o + 6] = Math.min(255, moonV[c] * 255); d[o + 7] = fl;
             d[o + 8] = cr; d[o + 9] = cg; d[o + 10] = cb; d[o + 11] = em;
             d[o + 12] = Math.min(255, skyV[c] * 255);
             d[o + 13] = Math.min(255, blR[c] * 127.5); d[o + 14] = Math.min(255, blG[c] * 127.5); d[o + 15] = Math.min(255, blB[c] * 127.5);
@@ -328,5 +345,16 @@ function* BX_bake(cx, cz, env) {
     const e = lampsRaw[i];
     if (e[0] >= ox && e[0] < ox + 16 && e[2] >= oz && e[2] < oz + 16) own.push(e);
   }
-  return { opaque: pack(op), water: pack(wa), emitters: own, maxY: gen.maxY };
+  // rain shelter, stored row = z so it can go straight into a texture
+  const rain = new Uint8Array(256);
+  for (let x = 0; x < 16; x++) for (let z = 0; z < 16; z++) {
+    const rb = (((x + 16) * 48) + (z + 16)) * H;
+    let y = Math.min(H - 2, gen.maxY);
+    for (; y > 0; y--) {
+      if (!reg[rb + y]) continue;
+      if ((reg[rb + y - R1] || reg[rb + y + R1]) && (reg[rb + y - R2] || reg[rb + y + R2])) break;
+    }
+    rain[z * 16 + x] = y + 1;
+  }
+  return { opaque: pack(op), water: pack(wa), emitters: own, maxY: gen.maxY, rain: rain };
 }

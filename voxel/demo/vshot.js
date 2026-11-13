@@ -12,6 +12,9 @@ const OUT = process.argv[2] || 'vx';
 // name -> [x, y, z, yaw, pitch, extra params]
 const SCENES = {
   spawn:   [20, 104, 34, 2.52, -0.16, {}],
+  acera:   [12.5, 29.2, 96, 0.35, -0.08, {}],
+  cruce:   [4, 31, 30, 0.6, -0.12, {}],
+  neon:    [-470, 31, -300, 0.8, -0.05, {}],
   alto2:   [10, 175, 150, 2.8, -0.42, {}],
   alto3:   [200, 130, -100, 0.9, -0.25, {}],
   ras:     [30, 60, 40, 3.14, 0.02, {}],
@@ -21,6 +24,8 @@ const SCENES = {
   alto:    [0, 150, 90, 2.9, -0.55, {}],
   rio:     [0, 40, 60, 0.0, -0.10, {}],
 };
+const FRAMES = +(process.env.VX_FRAMES || 20);          // frames accumulated per still
+const QUALITY = process.env.VX_Q;
 const WANT = process.argv.slice(3).length ? process.argv.slice(3) : ['spawn', 'calle', 'azotea'];
 
 (async () => {
@@ -32,7 +37,7 @@ const WANT = process.argv.slice(3).length ? process.argv.slice(3) : ['spawn', 'c
   await p.addInitScript(() => { window.__capture = true; });
   await p.goto('file://' + PAGE, { waitUntil: 'load' });
   await p.waitForFunction(() => window.__vx, null, { timeout: 20000 });
-  await p.evaluate(() => { __vx.start(); __vx.hideHud(true); });
+  await p.evaluate(q => { __vx.start(); __vx.hideHud(true); if (q !== undefined && q !== null) __vx.quality(+q); }, QUALITY === undefined ? null : QUALITY);
   for (const name of WANT) {
     const sc = SCENES[name];
     if (!sc) { console.log('  escena desconocida: ' + name); continue; }
@@ -43,13 +48,15 @@ const WANT = process.argv.slice(3).length ? process.argv.slice(3) : ['spawn', 'c
     const ms = Date.now() - t0;
     await p.evaluate(() => __vx.render(3.0));
     await p.waitForTimeout(150);
-    await p.evaluate(() => __vx.render(3.0));
+    const tr = Date.now();
+    await p.evaluate(n => __vx.render(3.0, n), FRAMES);
+    const rms = (Date.now() - tr) / FRAMES;
     await p.waitForTimeout(250);
     const file = OUT + '-' + name + '.png';
     await p.locator('#stage').screenshot({ path: file });
     const st = await p.evaluate(() => __vx.stats());
     console.log('  ' + name.padEnd(8) + ' -> ' + file + '   carga=' + ms + 'ms chunks=' + st.chunks + ' modo=' + st.mode +
-      ' hdr=' + st.hdr + ' horneado=' + st.baked + ' (' + (st.ms / Math.max(1, st.baked)).toFixed(0) + 'ms/chunk)');
+      ' hdr=' + st.hdr + ' horneado=' + st.baked + ' (' + (st.ms / Math.max(1, st.baked)).toFixed(0) + 'ms/chunk) ' + rms.toFixed(0) + 'ms/fotograma');
   }
   if (errs.length) console.log('ERRORES DE PÁGINA: ' + errs.slice(0, 4).join(' | '));
   if (logs.length) console.log('CONSOLA: ' + [...new Set(logs)].slice(0, 4).join(' | '));

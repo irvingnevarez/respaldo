@@ -115,7 +115,7 @@ const SCEN = {
     async shot(name) {
       await p.evaluate(() => __vx.render());
       await p.waitForTimeout(150);
-      await p.evaluate(() => __vx.render());
+      await p.evaluate(n => __vx.render(undefined, n), +(process.env.VX_FRAMES || 20));
       await p.waitForTimeout(250);
       const f = OUT + '-' + name + '.png';
       await p.locator('#stage').screenshot({ path: f });

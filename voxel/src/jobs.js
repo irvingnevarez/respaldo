@@ -63,10 +63,10 @@ function JB_package(cx, cz, out) {
   return {
     t: 'chunk', cx: cx, cz: cz,
     opaque: out.opaque, water: out.water, emitters: out.emitters,
-    vox: g.vox.slice(), top: g.top.slice(), maxY: out.maxY,
+    vox: g.vox.slice(), top: g.top.slice(), maxY: out.maxY, rain: out.rain,
   };
 }
 
 function JB_transfers(m) {
-  return [m.opaque.v.buffer, m.opaque.i.buffer, m.water.v.buffer, m.water.i.buffer, m.vox.buffer, m.top.buffer];
+  return [m.opaque.v.buffer, m.opaque.i.buffer, m.water.v.buffer, m.water.i.buffer, m.vox.buffer, m.top.buffer, m.rain.buffer];
 }

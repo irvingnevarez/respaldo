@@ -17,7 +17,7 @@ var IN = {
   stickX: 0, stickY: 0,                  // touch stick: x right, y up, -1..1
   jump: false, sprint: false,            // held
   jumpEdge: false, attackEdge: false, batEdge: false, grappleEdge: false,
-  mapEdge: false, pauseEdge: false, anyEdge: false, dodgeEdge: false,
+  mapEdge: false, pauseEdge: false, anyEdge: false, dodgeEdge: false, gfxEdge: false,
   locked: false, touch: false,
   grappleHeld: false,
 };
@@ -40,6 +40,7 @@ function IN_init(stage, canvas) {
       case 'KeyM': case 'Tab': IN.mapEdge = true; e.preventDefault(); break;
       case 'KeyP': case 'Escape': IN.pauseEdge = true; break;
       case 'KeyN': if (typeof AU_toggle === 'function') AU_toggle(); break;
+      case 'KeyG': IN.gfxEdge = true; break;
       case 'ArrowUp': case 'ArrowDown': case 'ArrowLeft': case 'ArrowRight': e.preventDefault(); break;
     }
   });
@@ -61,6 +62,7 @@ function IN_init(stage, canvas) {
     if (e.pointerType === 'touch') return;          // touch has its own handlers below
     IN.anyEdge = true;
     if (typeof VX !== 'undefined' && VX.state === 'map') { const r = stage.getBoundingClientRect(); UI_mapClick(e.clientX - r.left, e.clientY - r.top); return; }
+    if (IN_gfxTap(stage, e)) return;
     if (e.target.closest && e.target.closest('#touch')) return;
     if (!lockOk() && !IN.locked && e.button === 0) {
       // a first click asks for pointer lock; if the page refuses, drag-look still works
@@ -112,6 +114,7 @@ function IN_init(stage, canvas) {
     if (e.pointerType !== 'touch') return;
     IN.touch = true; IN.anyEdge = true;
     if (e.target.closest('#stick, #acts, #sys')) return;
+    if (IN_gfxTap(stage, e)) return;
     if (lookId === null) { lookId = e.pointerId; lookLast = { x: e.clientX, y: e.clientY, t: performance.now(), moved: 0 }; }
   });
   window.addEventListener('pointermove', e => {
@@ -142,6 +145,16 @@ function IN_init(stage, canvas) {
   bindBtn('tbP', () => { IN.attackEdge = true; });
   bindBtn('tbM', () => { IN.mapEdge = true; });
   bindBtn('tbS', () => { if (typeof AU_toggle === 'function') AU_toggle(); });
+}
+
+// On the pause screen the bottom strip is the graphics setting: a click or a tap
+// there steps it.
+function IN_gfxTap(stage, e) {
+  if (typeof VX === 'undefined' || VX.state !== 'pause') return false;
+  const r = stage.getBoundingClientRect();
+  if (e.clientY - r.top < r.height * 0.86) return false;
+  IN.gfxEdge = true;
+  return true;
 }
 
 // A gamepad, if one is plugged in: the left stick walks, the right stick looks,
@@ -195,5 +208,5 @@ function IN_takeLook(out) {
   return out;
 }
 function IN_clearEdges() {
-  IN.jumpEdge = IN.attackEdge = IN.batEdge = IN.grappleEdge = IN.mapEdge = IN.pauseEdge = IN.anyEdge = IN.dodgeEdge = false;
+  IN.jumpEdge = IN.attackEdge = IN.batEdge = IN.grappleEdge = IN.mapEdge = IN.pauseEdge = IN.anyEdge = IN.dodgeEdge = IN.gfxEdge = false;
 }
