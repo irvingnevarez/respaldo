@@ -235,8 +235,8 @@ void main() {
     vec2 dir = vec2(-((lN + lE) - (lS + lW)), (lW + lN) - (lE + lS));
     float red = 1.0 / (min(abs(dir.x), abs(dir.y)) + max((lN + lS + lW + lE) * 0.03, 0.0078));
     dir = clamp(dir * red, -8.0, 8.0) * uTexel;
-    vec3 a = 0.5 * (texture(uTex, vUV + dir * (1.0 / 3.0 - 0.5)).rgb + texture(uTex, vUV + dir * (2.0 / 3.0 - 0.5)).rgb);
-    vec3 b = a * 0.5 + 0.25 * (texture(uTex, vUV + dir * -0.5).rgb + texture(uTex, vUV + dir * 0.5).rgb);
+    vec3 a = 0.5 * (textureLod(uTex, vUV + dir * (1.0 / 3.0 - 0.5), 0.0).rgb + textureLod(uTex, vUV + dir * (2.0 / 3.0 - 0.5), 0.0).rgb);
+    vec3 b = a * 0.5 + 0.25 * (textureLod(uTex, vUV + dir * -0.5, 0.0).rgb + textureLod(uTex, vUV + dir * 0.5, 0.0).rgb);
     float lb = luma(b);
     col = (lb < lo || lb > hi) ? a : b;
   }

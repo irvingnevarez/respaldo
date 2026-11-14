@@ -116,9 +116,10 @@ const SCEN = {
       await p.evaluate(() => __vx.render());
       await p.waitForTimeout(150);
       await p.evaluate(n => __vx.render(undefined, n), +(process.env.VX_FRAMES || 20));
+      await p.evaluate(() => { const gl = __vx.rend().gl; gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4)); __vx.render(undefined, 1); });
       await p.waitForTimeout(250);
       const f = OUT + '-' + name + '.png';
-      await p.locator('#stage').screenshot({ path: f });
+      await p.locator('#stage').screenshot({ path: f, timeout: 180000 });
       console.log('  ' + name + ' -> ' + f);
     },
   };

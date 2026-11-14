@@ -38,10 +38,11 @@ const TOUR = {
     try { await p.waitForFunction(() => __vx.ready(), null, { timeout: 120000, polling: 200 }); } catch (e) { console.log('  (aviso) carga incompleta'); }
     await p.evaluate(() => __vx.render(3));
     await p.waitForTimeout(150);
-    await p.evaluate(() => __vx.render(3));
+    await p.evaluate(n => __vx.render(3, n), +(process.env.VX_FRAMES || 20));
+    await p.evaluate(() => { const gl = __vx.rend().gl; gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4)); __vx.render(3, 1); });
     await p.waitForTimeout(250);
     const f = OUT + '-' + name + '.png';
-    await p.locator('#stage').screenshot({ path: f });
+    await p.locator('#stage').screenshot({ path: f, timeout: 180000 });
     console.log('  ' + name + ' -> ' + f);
   }
   if (errs.length) console.log('ERRORES: ' + [...new Set(errs)].join(' | '));

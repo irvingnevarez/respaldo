@@ -117,6 +117,28 @@ const waitState = async (p, s, ms) => { try { await p.waitForFunction(s => __vx.
     ok('sin Workers tampoco hay errores', errs.length === 0, errs[0] || '');
     await p.context().close();
   }
+  {
+    // no floating-point render targets: the renderer must fall back to 8 bits, at every rung of the ladder
+    const { p, errs } = await open(browser, null, () => { window.__capture = true; window.__nohdr = true; });
+    await p.waitForFunction(() => window.__vx, null, { timeout: 20000 });
+    try { await p.waitForFunction(() => __vx.ready(), null, { timeout: 120000, polling: 200 }); } catch (e) { }
+    await p.evaluate(() => { __vx.start(); });
+    const names = [];
+    for (let q = 0; q < 5; q++) names.push(await p.evaluate(q => { const n = __vx.quality(q); __vx.render(1.0, 2); return n + ':' + __vx.glError(); }, q));
+    ok('sin HDR dibuja en 8 bits en los cinco niveles', await p.evaluate(() => __vx.stats().hdr) === false && names.every(n => /:0$/.test(n)) && errs.length === 0, errs[0] || names.join(' '));
+    await p.context().close();
+  }
+  {
+    // the same ladder with HDR: every shader variant compiles and draws without a GL error
+    const { p, errs } = await open(browser, null, () => { window.__capture = true; });
+    await p.waitForFunction(() => window.__vx, null, { timeout: 20000 });
+    try { await p.waitForFunction(() => __vx.ready(), null, { timeout: 120000, polling: 200 }); } catch (e) { }
+    await p.evaluate(() => { __vx.start(); });
+    const names = [];
+    for (let q = 0; q < 5; q++) names.push(await p.evaluate(q => { const n = __vx.quality(q); __vx.render(1.0, 2); return n + ':' + __vx.glError(); }, q));
+    ok('los cinco niveles de calidad compilan y dibujan', names.every(n => /:0$/.test(n)) && errs.length === 0, errs[0] || names.join(' '));
+    await p.context().close();
+  }
 
   // ── 4. touch layouts ──
   console.log('táctil');

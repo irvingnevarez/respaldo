@@ -67,23 +67,31 @@ function VX_cycleQuality() {
   else VX.manualQ++;
   try { localStorage.setItem(VX_GFX_KEY, String(VX.manualQ)); } catch (e) { }
   if (VX.manualQ >= 0) VX_setQuality(VX.manualQ);
-  else { VX_setQuality(Math.min(VX.quality, 3)); VX_ft.n = 0; VX_ft.cool = 2; VX_ft.bad = VX_ft.good = 0; }
+  else { VX_setQuality(Math.min(VX.quality, 3)); VX_ft.n = 0; VX_ft.t = 0; VX_ft.cool = 2; VX_ft.bad = VX_ft.good = 0; }
 }
-var VX_ft = { avg: 16.7, bad: 0, good: 0, cool: 3, n: 0 };
+var VX_ft = { avg: 16.7, bad: 0, good: 0, cool: 3, n: 0, t: 0 };
+// `dt` here is the real time the last frame took, not the clamped step the game runs on.
 function VX_adapt(dt) {
   const f = VX_ft;
-  f.n++;
-  if (VX.manualQ >= 0 || f.n < 90 || VX.state === 'boot') return;      // pinned, or still settling
-  f.avg += (dt * 1000 - f.avg) * 0.05;
+  f.n++; f.t += dt;
+  // pinned, still loading, or still settling after a change (which costs a shader build)
+  if (VX.manualQ >= 0 || VX.state === 'boot' || f.n < 6 || f.t < 1.0) return;
+  f.avg += (dt * 1000 - f.avg) * (dt > 0.05 ? 0.25 : 0.05);          // slow frames are believed sooner
   f.cool -= dt;
   // Where the browser can time the GPU, that is the better signal: the frame time
   // is capped by the display, so on its own it can say "too slow" but never "room to spare".
   const g = VX.rend.gpuMs;
-  let bad = f.avg > 25, good = f.avg < 14.5;
+  let bad = f.avg > 22, good = f.avg < 14.5;
   if (g > 0) { bad = bad || g > 15; good = g < 6.5 && f.avg < 19; }
   if (bad) { f.bad += dt; f.good = 0; } else if (good) { f.good += dt; f.bad = 0; } else { f.bad = Math.max(0, f.bad - dt); f.good = Math.max(0, f.good - dt); }
-  if (f.cool <= 0 && f.bad > 1.6 && VX.quality > 0) { VX_setQuality(VX.quality - 1); f.bad = 0; f.cool = 4; f.avg = 18; VX.rend.gpuMs = 0; }
-  else if (f.cool <= 0 && f.good > (g > 0 ? 4 : 9) && VX.quality < 3) { VX_setQuality(VX.quality + 1); f.good = 0; f.cool = 8; VX.rend.gpuMs = 0; }
+  const awful = f.avg > 60;                                          // under 16 frames a second: no need to wait to be sure
+  if (f.cool <= 0 && VX.quality > 0 && (f.bad > 1.6 || (awful && f.bad > 0.5))) {
+    VX_setQuality(VX.quality - (f.avg > 120 && VX.quality > 1 ? 2 : 1));
+    f.bad = 0; f.cool = awful ? 1.5 : 4; f.avg = 18; f.n = 0; f.t = 0.4; VX.rend.gpuMs = 0;
+  } else if (f.cool <= 0 && f.good > (g > 0 ? 4 : 9) && VX.quality < 3) {
+    VX_setQuality(VX.quality + 1);
+    f.good = 0; f.cool = 8; f.n = 0; f.t = 0.4; VX.rend.gpuMs = 0;
+  }
 }
 
 function VX_size() {
@@ -130,6 +138,17 @@ function VX_boot() {
     return;
   }
   const gl = VX.rend.gl;
+  // The name of the graphics chip, where the browser gives it, tempers the first
+  // guess: an integrated or a phone chip does not start on the costliest rung. The
+  // ladder still has the last word once real frames have been timed.
+  if (!(VX.manualQ >= 0)) {
+    let chip = '';
+    try { const dbg = gl.getExtension('WEBGL_debug_renderer_info'); chip = String(gl.getParameter(dbg ? dbg.UNMASKED_RENDERER_WEBGL : gl.RENDERER) || ''); } catch (e) { }
+    if (/Intel|Mali|Adreno|PowerVR|VideoCore|SwiftShader|llvmpipe|Basic Render/i.test(chip)) VX.quality = Math.min(VX.quality, coarse ? 1 : 2);
+    // no GPU at all: everything is drawn by the processor (the test tools keep their rung)
+    if (/SwiftShader|llvmpipe|Basic Render/i.test(chip) && !VX.capture) VX.quality = 0;
+    VX.scale = VX_Q[VX.quality].scale; VX.radius = VX_Q[VX.quality].radius; VX.dprMax = VX_Q[VX.quality].dpr || 1.75;
+  }
   VX.cam = new VxCamera();
   VX.world = new VxWorld(gl, { radius: VX.radius });
   VX.far = new VxFar(gl, VX.rend.farDist);
@@ -374,7 +393,7 @@ function VX_update(dtReal) {
   UI_update(dtReal);
   if (typeof AU_update === 'function') AU_update(dtReal);
   if (IN.gfxEdge && VX.state !== 'boot') VX_cycleQuality();
-  VX_adapt(dtReal);
+  VX_adapt(VX.rawDt || dtReal);
   IN_clearEdges();
 }
 
@@ -494,6 +513,7 @@ function VX_draw() {
 // loop carries on. Only a failure that repeats every frame stops it, with a message.
 function VX_loop(ts) {
   const dt = Math.min(0.1, (ts - VX.last) / 1000);
+  VX.rawDt = Math.min(1.5, Math.max(0, (ts - VX.last) / 1000));
   VX.last = ts;
   try {
     VX_update(dt);

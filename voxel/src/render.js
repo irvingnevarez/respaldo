@@ -60,7 +60,7 @@ class VxRenderer {
       powerPreference: 'high-performance', preserveDrawingBuffer: false });
     if (!gl) throw new Error('WebGL2 no está disponible en este navegador');
     this.gl = gl; this.canvas = canvas;
-    this.hdr = !!(gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float'));
+    this.hdr = !!(gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float')) && !window.__nohdr;
     gl.getExtension('OES_texture_float_linear');
 
     this.prog = {
@@ -276,16 +276,30 @@ class VxRenderer {
   }
 
   // Programs that depend on the quality settings, compiled when first needed.
+  // `can` remembers what this driver failed to build, so a feature that would not
+  // compile once is not tried again at every change of quality.
   variant(kind) {
-    const Q = this.Q, gl = this.gl;
+    const Q = this.Q, gl = this.gl, can = this.can || (this.can = { ssr: true, detail: true, caps: true });
     let key, make;
     if (kind === 'light') {
       const lt = Math.max(1, Math.min(3, Math.ceil(Q.lights / 4)));
-      const ssr = (Q.ssr && Q.taa && this.hdr) ? Q.ssr : 0;
-      key = 'light:' + ssr + ':' + lt + ':' + (Q.detail ? 1 : 0) + ':' + (Q.caps ? 1 : 0);
+      const ssr = (Q.ssr && Q.taa && this.hdr && can.ssr) ? Q.ssr : 0, detail = Q.detail && can.detail ? 1 : 0, caps = Q.caps && can.caps ? 1 : 0;
+      key = 'light:' + ssr + ':' + lt + ':' + detail + ':' + caps;
       make = () => GL_prog(gl, SH_FS_VS, SH_lightFS((ssr ? '#define Q_SSR ' + ssr + '\n' : '') + '#define Q_LTEX ' + lt + '\n' +
-        (Q.detail ? '#define Q_DETAIL 1\n' : '') + (Q.caps ? '#define Q_CAPS 1\n' : '')), key);
-    } else if (kind === 'vol') {
+        (detail ? '#define Q_DETAIL 1\n' : '') + (caps ? '#define Q_CAPS 1\n' : '')), key);
+      if (!this.variants[key]) {
+        try { this.variants[key] = make(); } catch (e) {
+          // A driver that cannot build the full shader still gets a picture: drop the
+          // costliest feature it was asked for and try again, down to the plainest variant.
+          if (!ssr && !detail && !caps) throw e;
+          if (window.console) console.warn('shader ' + key + ' no compila; se simplifica: ' + String(e.message).slice(0, 200));
+          if (ssr) can.ssr = false; else if (detail) can.detail = false; else can.caps = false;
+          return this.variant(kind);
+        }
+      }
+      return this.variants[key];
+    }
+    if (kind === 'vol') {
       const n = Math.max(1, Q.vol | 0), jit = Q.taa ? 1 : 0;
       key = 'vol:' + n + ':' + jit;
       make = () => GL_prog(gl, SH_VOL_VS, SH_volFS('#define Q_VOL ' + n + '\n' + (jit ? '#define Q_JIT 1\n' : '')), key);
@@ -704,8 +718,8 @@ class VxRenderer {
     this.tex(p, 'uStreak', 2, streak ? ST[0].tex : this.blackTex); this.tex(p, 'uExpo', 3, this.expo[this.ei].tex);
     gl.uniform1f(p.u('uExposure'), P.exposure * 2.0);
     // the pyramid is the SUM of its levels; divide it back into an average
-    gl.uniform1f(p.u('uBloomAmt'), P.bloom * 0.11 / B.length);
-    gl.uniform1f(p.u('uStreakAmt'), P.streak * 0.05);
+    gl.uniform1f(p.u('uBloomAmt'), P.bloom * 0.14 / B.length);
+    gl.uniform1f(p.u('uStreakAmt'), P.streak * 0.07);
     gl.uniform1f(p.u('uCA'), P.ca);
     gl.uniform1f(p.u('uVig'), P.vig); gl.uniform1f(p.u('uSat'), P.sat); gl.uniform1f(p.u('uContrast'), P.contrast);
     gl.uniform3f(p.u('uLift'), P.lift[0], P.lift[1], P.lift[2]);

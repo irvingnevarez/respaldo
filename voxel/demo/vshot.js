@@ -20,6 +20,8 @@ const SCENES = {
   hielo:   [450, 36, -335, 0.8, -0.2, {}],
   techos:  [60, 75, -60, 2.2, -0.35, {}],
   orilla:  [40, 24.5, 150, 2.6, 0.02, {}],
+  rayo:    [20, 104, 34, 2.52, -0.05, { flash: 0.85 }],
+  bajoagua: [40, 18.5, 150, 2.6, 0.25, {}],
   puente:  [5, 30, 120, 3.14, 0.06, {}],
   alto2:   [10, 175, 150, 2.8, -0.42, {}],
   alto3:   [200, 130, -100, 0.9, -0.25, {}],
@@ -40,7 +42,7 @@ const WANT = process.argv.slice(3).length ? process.argv.slice(3) : ['spawn', 'c
   const errs = [], logs = [];
   p.on('pageerror', e => errs.push(e.message));
   p.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') logs.push(m.text()); });
-  await p.addInitScript(() => { window.__capture = true; });
+  await p.addInitScript(nohdr => { window.__capture = true; if (nohdr) window.__nohdr = true; }, !!process.env.VX_NOHDR);
   await p.goto('file://' + PAGE, { waitUntil: 'load' });
   await p.waitForFunction(() => window.__vx, null, { timeout: 20000 });
   await p.evaluate(q => { __vx.start(); __vx.hideHud(true); if (q !== undefined && q !== null) __vx.quality(+q); }, QUALITY === undefined ? null : QUALITY);
@@ -56,10 +58,12 @@ const WANT = process.argv.slice(3).length ? process.argv.slice(3) : ['spawn', 'c
     await p.waitForTimeout(150);
     const tr = Date.now();
     await p.evaluate(n => __vx.render(3.0, n), FRAMES);
-    const rms = (Date.now() - tr) / FRAMES;
+    // drawing is queued: reading one pixel back makes the page wait until it is really done
+    await p.evaluate(() => { const gl = __vx.rend().gl; gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4)); __vx.render(3.0, 1); });
+    const rms = (Date.now() - tr) / (FRAMES + 1);
     await p.waitForTimeout(250);
     const file = OUT + '-' + name + '.png';
-    await p.locator('#stage').screenshot({ path: file });
+    await p.locator('#stage').screenshot({ path: file, timeout: 180000 });
     const st = await p.evaluate(() => __vx.stats());
     console.log('  ' + name.padEnd(8) + ' -> ' + file + '   carga=' + ms + 'ms chunks=' + st.chunks + ' modo=' + st.mode +
       ' hdr=' + st.hdr + ' horneado=' + st.baked + ' (' + (st.ms / Math.max(1, st.baked)).toFixed(0) + 'ms/chunk) ' + rms.toFixed(0) + 'ms/fotograma');

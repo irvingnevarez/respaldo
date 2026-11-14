@@ -446,6 +446,7 @@ function TR_begin(i, vt) {
   TR.si = i; TR.shot = TR.shots[i]; TR.t = 0; TR.acc = 0; TR.vt = vt === undefined ? TR.shot.start : vt;
   TR.flashQ = []; TR.cardsDone = false; TR.bombsSet = false; TR.done = {};
   if (TR.shot.setup) TR.shot.setup();
+  VX.rend.resetHistory();                 // a cut: the frame before has nothing to say about this one
   VX.noPlayer = false;
   TR_camera(0);
   return { id: TR.shot.id, frames: Math.round(TR.shot.dur * TR.FPS) };
@@ -486,7 +487,7 @@ function TR_advance() {
   // lightning: a bright double pulse, the exposure kicked up with it
   let fl = 0;
   for (const f of TR.flashQ) { const d = TR.t - f.t; if (d >= 0 && d < 0.5) fl = Math.max(fl, f.p * Math.exp(-d * 11)); }
-  VX.rend.P.flash = Math.min(1, fl); VX.rend.P.exposure = 1.45 + fl * 1.6;
+  VX.rend.P.flash = Math.min(1, fl); VX.rend.P.exposure = VX_BASE.exposure * (1 + fl * 1.1);
   TR_camera(dt);
   UI.hintT = 0;
   if (sh.hud) UI_update(dt);
