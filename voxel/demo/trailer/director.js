@@ -423,7 +423,7 @@ function TR_init(o) {
   TR.ctrl = VX.cam; TR.view = new VxCamera(); VX.cam = TR.view;
   UI.compassT = 1e9;                      // no district banners: the film has its own titles
   VX.freeCam = true; GS.spawnOff = true; VX.eyeGlow = 0.5;
-  VX_setQuality(3);
+  VX_setQuality(4);                       // the film is the showcase: the top rung
   VX.rend.P.rainCount = o.rain || 4000; VX.rend.P.bloom = 0.56; VX.rend.P.grain = 0.012; VX.rend.P.sat = 1.03; VX.rend.P.contrast = 1.09;
   VX_setState('play'); VX.fade = 0; VX.fadeTo = 0; VX.rend.P.fade = 1;
   // the sound log: every effect the game plays, with its time and how near it was

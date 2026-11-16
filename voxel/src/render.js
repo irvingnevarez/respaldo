@@ -364,7 +364,11 @@ class VxRenderer {
 
   tex(p, name, unit, t) { const gl = this.gl; gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t); gl.uniform1i(p.u(name), unit); }
   fullscreen() { const gl = this.gl; gl.bindVertexArray(this.emptyVao); gl.drawArrays(gl.TRIANGLES, 0, 3); }
-  resetHistory() { this.histValid = false; }
+  resetHistory() {
+    this.histValid = false;
+    // the first frame of a new place must not wear the shadows of the last one
+    if (this.sh) this.sh.c[0].valid = this.sh.c[1].valid = false;
+  }
 
   // ── lamps ───────────────────────────────────────────────────────────────
   // Rebuilt only when chunks arrive or leave, or the camera crosses into another
@@ -579,7 +583,7 @@ class VxRenderer {
     // A cut — a teleport, a respawn, a new shot — leaves nothing for the history to
     // say about this frame: start again rather than smear the old picture into it.
     const lc = this.lastCam;
-    if (lc && (Math.hypot(cam.x - lc[0], cam.y - lc[1], cam.z - lc[2]) > 12 || cam.fx * lc[3] + cam.fy * lc[4] + cam.fz * lc[5] < 0.5)) this.histValid = false;
+    if (lc && (Math.hypot(cam.x - lc[0], cam.y - lc[1], cam.z - lc[2]) > 12 || cam.fx * lc[3] + cam.fy * lc[4] + cam.fz * lc[5] < 0.5)) this.resetHistory();
     this.lastCam = [cam.x, cam.y, cam.z, cam.fx, cam.fy, cam.fz];
     const taa = !!Q.taa;
     let jx = 0, jy = 0;
