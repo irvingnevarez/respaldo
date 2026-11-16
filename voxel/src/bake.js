@@ -28,7 +28,9 @@
 //                      of the column's building (style + window offset), so the
 //                      shader can find the window a glass voxel belongs to, or
 //                      for a billboard voxel its place in the panel (128 + ...)
-//    4  block face moon flags     moon = how much of the moon this vertex sees
+//    4  block face moon flags     moon: how much of the moon this vertex sees (6 bits)
+//                                 and its corner occlusion, 0..3 (2 bits), apart,
+//                                 because shadow maps replace the first but not the second
 //    8  r g b emit     albedo, and how hard the voxel glows (emit/255*4)
 //   12  sky bR bG bB   sky visibility, and baked lamp light (value/255*2)
 //
@@ -308,7 +310,7 @@ function* BX_bake(cx, cz, env) {
               }
             }
             const aoF = BX_AOF[aoV[c]];
-            skyV[c] = a * aoF; moonV[c] = m * aoF;
+            skyV[c] = a * aoF; moonV[c] = m;
             const al = 0.55 + 0.45 * aoF;
             blR[c] = lr * al; blG[c] = lg * al; blB[c] = lb * al;
           }
@@ -325,7 +327,7 @@ function* BX_bake(cx, cz, env) {
           for (let c = 0; c < 4; c++) {
             const V = F.verts[c], o = (v0 + c) * 16, d = mesh.v;
             d[o] = x + V.p[0]; d[o + 1] = y + V.p[1]; d[o + 2] = z + V.p[2]; d[o + 3] = fc;
-            d[o + 4] = b; d[o + 5] = f; d[o + 6] = Math.min(255, moonV[c] * 255); d[o + 7] = fl;
+            d[o + 4] = b; d[o + 5] = f; d[o + 6] = (Math.min(63, Math.round(moonV[c] * 63)) << 2) | aoV[c]; d[o + 7] = fl;
             d[o + 8] = cr; d[o + 9] = cg; d[o + 10] = cb; d[o + 11] = em;
             d[o + 12] = Math.min(255, skyV[c] * 255);
             d[o + 13] = Math.min(255, blR[c] * 127.5); d[o + 14] = Math.min(255, blG[c] * 127.5); d[o + 15] = Math.min(255, blB[c] * 127.5);

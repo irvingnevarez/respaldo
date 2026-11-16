@@ -4,6 +4,8 @@
 //    TAA       every frame is drawn a fraction of a pixel off; this pass blends it
 //              with the frames before, re-projected through depth, so edges, thin
 //              rain-wet highlights and the noise of the reflections all settle
+//    BLUR      motion blur: each pixel is smeared along the path it travelled on the
+//              screen while the shutter was open, found by re-projecting its depth
 //    BLOOM     a pyramid of blurs of the whole picture, no threshold: a lamp
 //              glares because it is a thousand times brighter than the wall, not
 //              because a shader decided it was "bright"
@@ -78,6 +80,51 @@ void main() {
   vec3 r = max(fromY((cur * kc + h * kh) / (kc + kh)), vec3(0.0));
   oHist = vec4(r, 1.0);
   oPost = vec4(r, 1.0);
+}`;
+
+// Motion blur from the camera's own movement. Where a pixel was last frame comes
+// from its depth and last frame's view; the picture is averaged along that path,
+// for the part of the frame the shutter stays open. What moves WITH the camera —
+// the character it follows, the people around him — is flagged in the G-buffer and
+// stays sharp, and the blur of the street behind him never picks up his colours.
+var SH_MBLUR_FS = SH_HEAD + `
+in vec2 vUV;
+uniform sampler2D uTex;
+uniform sampler2D uDepth;
+uniform sampler2D uG3;
+uniform mat4 uInvVPj;
+uniform mat4 uPrevVP;
+uniform vec2 uRes;
+uniform float uShutter;
+uniform float uMaxLen;
+uniform int uN;
+uniform float uFrame;
+layout(location = 0) out vec4 oColor;
+float ign(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }
+void main() {
+  ivec2 px = ivec2(gl_FragCoord.xy);
+  vec3 c0 = texelFetch(uTex, px, 0).rgb;
+  if (texelFetch(uG3, px, 0).a > 0.5) { oColor = vec4(c0, 1.0); return; }
+  float d = texelFetch(uDepth, px, 0).r;
+  vec4 w = uInvVPj * vec4(vUV * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
+  vec4 pc = uPrevVP * vec4(w.xyz / w.w, 1.0);
+  if (pc.w <= 0.0) { oColor = vec4(c0, 1.0); return; }
+  vec2 v = (vUV - (pc.xy / pc.w * 0.5 + 0.5)) * uShutter;
+  float L = length(v * uRes);
+  if (L < 0.75) { oColor = vec4(c0, 1.0); return; }
+  if (L > uMaxLen) v *= uMaxLen / L;
+  float jit = ign(gl_FragCoord.xy + uFrame * 5.588238) - 0.5;
+  vec3 acc = c0;
+  float ws = 1.0;
+  for (int i = 0; i < 16; i++) {
+    if (i >= uN) break;
+    vec2 s = vUV + v * ((float(i) + 0.5 + jit) / float(uN) - 0.5);
+    ivec2 sp = clamp(ivec2(s * uRes), ivec2(0), ivec2(uRes) - 1);
+    if (texelFetch(uG3, sp, 0).a > 0.5) continue;
+    acc += texelFetch(uTex, sp, 0).rgb;
+    ws += 1.0;
+  }
+  oColor = vec4(acc / ws, 1.0);
 }`;
 
 // Downsample: 13 taps (Jimenez), with the option of weighing each group by its

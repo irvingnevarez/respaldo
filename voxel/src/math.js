@@ -14,6 +14,13 @@ function M4_persp(o, fovy, aspect, n, f) {
   return o;
 }
 
+function M4_ortho(o, l, r, b, t, n, f) {
+  o.fill(0);
+  o[0] = 2 / (r - l); o[5] = 2 / (t - b); o[10] = -2 / (f - n);
+  o[12] = -(r + l) / (r - l); o[13] = -(t + b) / (t - b); o[14] = -(f + n) / (f - n); o[15] = 1;
+  return o;
+}
+
 // o = a * b. Safe when o is a or b.
 var M4_tmp = new Float32Array(16);
 function M4_mul(o, a, b) {

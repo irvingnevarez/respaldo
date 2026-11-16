@@ -54,22 +54,33 @@ visible.
 - **Lluvia de verdad**: el suelo expuesto tiene una película de agua y charcos con ondas; bajo un
   techo o el puente está seco (mapa de refugio por columna). Las gotas se iluminan al cruzar la luz
   de una farola y salpican donde caen.
-- **Luces**: la luz difusa y sus sombras vienen horneadas; los brillos de farolas y neones se
+- **Sombras de la luna en tiempo real**: dos cascadas de mapa de sombras (una cercana y nítida,
+  otra amplia que llega a la ciudad lejana), guardadas entre fotogramas y redibujadas solo cuando
+  la cámara se aleja o llegan chunks nuevos. La penumbra crece con la distancia al objeto que la
+  proyecta (un pretil da un borde nítido; una torre al otro lado de la calle, uno suave), y las
+  nubes proyectan sus sombras, que se mueven por la ciudad al ritmo de las del cielo.
+- **Luces**: la luz difusa de farolas y neones y sus sombras vienen horneadas; sus brillos se
   calculan por píxel con una rejilla de listas de luces. Explosiones y disparos iluminan la escena.
+- **Oclusión ambiental en pantalla** (SSAO) sobre la del horneado: atrapa lo que el horneado no ve,
+  como los personajes, el hueco bajo un coche o la esquina entre una caja y una pared.
 - **Reflejos en espacio de pantalla** sobre asfalto mojado, vidrio, hielo, coches y agua, con un
   panorama del cielo como respaldo.
 - **Ventanas con interior** (*interior mapping*): cada ventana encendida es una habitación con su
   lámpara, muebles, persianas o cortinas. Escaparates, rótulos con letras, neones y vallas LED.
 - **Luz en el aire**: el halo de cada farola y cada neón es la integral analítica de la luz
   dispersada por la niebla, cortada por la profundidad de la escena. La ciudad lejana también brilla.
+  La niebla se aclara donde la alcanza la luna y se oscurece a la sombra de las torres.
 - **Cielo**: dos capas de nubes iluminadas por la luna desde arriba y por la ciudad desde abajo,
   relámpagos dentro de la nube, horizonte fundido con la bruma.
 - **Personajes**: sombra suave de cápsula hacia la luz que más les da, oclusión bajo los pies, luz
   de borde.
-- **Posprocesado**: antialiasing temporal, bloom sin umbral en pirámide, destello anamórfico,
-  adaptación del ojo, curva ACES, aberración cromática leve, nitidez y grano.
+- **Posprocesado**: antialiasing temporal, desenfoque de movimiento de cámara (los personajes que
+  sigue quedan nítidos), bloom sin umbral en pirámide, destello anamórfico, adaptación del ojo,
+  curva ACES, aberración cromática leve, nitidez y grano. Un corte de cámara (viaje rápido,
+  reaparición, cambio de plano) reinicia el historial en vez de arrastrar la imagen anterior.
 
-Cinco niveles de calidad (MÍNIMA, BAJA, MEDIA, ALTA, ULTRA). Por defecto el juego elige y ajusta
+Cinco niveles de calidad (MÍNIMA, BAJA, MEDIA, ALTA, ULTRA); las sombras en tiempo real, la SSAO y
+el desenfoque de movimiento empiezan en MEDIA. Por defecto el juego elige y ajusta
 solo según el rendimiento real (con el tiempo de GPU cuando el navegador lo da); **G** o un clic en
 el pie de la pausa lo fija a mano, y ULTRA solo se elige a mano. Sin texturas de coma flotante el
 motor sigue funcionando en 8 bits, y si un controlador no compila el shader completo va quitando

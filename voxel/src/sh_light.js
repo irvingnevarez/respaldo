@@ -17,8 +17,10 @@
 //    6. FOG
 //
 //  The quality ladder compiles variants of this shader: `Q_SSR n` sets the number
-//  of reflection steps, `Q_LIGHTS n` the lamps examined per pixel, `Q_DETAIL`
-//  enables the class-specific material work and the window interiors.
+//  of reflection steps, `Q_LTEX n` the lamps examined per pixel (4 per n), `Q_DETAIL`
+//  enables the class-specific material work and the window interiors, `Q_SHADOW`
+//  the moon's shadow maps (`Q_SHB`/`Q_SHP` taps), `Q_SSAO n` screen-space
+//  occlusion and `Q_SHAFT n` the moonlit air.
 // ═══════════════════════════════════════════════════════════════════════
 
 function SH_lightFS(defs) {
@@ -59,6 +61,14 @@ uniform int uDynN;
 uniform vec4 uCap[8];          // characters: feet xyz, height
 uniform vec4 uCapL[8];         // the light each one blocks: xyz, strength (negative: the moon)
 uniform int uCapN;
+uniform int uDbg;              // a diagnostic view instead of the picture (tools only)
+#ifdef Q_SHADOW
+uniform highp sampler2DShadow uShC;   // both cascades side by side, compared in hardware
+uniform highp sampler2D uShR;         // the same texture, raw depth, for the blocker search
+uniform mat4 uShVP0;
+uniform mat4 uShVP1;
+uniform vec4 uShK;                    // x, y: world size of a texel in each cascade; z: depth range; w: 1 / texels across a cascade
+#endif
 layout(location = 0) out vec4 oColor;
 
 float linZ(float d) { return uNF.x * uNF.y / (uNF.y - d * (uNF.y - uNF.x)); }
@@ -165,6 +175,107 @@ float capShadow(vec3 p, vec3 c, float h, float r, vec3 lp) {
   float pen = r * (0.30 + t * 0.22);
   return smoothstep(r - pen * 0.5, r + pen, dist);
 }
+
+// The shadow of the clouds: how thick the cloud deck is where the line from this
+// point to the moon crosses it. The same field, moving at the same speed, as the
+// clouds drawn in the sky, so the patches of moonlight sweep over the city with them.
+float cloudShade(vec3 p) {
+  float t = (uCloudH - p.y) / max(uMoonDir.y, 0.05);
+  vec2 c = p.xz + uMoonDir.xz * t + uTime * vec2(3.6, 1.4);
+  return 1.0 - 0.58 * cloudDensity(c, mix(0.50, 0.36, uStorm));
+}
+
+#ifdef Q_SHADOW
+  const vec2 SH_TAPS[8] = vec2[8](vec2(-0.613, 0.354), vec2(0.168, -0.795), vec2(0.735, 0.481), vec2(-0.316, -0.278),
+  vec2(0.384, 0.069), vec2(-0.795, -0.494), vec2(-0.087, 0.861), vec2(0.909, -0.249));
+
+// The moon's light at a point from the shadow maps: 1 lit, 0 in shadow. The
+// penumbra widens with the distance to whatever casts it (the haze turns the moon
+// into a broad light): a parapet throws a crisp edge, a tower across the street a
+// soft one. .y is how far to trust it: 0 outside the maps, where the bake stands.
+vec2 moonShadow(vec3 wp, vec3 N0, float jit) {
+  int c = 0;
+  vec4 q = uShVP0 * vec4(wp + N0 * uShK.x * 1.5, 1.0);
+  float e = max(abs(q.x), abs(q.y));
+  if (e > 0.86 + 0.10 * jit) {                       // the far cascade, behind a dithered seam
+    q = uShVP1 * vec4(wp + N0 * uShK.y * 1.5, 1.0);
+    e = max(abs(q.x), abs(q.y));
+    if (e > 0.985) return vec2(1.0, 0.0);
+    c = 1;
+  }
+  vec3 sp = q.xyz * 0.5 + 0.5;
+  float tw = c == 0 ? uShK.x : uShK.y;              // world size of one texel
+  vec2 tUV = vec2(0.5, 1.0) * uShK.w;               // one texel, in the atlas
+  float u0 = float(c) * 0.5 + tUV.x, u1 = float(c) * 0.5 + 0.5 - tUV.x;
+  vec2 uv = vec2((sp.x + float(c)) * 0.5, sp.y);
+  float ref = sp.z;
+  float ang = jit * 6.2831853;
+  mat2 rot = mat2(cos(ang), sin(ang), -sin(ang), cos(ang));
+  float fade = 1.0 - smoothstep(0.88, 0.985, e) * float(c);
+  // where are the blockers, and how far above the point?
+  float sr = 1.3 / tw;
+  float bs = 0.0, bn = 0.0;
+  for (int i = 0; i < Q_SHB; i++) {
+    vec2 o = rot * SH_TAPS[i] * sr * tUV;
+    float d = textureLod(uShR, vec2(clamp(uv.x + o.x, u0, u1), uv.y + o.y), 0.0).r;
+    if (d < ref) { bs += d; bn += 1.0; }
+  }
+  if (bn == 0.0) return vec2(1.0, fade);
+  float gap = (ref - bs / bn) * uShK.z;
+  float pen = clamp(gap * 0.020, tw * 0.9, 1.6) / tw;
+  float lit = 0.0;
+  for (int i = 0; i < Q_SHP; i++) {
+    vec2 o = rot * SH_TAPS[7 - i] * pen * tUV;
+    lit += textureLod(uShC, vec3(clamp(uv.x + o.x, u0, u1), uv.y + o.y, ref), 0.0);
+  }
+  return vec2(lit / float(Q_SHP), fade);
+}
+
+#ifdef Q_SHAFT
+// How much of the air between the eye and the point the moon reaches. Fog glows in
+// the open and goes dark in the shadow of the towers, which is what draws shafts of
+// moonlight between them.
+float moonAir(vec3 rd, float len, float jit) {
+  float acc = 0.0, ws = 0.0;
+  for (int i = 0; i < Q_SHAFT; i++) {
+    vec3 p = uCam + rd * (len * (float(i) + jit) / float(Q_SHAFT));
+    float w = fogDensityAt(p.y);
+    vec4 q = uShVP1 * vec4(p, 1.0);
+    float v = 1.0;
+    if (max(abs(q.x), abs(q.y)) < 0.98) v = textureLod(uShC, vec3((q.x * 0.5 + 1.5) * 0.5, q.y * 0.5 + 0.5, q.z * 0.5 + 0.5), 0.0);
+    acc += v * w; ws += w;
+  }
+  return acc / max(ws, 1e-4);
+}
+#endif
+#endif
+
+#ifdef Q_SSAO
+// Occlusion from what is on the screen: points in the hemisphere over the surface,
+// tested against the depth buffer. A few samples, turned every frame; the temporal
+// blend does the averaging. It catches what the bake cannot see: characters, the
+// gap under a car, the corner a crate makes with a wall.
+float ssao(vec3 wp, vec3 N, float jit) {
+  vec2 r2 = h22(gl_FragCoord.xy * 0.731 + uFrame * 1.37);
+  vec3 T = normalize(cross(N, abs(N.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+  vec3 B = cross(N, T);
+  float occ = 0.0;
+  for (int i = 0; i < Q_SSAO; i++) {
+    float fi = (float(i) + jit) / float(Q_SSAO);
+    float phi = 6.2831853 * fract(r2.x + float(i) * 0.618034);
+    float u = fract(r2.y + float(i) * 0.7548777);
+    vec3 d = (T * cos(phi) + B * sin(phi)) * sqrt(u) + N * sqrt(1.0 - u);
+    vec3 s = wp + N * 0.03 + d * (1.5 * mix(0.10, 1.0, fi * fi));
+    vec4 c = uVPj * vec4(s, 1.0);
+    if (c.w < 0.15) continue;
+    vec2 suv = c.xy / c.w * 0.5 + 0.5;
+    if (suv.x < 0.0 || suv.x > 1.0 || suv.y < 0.0 || suv.y > 1.0) continue;
+    float dd = c.w - linZ(textureLod(uDepth, suv, 0.0).r);
+    occ += step(0.05, dd) * (1.0 - smoothstep(0.9, 3.0, dd));
+  }
+  return 1.0 - occ / float(Q_SSAO);
+}
+#endif
 
 #ifdef Q_DETAIL
 // Blocky lettering: a row of 3 x 5 glyphs picked by hash. p is in glyph cells.
@@ -336,7 +447,9 @@ void main() {
   vec3 alb = pow(g0.rgb, vec3(2.2));
   float emit = g0.a * 4.0;
   float skyV = g2.a, moonV = g3.r;
+  float aoV = ent ? 1.0 : g3.b;                       // the vertex's own corner occlusion
   vec3 lampB = g2.rgb * (2.0 * uBlockI);
+  float jitS = ign(gl_FragCoord.xy + uFrame * 5.588238);
 
   vec3 N = N0;
   float rough = 0.5, metal = 0.0, f0 = 0.04, cavity = 1.0, pud = 0.0, wet = 0.0;
@@ -440,8 +553,8 @@ void main() {
       } else if (cls == MC_ROOF) {
         if (grain > 0.9) {
           vec4 cb = noiseB(uv, 1.3, fw);
-          alb *= 0.66 + 0.68 * cb.g;
-          N += (T * (cb.g - 0.5) + B * (fract(cb.g * 7.0) - 0.5)) * 0.5 * nearK;
+          alb *= 0.78 + 0.44 * cb.g;
+          N += (T * (cb.g - 0.5) + B * (fract(cb.g * 7.0) - 0.5)) * 0.35 * nearK;
         } else rough = mix(rough, 0.52, smoothstep(0.50, 0.72, nc.a));
       } else if (cls == MC_WOOD) {
         alb *= 0.74 + 0.52 * noiseA(vec2(uv.x * 0.12, uv.y * 2.6) + trnd * 9.0, 3.0, fw).r;
@@ -583,14 +696,31 @@ void main() {
   }
 #endif
 
+  // ── the moon: shadow maps where there are any, the bake beyond; the clouds over both ──
+  float moonL = moonV;
+#ifdef Q_SHADOW
+  if (dot(N0, uMoonDir) > -0.02) {
+    vec2 sm = moonShadow(wp, N0, jitS);
+    moonL = mix(moonV, sm.x * mix(1.0, aoV, 0.5), sm.y);
+  }
+#endif
+  moonL *= cloudShade(wp);
+  // ── what the screen says about occlusion ──
+  float ao2 = 1.0;
+#ifdef Q_SSAO
+  if (dist < 90.0) ao2 = mix(1.0, ssao(wp, N0, jitS), 0.70 * (1.0 - smoothstep(55.0, 90.0, dist)));
+#endif
+
   // ── light ──
   float hemi = clamp(0.67 + 0.33 * N.y + 0.11 * N.z, 0.2, 1.1);
   float flash = 1.0 + uBolt * 6.0 / max(uSkyI, 0.1);
   vec3 skyC = uSkyTint * uSkyI * flash;
   float ndm = max(dot(N, uMoonDir), 0.0);
-  vec3 light = skyC * (0.36 * hemi * skyV * capAO + 0.62 * ndm * moonV * capMoon);
+  // The moon is the one light that throws a shadow across the whole city, so it has
+  // to outweigh the sky by enough for that shadow to read: about three to one.
+  vec3 light = skyC * (0.31 * hemi * skyV * capAO * ao2 + 1.0 * ndm * moonL * capMoon);
   vec3 spec = vec3(0.0);
-  if (moonV > 0.01 && ndm > 0.0) spec += skyC * 0.62 * moonV * capMoon * specLobe(N, V, uMoonDir, max(a, 0.05), F0v, nv);
+  if (moonL > 0.01 && ndm > 0.0) spec += skyC * 1.0 * moonL * capMoon * specLobe(N, V, uMoonDir, max(a, 0.05), F0v, nv);
 
   // lamps: the bake gives the diffuse light and its shadows; the grid gives the
   // lamps themselves, for the detail normal and for the highlights
@@ -629,7 +759,7 @@ void main() {
   }
   float ratio = eFlat > 0.012 ? clamp(ePP / eFlat, 0.0, 2.2) : 1.0;
   float vis = eFlat > 0.012 ? clamp(lum(lampB) / (eFlat * 0.8), 0.0, 1.0) : (N0.y > 0.5 ? 0.7 : 0.25);
-  light += lampB * ratio * capLamp;
+  light += lampB * ratio * capLamp * mix(1.0, ao2, 0.5);
   spec += lampS * vis * capLamp * uSpec;
 
   // lights that move: explosions, muzzle flashes, sparks
@@ -648,7 +778,7 @@ void main() {
   vec3 R = reflect(-V, N);
   R = normalize(R + N0 * max(0.0, -dot(R, N0)) * 1.1);
   vec3 Fenv = F0v + (max(vec3(1.0 - rough), F0v) - F0v) * pow(1.0 - nv, 5.0);
-  float occ = ent ? 0.5 * skyV + 0.2 : mix(skyV, 1.0, 0.12);
+  float occ = (ent ? 0.5 * skyV + 0.2 : mix(skyV, 1.0, 0.12)) * ao2;
   vec3 env = textureLod(uEnv, envUV(R), rough * 5.5).rgb * occ;
 #ifdef Q_SSR
   if (rough < 0.42 && max(Fenv.r, max(Fenv.g, Fenv.b)) > 0.012 && dist < 260.0) {
@@ -660,8 +790,14 @@ void main() {
 
   vec3 col = dAlb * light * cavity + spec * mix(1.0, cavity, 0.5) + emitCol;
   // a cold rim keeps a dark character readable against a dark city
-  if (ent) col += vec3(0.33, 0.53, 1.0) * g3.b * pow(1.0 - nv, 3.0) * (0.35 + 0.65 * moonV) * 0.30;
-  col = mix(col, fogColor(rd), fogAmt(wp));
+  if (ent) col += vec3(0.33, 0.53, 1.0) * g3.b * pow(1.0 - nv, 3.0) * (0.35 + 0.65 * moonL) * 0.30;
+  vec3 fc = fogColor(rd);
+#if defined(Q_SHADOW) && defined(Q_SHAFT)
+  fc *= 0.70 + 0.62 * moonAir(rd, min(dist, 170.0), jitS);
+#endif
+  col = mix(col, fc, fogAmt(wp));
+  if (uDbg == 1) col = vec3(moonL * 0.5, moonV * 0.5, ndm * 0.5);
+  else if (uDbg == 2) col = vec3(ao2 * 0.5);
   oColor = vec4(min(col, vec3(64.0)), 1.0);
 }`;
 }

@@ -41,11 +41,11 @@ var VX_STEP = 1 / 120;
 // there is room. The player can also pin a rung from the pause screen; ULTRA is
 // only ever chosen by hand. Nothing here changes how the game plays.
 var VX_Q = [
-  { name: 'MÍNIMA', scale: 0.55, radius: 5, rain: 1100, g: { taa: 0, ssr: 0, vol: 0, lights: 4, detail: 0, caps: 0, splash: 0, streak: 0 } },
-  { name: 'BAJA', scale: 0.70, radius: 6, rain: 2200, g: { taa: 0, ssr: 0, vol: 2, lights: 8, detail: 1, caps: 1, splash: 300, streak: 0 } },
-  { name: 'MEDIA', scale: 0.85, radius: 7, rain: 3600, g: { taa: 1, ssr: 14, vol: 3, lights: 8, detail: 1, caps: 1, splash: 600, streak: 1 } },
-  { name: 'ALTA', scale: 1.00, radius: 8, rain: 5600, g: { taa: 1, ssr: 28, vol: 4, lights: 12, detail: 1, caps: 1, splash: 900, streak: 1 } },
-  { name: 'ULTRA', scale: 1.00, radius: 8, rain: 8000, dpr: 2.0, g: { taa: 1, ssr: 44, vol: 6, lights: 12, detail: 1, caps: 1, splash: 1500, streak: 1 } },
+  { name: 'MÍNIMA', scale: 0.55, radius: 5, rain: 1100, g: { taa: 0, ssr: 0, vol: 0, lights: 4, detail: 0, caps: 0, splash: 0, streak: 0, shadow: 0, shRes: 0, ssao: 0, shaft: 0, mblur: 0 } },
+  { name: 'BAJA', scale: 0.70, radius: 6, rain: 2200, g: { taa: 0, ssr: 0, vol: 2, lights: 8, detail: 1, caps: 1, splash: 300, streak: 0, shadow: 0, shRes: 0, ssao: 0, shaft: 0, mblur: 0 } },
+  { name: 'MEDIA', scale: 0.85, radius: 7, rain: 3600, g: { taa: 1, ssr: 14, vol: 3, lights: 8, detail: 1, caps: 1, splash: 600, streak: 1, shadow: 1, shRes: 1024, ssao: 4, shaft: 0, mblur: 6 } },
+  { name: 'ALTA', scale: 1.00, radius: 8, rain: 5600, g: { taa: 1, ssr: 28, vol: 4, lights: 12, detail: 1, caps: 1, splash: 900, streak: 1, shadow: 2, shRes: 2048, ssao: 8, shaft: 10, mblur: 8 } },
+  { name: 'ULTRA', scale: 1.00, radius: 8, rain: 8000, dpr: 2.0, g: { taa: 1, ssr: 44, vol: 6, lights: 12, detail: 1, caps: 1, splash: 1500, streak: 1, shadow: 3, shRes: 2048, ssao: 12, shaft: 16, mblur: 12 } },
 ];
 var VX_GFX_KEY = 'gotham-voxel-gfx';
 function VX_setQuality(q) {

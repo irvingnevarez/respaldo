@@ -247,7 +247,7 @@ class VxWorld {
   // ── drawing ─────────────────────────────────────────────────────────────
   // Draws every loaded chunk that touches the frustum with whichever mesh `which`
   // names ('o' opaque, 'w' water).
-  draw(prog, planes, camX, camZ, which, maxDist) {
+  draw(prog, planes, camX, camZ, which, maxDist, noStats) {
     const gl = this.gl, org = prog.u('uOrg');
     const lim = maxDist * maxDist;
     let drawn = 0, tris = 0;
@@ -273,7 +273,7 @@ class VxWorld {
       drawn++; tris += m.n / 3;
     }
     gl.bindVertexArray(null);
-    if (which === 'o') { this.stats.drawn = drawn; this.stats.tris = tris; }
+    if (which === 'o' && !noStats) { this.stats.drawn = drawn; this.stats.tris = tris; }
   }
 
   // Every light source near a point, packed for the glow-sprite pass:

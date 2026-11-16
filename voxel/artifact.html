@@ -236,8 +236,8 @@ var BK_FLAGS = new Uint8Array(256);
   def('WIN_WARM', 255, 190, 104, 0, 1.55);
   def('WIN_COOL', 150, 200, 255, 0, 1.45);
   def('WIN_WHITE', 240, 236, 214, 0, 1.5);
-  def('ROOF_TAR', 30, 32, 38, 0);
-  def('ROOF_GRAVEL', 56, 56, 60, 0);
+  def('ROOF_TAR', 44, 46, 52, 0);
+  def('ROOF_GRAVEL', 84, 84, 88, 0);
   def('WATER', 16, 42, 62, T);
   def('SAND', 118, 104, 82, 0);
   def('WOOD', 90, 62, 40, 0);
@@ -1691,7 +1691,9 @@ var WG_SPAWN = LM.spawn;
 //                      of the column's building (style + window offset), so the
 //                      shader can find the window a glass voxel belongs to, or
 //                      for a billboard voxel its place in the panel (128 + ...)
-//    4  block face moon flags     moon = how much of the moon this vertex sees
+//    4  block face moon flags     moon: how much of the moon this vertex sees (6 bits)
+//                                 and its corner occlusion, 0..3 (2 bits), apart,
+//                                 because shadow maps replace the first but not the second
 //    8  r g b emit     albedo, and how hard the voxel glows (emit/255*4)
 //   12  sky bR bG bB   sky visibility, and baked lamp light (value/255*2)
 //
@@ -1971,7 +1973,7 @@ function* BX_bake(cx, cz, env) {
               }
             }
             const aoF = BX_AOF[aoV[c]];
-            skyV[c] = a * aoF; moonV[c] = m * aoF;
+            skyV[c] = a * aoF; moonV[c] = m;
             const al = 0.55 + 0.45 * aoF;
             blR[c] = lr * al; blG[c] = lg * al; blB[c] = lb * al;
           }
@@ -1988,7 +1990,7 @@ function* BX_bake(cx, cz, env) {
           for (let c = 0; c < 4; c++) {
             const V = F.verts[c], o = (v0 + c) * 16, d = mesh.v;
             d[o] = x + V.p[0]; d[o + 1] = y + V.p[1]; d[o + 2] = z + V.p[2]; d[o + 3] = fc;
-            d[o + 4] = b; d[o + 5] = f; d[o + 6] = Math.min(255, moonV[c] * 255); d[o + 7] = fl;
+            d[o + 4] = b; d[o + 5] = f; d[o + 6] = (Math.min(63, Math.round(moonV[c] * 63)) << 2) | aoV[c]; d[o + 7] = fl;
             d[o + 8] = cr; d[o + 9] = cg; d[o + 10] = cb; d[o + 11] = em;
             d[o + 12] = Math.min(255, skyV[c] * 255);
             d[o + 13] = Math.min(255, blR[c] * 127.5); d[o + 14] = Math.min(255, blG[c] * 127.5); d[o + 15] = Math.min(255, blB[c] * 127.5);
@@ -2137,6 +2139,13 @@ function M4_persp(o, fovy, aspect, n, f) {
   const t = 1 / Math.tan(fovy / 2);
   o.fill(0);
   o[0] = t / aspect; o[5] = t; o[10] = (f + n) / (n - f); o[11] = -1; o[14] = 2 * f * n / (n - f);
+  return o;
+}
+
+function M4_ortho(o, l, r, b, t, n, f) {
+  o.fill(0);
+  o[0] = 2 / (r - l); o[5] = 2 / (t - b); o[10] = -2 / (f - n);
+  o[12] = -(r + l) / (r - l); o[13] = -(t + b) / (t - b); o[14] = -(f + n) / (f - n); o[15] = 1;
   return o;
 }
 
@@ -2338,8 +2347,8 @@ var BK_FLAGS = new Uint8Array(256);
   def('WIN_WARM', 255, 190, 104, 0, 1.55);
   def('WIN_COOL', 150, 200, 255, 0, 1.45);
   def('WIN_WHITE', 240, 236, 214, 0, 1.5);
-  def('ROOF_TAR', 30, 32, 38, 0);
-  def('ROOF_GRAVEL', 56, 56, 60, 0);
+  def('ROOF_TAR', 44, 46, 52, 0);
+  def('ROOF_GRAVEL', 84, 84, 88, 0);
   def('WATER', 16, 42, 62, T);
   def('SAND', 118, 104, 82, 0);
   def('WOOD', 90, 62, 40, 0);
@@ -3793,7 +3802,9 @@ var WG_SPAWN = LM.spawn;
 //                      of the column's building (style + window offset), so the
 //                      shader can find the window a glass voxel belongs to, or
 //                      for a billboard voxel its place in the panel (128 + ...)
-//    4  block face moon flags     moon = how much of the moon this vertex sees
+//    4  block face moon flags     moon: how much of the moon this vertex sees (6 bits)
+//                                 and its corner occlusion, 0..3 (2 bits), apart,
+//                                 because shadow maps replace the first but not the second
 //    8  r g b emit     albedo, and how hard the voxel glows (emit/255*4)
 //   12  sky bR bG bB   sky visibility, and baked lamp light (value/255*2)
 //
@@ -4073,7 +4084,7 @@ function* BX_bake(cx, cz, env) {
               }
             }
             const aoF = BX_AOF[aoV[c]];
-            skyV[c] = a * aoF; moonV[c] = m * aoF;
+            skyV[c] = a * aoF; moonV[c] = m;
             const al = 0.55 + 0.45 * aoF;
             blR[c] = lr * al; blG[c] = lg * al; blB[c] = lb * al;
           }
@@ -4090,7 +4101,7 @@ function* BX_bake(cx, cz, env) {
           for (let c = 0; c < 4; c++) {
             const V = F.verts[c], o = (v0 + c) * 16, d = mesh.v;
             d[o] = x + V.p[0]; d[o + 1] = y + V.p[1]; d[o + 2] = z + V.p[2]; d[o + 3] = fc;
-            d[o + 4] = b; d[o + 5] = f; d[o + 6] = Math.min(255, moonV[c] * 255); d[o + 7] = fl;
+            d[o + 4] = b; d[o + 5] = f; d[o + 6] = (Math.min(63, Math.round(moonV[c] * 63)) << 2) | aoV[c]; d[o + 7] = fl;
             d[o + 8] = cr; d[o + 9] = cg; d[o + 10] = cb; d[o + 11] = em;
             d[o + 12] = Math.min(255, skyV[c] * 255);
             d[o + 13] = Math.min(255, blR[c] * 127.5); d[o + 14] = Math.min(255, blG[c] * 127.5); d[o + 15] = Math.min(255, blB[c] * 127.5);
@@ -4495,7 +4506,8 @@ function TX_classDefines() {
 //    0  albedo rgb (as authored, sRGB)        a  emission / 4
 //    1  normal * 0.5 + 0.5                    a  block id / 255   (255 entity, 254 particle)
 //    2  baked lamp rgb / 2                    a  baked sky visibility
-//    3  r baked moon visibility   g facade code / 255   b rim   a 1 for things that move
+//    3  r baked moon visibility   g facade code / 255   b corner occlusion (terrain) or
+//       rim (characters)   a 1 for things that move
 // ═══════════════════════════════════════════════════════════════════════
 
 var SH_HEAD = `#version 300 es
@@ -4631,7 +4643,7 @@ vec2 envUV(vec3 d) { return vec2(atan(d.z, d.x) * 0.15915494 + 0.5, d.y * 0.5 + 
 // ── terrain into the G-buffer ─────────────────────────────────────────────
 var SH_GBUF_VS = SH_HEAD + `
 layout(location = 0) in vec4 aPos;      // xyz inside the chunk, facade code
-layout(location = 1) in uvec4 aIds;     // block, face, baked moon visibility, flags
+layout(location = 1) in uvec4 aIds;     // block, face, moon visibility (6 bits) and corner occlusion (2 bits), flags
 layout(location = 2) in vec4 aCol;      // albedo rgb, emission
 layout(location = 3) in vec4 aLit;      // baked sky visibility, baked lamp rgb
 uniform mat4 uVP;
@@ -4640,11 +4652,14 @@ out vec3 vW;
 out vec4 vCol;
 out vec4 vLit;
 out float vMoon;
+out float vAO;
 flat out vec3 vInfo;                    // block, face, facade code
+  const float AOF[4] = float[4](0.50, 0.70, 0.86, 1.0);
 void main() {
   vec3 p = uOrg + aPos.xyz;
   if ((aIds.w & 4u) != 0u) p.y -= 0.14;           // a liquid's surface sits a little below the brim
-  vW = p; vCol = aCol; vLit = aLit; vMoon = float(aIds.z) / 255.0;
+  vAO = AOF[aIds.z & 3u];
+  vW = p; vCol = aCol; vLit = aLit; vMoon = float(aIds.z >> 2u) / 63.0 * vAO;
   vInfo = vec3(float(aIds.x), float(aIds.y), aPos.w);
   gl_Position = uVP * vec4(p, 1.0);
 }`;
@@ -4655,6 +4670,7 @@ in vec3 vW;
 in vec4 vCol;
 in vec4 vLit;
 in float vMoon;
+in float vAO;
 flat in vec3 vInfo;
 uniform vec3 uCam;
 uniform float uCut;       // the far pass discards everything inside this radius
@@ -4671,7 +4687,35 @@ void main() {
   o0 = vCol;
   o1 = vec4(VXN[int(vInfo.y + 0.5)] * 0.5 + 0.5, vInfo.x / 255.0);
   o2 = vec4(vLit.yzw, vLit.x);
-  o3 = vec4(vMoon, vInfo.z / 255.0, 0.0, 0.0);
+  o3 = vec4(vMoon, vInfo.z / 255.0, vAO, 0.0);
+}`;
+}
+
+// ── shadow maps: the world's depth as the moon sees it ─────────────────────
+// Only the faces turned AWAY from the moon are drawn (front faces are culled), so
+// what is stored is the far side of every solid. A lit face then always lies in
+// front of its own block's stored depth and cannot shadow itself, with no bias to
+// tune; anything behind a solid, seen from the moon, is in its shadow.
+var SH_SHADOW_VS = SH_HEAD + `
+layout(location = 0) in vec4 aPos;
+uniform mat4 uVP;
+uniform vec3 uOrg;
+out vec2 vXZ;
+void main() {
+  vec3 p = uOrg + aPos.xyz;
+  vXZ = p.xz;
+  gl_Position = uVP * vec4(p, 1.0);
+}`;
+function SH_shadowFS(cut) {
+  return SH_HEAD + (cut ? '#define CUT 1\n' : '') + `
+in vec2 vXZ;
+uniform vec3 uCam;
+uniform float uCut;
+void main() {
+#ifdef CUT
+  vec2 d = vXZ - uCam.xz;
+  if (dot(d, d) < uCut * uCut) discard;
+#endif
 }`;
 }
 
@@ -4769,8 +4813,10 @@ void main() {
 //    6. FOG
 //
 //  The quality ladder compiles variants of this shader: `Q_SSR n` sets the number
-//  of reflection steps, `Q_LIGHTS n` the lamps examined per pixel, `Q_DETAIL`
-//  enables the class-specific material work and the window interiors.
+//  of reflection steps, `Q_LTEX n` the lamps examined per pixel (4 per n), `Q_DETAIL`
+//  enables the class-specific material work and the window interiors, `Q_SHADOW`
+//  the moon's shadow maps (`Q_SHB`/`Q_SHP` taps), `Q_SSAO n` screen-space
+//  occlusion and `Q_SHAFT n` the moonlit air.
 // ═══════════════════════════════════════════════════════════════════════
 
 function SH_lightFS(defs) {
@@ -4811,6 +4857,14 @@ uniform int uDynN;
 uniform vec4 uCap[8];          // characters: feet xyz, height
 uniform vec4 uCapL[8];         // the light each one blocks: xyz, strength (negative: the moon)
 uniform int uCapN;
+uniform int uDbg;              // a diagnostic view instead of the picture (tools only)
+#ifdef Q_SHADOW
+uniform highp sampler2DShadow uShC;   // both cascades side by side, compared in hardware
+uniform highp sampler2D uShR;         // the same texture, raw depth, for the blocker search
+uniform mat4 uShVP0;
+uniform mat4 uShVP1;
+uniform vec4 uShK;                    // x, y: world size of a texel in each cascade; z: depth range; w: 1 / texels across a cascade
+#endif
 layout(location = 0) out vec4 oColor;
 
 float linZ(float d) { return uNF.x * uNF.y / (uNF.y - d * (uNF.y - uNF.x)); }
@@ -4917,6 +4971,107 @@ float capShadow(vec3 p, vec3 c, float h, float r, vec3 lp) {
   float pen = r * (0.30 + t * 0.22);
   return smoothstep(r - pen * 0.5, r + pen, dist);
 }
+
+// The shadow of the clouds: how thick the cloud deck is where the line from this
+// point to the moon crosses it. The same field, moving at the same speed, as the
+// clouds drawn in the sky, so the patches of moonlight sweep over the city with them.
+float cloudShade(vec3 p) {
+  float t = (uCloudH - p.y) / max(uMoonDir.y, 0.05);
+  vec2 c = p.xz + uMoonDir.xz * t + uTime * vec2(3.6, 1.4);
+  return 1.0 - 0.58 * cloudDensity(c, mix(0.50, 0.36, uStorm));
+}
+
+#ifdef Q_SHADOW
+  const vec2 SH_TAPS[8] = vec2[8](vec2(-0.613, 0.354), vec2(0.168, -0.795), vec2(0.735, 0.481), vec2(-0.316, -0.278),
+  vec2(0.384, 0.069), vec2(-0.795, -0.494), vec2(-0.087, 0.861), vec2(0.909, -0.249));
+
+// The moon's light at a point from the shadow maps: 1 lit, 0 in shadow. The
+// penumbra widens with the distance to whatever casts it (the haze turns the moon
+// into a broad light): a parapet throws a crisp edge, a tower across the street a
+// soft one. .y is how far to trust it: 0 outside the maps, where the bake stands.
+vec2 moonShadow(vec3 wp, vec3 N0, float jit) {
+  int c = 0;
+  vec4 q = uShVP0 * vec4(wp + N0 * uShK.x * 1.5, 1.0);
+  float e = max(abs(q.x), abs(q.y));
+  if (e > 0.86 + 0.10 * jit) {                       // the far cascade, behind a dithered seam
+    q = uShVP1 * vec4(wp + N0 * uShK.y * 1.5, 1.0);
+    e = max(abs(q.x), abs(q.y));
+    if (e > 0.985) return vec2(1.0, 0.0);
+    c = 1;
+  }
+  vec3 sp = q.xyz * 0.5 + 0.5;
+  float tw = c == 0 ? uShK.x : uShK.y;              // world size of one texel
+  vec2 tUV = vec2(0.5, 1.0) * uShK.w;               // one texel, in the atlas
+  float u0 = float(c) * 0.5 + tUV.x, u1 = float(c) * 0.5 + 0.5 - tUV.x;
+  vec2 uv = vec2((sp.x + float(c)) * 0.5, sp.y);
+  float ref = sp.z;
+  float ang = jit * 6.2831853;
+  mat2 rot = mat2(cos(ang), sin(ang), -sin(ang), cos(ang));
+  float fade = 1.0 - smoothstep(0.88, 0.985, e) * float(c);
+  // where are the blockers, and how far above the point?
+  float sr = 1.3 / tw;
+  float bs = 0.0, bn = 0.0;
+  for (int i = 0; i < Q_SHB; i++) {
+    vec2 o = rot * SH_TAPS[i] * sr * tUV;
+    float d = textureLod(uShR, vec2(clamp(uv.x + o.x, u0, u1), uv.y + o.y), 0.0).r;
+    if (d < ref) { bs += d; bn += 1.0; }
+  }
+  if (bn == 0.0) return vec2(1.0, fade);
+  float gap = (ref - bs / bn) * uShK.z;
+  float pen = clamp(gap * 0.020, tw * 0.9, 1.6) / tw;
+  float lit = 0.0;
+  for (int i = 0; i < Q_SHP; i++) {
+    vec2 o = rot * SH_TAPS[7 - i] * pen * tUV;
+    lit += textureLod(uShC, vec3(clamp(uv.x + o.x, u0, u1), uv.y + o.y, ref), 0.0);
+  }
+  return vec2(lit / float(Q_SHP), fade);
+}
+
+#ifdef Q_SHAFT
+// How much of the air between the eye and the point the moon reaches. Fog glows in
+// the open and goes dark in the shadow of the towers, which is what draws shafts of
+// moonlight between them.
+float moonAir(vec3 rd, float len, float jit) {
+  float acc = 0.0, ws = 0.0;
+  for (int i = 0; i < Q_SHAFT; i++) {
+    vec3 p = uCam + rd * (len * (float(i) + jit) / float(Q_SHAFT));
+    float w = fogDensityAt(p.y);
+    vec4 q = uShVP1 * vec4(p, 1.0);
+    float v = 1.0;
+    if (max(abs(q.x), abs(q.y)) < 0.98) v = textureLod(uShC, vec3((q.x * 0.5 + 1.5) * 0.5, q.y * 0.5 + 0.5, q.z * 0.5 + 0.5), 0.0);
+    acc += v * w; ws += w;
+  }
+  return acc / max(ws, 1e-4);
+}
+#endif
+#endif
+
+#ifdef Q_SSAO
+// Occlusion from what is on the screen: points in the hemisphere over the surface,
+// tested against the depth buffer. A few samples, turned every frame; the temporal
+// blend does the averaging. It catches what the bake cannot see: characters, the
+// gap under a car, the corner a crate makes with a wall.
+float ssao(vec3 wp, vec3 N, float jit) {
+  vec2 r2 = h22(gl_FragCoord.xy * 0.731 + uFrame * 1.37);
+  vec3 T = normalize(cross(N, abs(N.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+  vec3 B = cross(N, T);
+  float occ = 0.0;
+  for (int i = 0; i < Q_SSAO; i++) {
+    float fi = (float(i) + jit) / float(Q_SSAO);
+    float phi = 6.2831853 * fract(r2.x + float(i) * 0.618034);
+    float u = fract(r2.y + float(i) * 0.7548777);
+    vec3 d = (T * cos(phi) + B * sin(phi)) * sqrt(u) + N * sqrt(1.0 - u);
+    vec3 s = wp + N * 0.03 + d * (1.5 * mix(0.10, 1.0, fi * fi));
+    vec4 c = uVPj * vec4(s, 1.0);
+    if (c.w < 0.15) continue;
+    vec2 suv = c.xy / c.w * 0.5 + 0.5;
+    if (suv.x < 0.0 || suv.x > 1.0 || suv.y < 0.0 || suv.y > 1.0) continue;
+    float dd = c.w - linZ(textureLod(uDepth, suv, 0.0).r);
+    occ += step(0.05, dd) * (1.0 - smoothstep(0.9, 3.0, dd));
+  }
+  return 1.0 - occ / float(Q_SSAO);
+}
+#endif
 
 #ifdef Q_DETAIL
 // Blocky lettering: a row of 3 x 5 glyphs picked by hash. p is in glyph cells.
@@ -5088,7 +5243,9 @@ void main() {
   vec3 alb = pow(g0.rgb, vec3(2.2));
   float emit = g0.a * 4.0;
   float skyV = g2.a, moonV = g3.r;
+  float aoV = ent ? 1.0 : g3.b;                       // the vertex's own corner occlusion
   vec3 lampB = g2.rgb * (2.0 * uBlockI);
+  float jitS = ign(gl_FragCoord.xy + uFrame * 5.588238);
 
   vec3 N = N0;
   float rough = 0.5, metal = 0.0, f0 = 0.04, cavity = 1.0, pud = 0.0, wet = 0.0;
@@ -5192,8 +5349,8 @@ void main() {
       } else if (cls == MC_ROOF) {
         if (grain > 0.9) {
           vec4 cb = noiseB(uv, 1.3, fw);
-          alb *= 0.66 + 0.68 * cb.g;
-          N += (T * (cb.g - 0.5) + B * (fract(cb.g * 7.0) - 0.5)) * 0.5 * nearK;
+          alb *= 0.78 + 0.44 * cb.g;
+          N += (T * (cb.g - 0.5) + B * (fract(cb.g * 7.0) - 0.5)) * 0.35 * nearK;
         } else rough = mix(rough, 0.52, smoothstep(0.50, 0.72, nc.a));
       } else if (cls == MC_WOOD) {
         alb *= 0.74 + 0.52 * noiseA(vec2(uv.x * 0.12, uv.y * 2.6) + trnd * 9.0, 3.0, fw).r;
@@ -5335,14 +5492,31 @@ void main() {
   }
 #endif
 
+  // ── the moon: shadow maps where there are any, the bake beyond; the clouds over both ──
+  float moonL = moonV;
+#ifdef Q_SHADOW
+  if (dot(N0, uMoonDir) > -0.02) {
+    vec2 sm = moonShadow(wp, N0, jitS);
+    moonL = mix(moonV, sm.x * mix(1.0, aoV, 0.5), sm.y);
+  }
+#endif
+  moonL *= cloudShade(wp);
+  // ── what the screen says about occlusion ──
+  float ao2 = 1.0;
+#ifdef Q_SSAO
+  if (dist < 90.0) ao2 = mix(1.0, ssao(wp, N0, jitS), 0.70 * (1.0 - smoothstep(55.0, 90.0, dist)));
+#endif
+
   // ── light ──
   float hemi = clamp(0.67 + 0.33 * N.y + 0.11 * N.z, 0.2, 1.1);
   float flash = 1.0 + uBolt * 6.0 / max(uSkyI, 0.1);
   vec3 skyC = uSkyTint * uSkyI * flash;
   float ndm = max(dot(N, uMoonDir), 0.0);
-  vec3 light = skyC * (0.36 * hemi * skyV * capAO + 0.62 * ndm * moonV * capMoon);
+  // The moon is the one light that throws a shadow across the whole city, so it has
+  // to outweigh the sky by enough for that shadow to read: about three to one.
+  vec3 light = skyC * (0.31 * hemi * skyV * capAO * ao2 + 1.0 * ndm * moonL * capMoon);
   vec3 spec = vec3(0.0);
-  if (moonV > 0.01 && ndm > 0.0) spec += skyC * 0.62 * moonV * capMoon * specLobe(N, V, uMoonDir, max(a, 0.05), F0v, nv);
+  if (moonL > 0.01 && ndm > 0.0) spec += skyC * 1.0 * moonL * capMoon * specLobe(N, V, uMoonDir, max(a, 0.05), F0v, nv);
 
   // lamps: the bake gives the diffuse light and its shadows; the grid gives the
   // lamps themselves, for the detail normal and for the highlights
@@ -5381,7 +5555,7 @@ void main() {
   }
   float ratio = eFlat > 0.012 ? clamp(ePP / eFlat, 0.0, 2.2) : 1.0;
   float vis = eFlat > 0.012 ? clamp(lum(lampB) / (eFlat * 0.8), 0.0, 1.0) : (N0.y > 0.5 ? 0.7 : 0.25);
-  light += lampB * ratio * capLamp;
+  light += lampB * ratio * capLamp * mix(1.0, ao2, 0.5);
   spec += lampS * vis * capLamp * uSpec;
 
   // lights that move: explosions, muzzle flashes, sparks
@@ -5400,7 +5574,7 @@ void main() {
   vec3 R = reflect(-V, N);
   R = normalize(R + N0 * max(0.0, -dot(R, N0)) * 1.1);
   vec3 Fenv = F0v + (max(vec3(1.0 - rough), F0v) - F0v) * pow(1.0 - nv, 5.0);
-  float occ = ent ? 0.5 * skyV + 0.2 : mix(skyV, 1.0, 0.12);
+  float occ = (ent ? 0.5 * skyV + 0.2 : mix(skyV, 1.0, 0.12)) * ao2;
   vec3 env = textureLod(uEnv, envUV(R), rough * 5.5).rgb * occ;
 #ifdef Q_SSR
   if (rough < 0.42 && max(Fenv.r, max(Fenv.g, Fenv.b)) > 0.012 && dist < 260.0) {
@@ -5412,8 +5586,14 @@ void main() {
 
   vec3 col = dAlb * light * cavity + spec * mix(1.0, cavity, 0.5) + emitCol;
   // a cold rim keeps a dark character readable against a dark city
-  if (ent) col += vec3(0.33, 0.53, 1.0) * g3.b * pow(1.0 - nv, 3.0) * (0.35 + 0.65 * moonV) * 0.30;
-  col = mix(col, fogColor(rd), fogAmt(wp));
+  if (ent) col += vec3(0.33, 0.53, 1.0) * g3.b * pow(1.0 - nv, 3.0) * (0.35 + 0.65 * moonL) * 0.30;
+  vec3 fc = fogColor(rd);
+#if defined(Q_SHADOW) && defined(Q_SHAFT)
+  fc *= 0.70 + 0.62 * moonAir(rd, min(dist, 170.0), jitS);
+#endif
+  col = mix(col, fc, fogAmt(wp));
+  if (uDbg == 1) col = vec3(moonL * 0.5, moonV * 0.5, ndm * 0.5);
+  else if (uDbg == 2) col = vec3(ao2 * 0.5);
   oColor = vec4(min(col, vec3(64.0)), 1.0);
 }`;
 }
@@ -5719,6 +5899,8 @@ void main() {
 //    TAA       every frame is drawn a fraction of a pixel off; this pass blends it
 //              with the frames before, re-projected through depth, so edges, thin
 //              rain-wet highlights and the noise of the reflections all settle
+//    BLUR      motion blur: each pixel is smeared along the path it travelled on the
+//              screen while the shutter was open, found by re-projecting its depth
 //    BLOOM     a pyramid of blurs of the whole picture, no threshold: a lamp
 //              glares because it is a thousand times brighter than the wall, not
 //              because a shader decided it was "bright"
@@ -5793,6 +5975,51 @@ void main() {
   vec3 r = max(fromY((cur * kc + h * kh) / (kc + kh)), vec3(0.0));
   oHist = vec4(r, 1.0);
   oPost = vec4(r, 1.0);
+}`;
+
+// Motion blur from the camera's own movement. Where a pixel was last frame comes
+// from its depth and last frame's view; the picture is averaged along that path,
+// for the part of the frame the shutter stays open. What moves WITH the camera —
+// the character it follows, the people around him — is flagged in the G-buffer and
+// stays sharp, and the blur of the street behind him never picks up his colours.
+var SH_MBLUR_FS = SH_HEAD + `
+in vec2 vUV;
+uniform sampler2D uTex;
+uniform sampler2D uDepth;
+uniform sampler2D uG3;
+uniform mat4 uInvVPj;
+uniform mat4 uPrevVP;
+uniform vec2 uRes;
+uniform float uShutter;
+uniform float uMaxLen;
+uniform int uN;
+uniform float uFrame;
+layout(location = 0) out vec4 oColor;
+float ign(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }
+void main() {
+  ivec2 px = ivec2(gl_FragCoord.xy);
+  vec3 c0 = texelFetch(uTex, px, 0).rgb;
+  if (texelFetch(uG3, px, 0).a > 0.5) { oColor = vec4(c0, 1.0); return; }
+  float d = texelFetch(uDepth, px, 0).r;
+  vec4 w = uInvVPj * vec4(vUV * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
+  vec4 pc = uPrevVP * vec4(w.xyz / w.w, 1.0);
+  if (pc.w <= 0.0) { oColor = vec4(c0, 1.0); return; }
+  vec2 v = (vUV - (pc.xy / pc.w * 0.5 + 0.5)) * uShutter;
+  float L = length(v * uRes);
+  if (L < 0.75) { oColor = vec4(c0, 1.0); return; }
+  if (L > uMaxLen) v *= uMaxLen / L;
+  float jit = ign(gl_FragCoord.xy + uFrame * 5.588238) - 0.5;
+  vec3 acc = c0;
+  float ws = 1.0;
+  for (int i = 0; i < 16; i++) {
+    if (i >= uN) break;
+    vec2 s = vUV + v * ((float(i) + 0.5 + jit) / float(uN) - 0.5);
+    ivec2 sp = clamp(ivec2(s * uRes), ivec2(0), ivec2(uRes) - 1);
+    if (texelFetch(uG3, sp, 0).a > 0.5) continue;
+    acc += texelFetch(uTex, sp, 0).rgb;
+    ws += 1.0;
+  }
+  oColor = vec4(acc / ws, 1.0);
 }`;
 
 // Downsample: 13 taps (Jimenez), with the option of weighing each group by its
@@ -6218,7 +6445,7 @@ class VxWorld {
   // ── drawing ─────────────────────────────────────────────────────────────
   // Draws every loaded chunk that touches the frustum with whichever mesh `which`
   // names ('o' opaque, 'w' water).
-  draw(prog, planes, camX, camZ, which, maxDist) {
+  draw(prog, planes, camX, camZ, which, maxDist, noStats) {
     const gl = this.gl, org = prog.u('uOrg');
     const lim = maxDist * maxDist;
     let drawn = 0, tris = 0;
@@ -6244,7 +6471,7 @@ class VxWorld {
       drawn++; tris += m.n / 3;
     }
     gl.bindVertexArray(null);
-    if (which === 'o') { this.stats.drawn = drawn; this.stats.tris = tris; }
+    if (which === 'o' && !noStats) { this.stats.drawn = drawn; this.stats.tris = tris; }
   }
 
   // Every light source near a point, packed for the glow-sprite pass:
@@ -6427,7 +6654,7 @@ function FR_quad(m, f, x, y, z, w, hh, d, blk, vr, emit, sky, moon, code) {
   const x1 = x + w, y1 = y + hh, z1 = z + d;
   const r = BK_RGB[blk * 3] * vr, g = BK_RGB[blk * 3 + 1] * vr, b = BK_RGB[blk * 3 + 2] * vr;
   const v0 = m.nv, fl = BK_FLAGS[blk];
-  const s = Math.min(255, sky * 255), mo = Math.min(255, moon * 255), em = Math.min(255, Math.round(emit / 4 * 255));
+  const s = Math.min(255, sky * 255), mo = (Math.min(63, Math.round(moon * 63)) << 2) | 3, em = Math.min(255, Math.round(emit / 4 * 255));
   for (let c = 0; c < 4; c++) {
     const p = F.verts[c].p, o = (v0 + c) * 16, dd = m.v;
     dd[o] = p[0] ? x1 : x; dd[o + 1] = p[1] ? y1 : y; dd[o + 2] = p[2] ? z1 : z; dd[o + 3] = code;
@@ -6478,7 +6705,7 @@ function FR_water(m, bx, bz) {
   for (let c = 0; c < 4; c++) {
     const p = F.verts[c].p, o = (v0 + c) * 16, dd = m.v;
     dd[o] = bx + (p[0] ? FR_CELL : 0); dd[o + 1] = WG_SEA + 1; dd[o + 2] = bz + (p[2] ? FR_CELL : 0); dd[o + 3] = 0;
-    dd[o + 4] = BK.WATER; dd[o + 5] = 2; dd[o + 6] = 200; dd[o + 7] = 4;
+    dd[o + 4] = BK.WATER; dd[o + 5] = 2; dd[o + 6] = (49 << 2) | 3; dd[o + 7] = 4;
     dd[o + 8] = 16; dd[o + 9] = 42; dd[o + 10] = 62; dd[o + 11] = 0;
     dd[o + 12] = 215; dd[o + 13] = 0; dd[o + 14] = 0; dd[o + 15] = 0;
   }
@@ -6512,11 +6739,15 @@ function FR_upload(gl, m) {
 //  One frame:
 //    lights    lamps near the camera go into two small float textures: the list,
 //              and a grid that says which of them matter where
+//    shadows   the city's depth as the moon sees it, in two cascades (a near, sharp
+//              one and a wide one), kept between frames and redrawn only when the
+//              camera has moved far enough or new chunks have arrived
 //    env       a panorama of the sky, every few frames, for glossy reflections
 //    G-BUFFER  far city, chunks, characters, particles: what each pixel IS
 //    LIGHT     one fullscreen pass turns that into the lit, wet, foggy picture
 //    AIR       light scattered around lamps, beams — added on top, depth-aware
 //    TAA       the frame is jittered by a sub-pixel; this blends it with history
+//    BLUR      motion blur along each pixel's path on the screen
 //    RAIN      after TAA, so the streaks stay crisp
 //    POST      bloom pyramid, anamorphic streak, eye adaptation, tone curve,
 //              grade, sharpening, grain
@@ -6586,7 +6817,29 @@ class VxRenderer {
       streak: GL_prog(gl, SH_POST_VS, SH_STREAK_FS, 'streak'),
       expo: GL_prog(gl, SH_POST_VS, SH_EXPO_FS, 'expo'),
       comp: GL_prog(gl, SH_POST_VS, SH_COMP_FS, 'comp'),
+      mblur: GL_prog(gl, SH_POST_VS, SH_MBLUR_FS, 'mblur'),
+      shadow: GL_prog(gl, SH_SHADOW_VS, SH_shadowFS(false), 'shadow'),
+      shadowFar: GL_prog(gl, SH_SHADOW_VS, SH_shadowFS(true), 'shadowFar'),
     };
+    // One depth texture holds both shadow cascades; it is read through two samplers,
+    // one that compares (filtered: four taps for the price of one) and one that
+    // returns the raw depth, for finding how far away the blocker is.
+    this.sh = null;
+    this.shCmp = gl.createSampler();
+    this.shRaw = gl.createSampler();
+    for (const [s, f] of [[this.shCmp, gl.LINEAR], [this.shRaw, gl.NEAREST]]) {
+      gl.samplerParameteri(s, gl.TEXTURE_MIN_FILTER, f); gl.samplerParameteri(s, gl.TEXTURE_MAG_FILTER, f);
+      gl.samplerParameteri(s, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.samplerParameteri(s, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    }
+    gl.samplerParameteri(this.shCmp, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE);
+    gl.samplerParameteri(this.shCmp, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL);
+    gl.samplerParameteri(this.shRaw, gl.TEXTURE_COMPARE_MODE, gl.NONE);
+    this.maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE) || 2048;
+    // the light's frame: z towards the moon, x and y across its beam (as M4_look builds them)
+    const L = [BX_MOON.x, BX_MOON.y, BX_MOON.z], xl = Math.hypot(L[2], L[0]);
+    const X = [L[2] / xl, 0, -L[0] / xl];
+    this.shBasis = { z: L, x: X, y: [L[1] * X[2] - L[2] * X[1], L[2] * X[0] - L[0] * X[2], L[0] * X[1] - L[1] * X[0]] };
+    this.shView = M4_new(); this.shProj = M4_new();
     this.variants = {};          // programs compiled per quality setting, on first use
     this.emptyVao = gl.createVertexArray();
 
@@ -6668,8 +6921,9 @@ class VxRenderer {
     this.rain = true;
     this.beam = { on: true, p0: [0, 0, 0], p1: [0, 0, 0] };
     this.P = VxRenderer.defaults();
-    this.Q = { taa: 1, ssr: 28, vol: 4, lights: 12, detail: 1, caps: 1, splash: 900, streak: 1 };
-    this.stats = { lights: 0, vol: 0 };
+    this.Q = { taa: 1, ssr: 28, vol: 4, lights: 12, detail: 1, caps: 1, splash: 900, streak: 1, shadow: 2, shRes: 2048, ssao: 8, shaft: 10, mblur: 8 };
+    this.stats = { lights: 0, vol: 0, shadowDraws: 0 };
+    this.lastCam = null;
     // GPU time per frame, where the browser will tell us (it is what the quality
     // ladder steers by; 0 means unknown)
     this.tq = gl.getExtension('EXT_disjoint_timer_query_webgl2');
@@ -6699,7 +6953,7 @@ class VxRenderer {
   static defaults() {
     return {
       skyTint: [0.60, 0.70, 0.90], skyI: 2.1, blockI: 1.0,
-      fog: [0.082, 0.082, 0.092], fogD: 0.017, fogK: 0.045, fogB: 0.0010, fogBase: 22, fogFar: 4.6,
+      fog: [0.082, 0.082, 0.092], fogD: 0.017, fogK: 0.045, fogB: 0.0010, fogBase: 22, fogFar: 4.6, mblur: 0.5,
       horizon: [0.046, 0.058, 0.076], zenith: [0.005, 0.009, 0.019],
       cloudH: 175, storm: 0, flash: 0,
       bevel: 0.6, wet: 1.0, spec: 0.55, vol: 0.16, rainLit: 0.55,
@@ -6787,21 +7041,25 @@ class VxRenderer {
   // `can` remembers what this driver failed to build, so a feature that would not
   // compile once is not tried again at every change of quality.
   variant(kind) {
-    const Q = this.Q, gl = this.gl, can = this.can || (this.can = { ssr: true, detail: true, caps: true });
+    const Q = this.Q, gl = this.gl, can = this.can || (this.can = { ssr: true, detail: true, caps: true, shadow: true, ssao: true });
     let key, make;
     if (kind === 'light') {
       const lt = Math.max(1, Math.min(3, Math.ceil(Q.lights / 4)));
       const ssr = (Q.ssr && Q.taa && this.hdr && can.ssr) ? Q.ssr : 0, detail = Q.detail && can.detail ? 1 : 0, caps = Q.caps && can.caps ? 1 : 0;
-      key = 'light:' + ssr + ':' + lt + ':' + detail + ':' + caps;
-      make = () => GL_prog(gl, SH_FS_VS, SH_lightFS((ssr ? '#define Q_SSR ' + ssr + '\n' : '') + '#define Q_LTEX ' + lt + '\n' +
-        (detail ? '#define Q_DETAIL 1\n' : '') + (caps ? '#define Q_CAPS 1\n' : '')), key);
+      const shadow = this.shadowOn() ? Q.shadow : 0, ssao = (Q.ssao && Q.taa && can.ssao) ? Q.ssao : 0, shaft = shadow ? (Q.shaft | 0) : 0;
+      key = 'light:' + ssr + ':' + lt + ':' + detail + ':' + caps + ':' + shadow + ':' + ssao + ':' + shaft;
+      const defs = (ssr ? '#define Q_SSR ' + ssr + '\n' : '') + '#define Q_LTEX ' + lt + '\n' +
+        (detail ? '#define Q_DETAIL 1\n' : '') + (caps ? '#define Q_CAPS 1\n' : '') +
+        (shadow ? '#define Q_SHADOW 1\n#define Q_SHB ' + (shadow > 1 ? 5 : 3) + '\n#define Q_SHP ' + (shadow > 2 ? 8 : (shadow > 1 ? 6 : 4)) + '\n' : '') +
+        (shaft ? '#define Q_SHAFT ' + shaft + '\n' : '') + (ssao ? '#define Q_SSAO ' + ssao + '\n' : '');
+      make = () => { const pr = GL_prog(gl, SH_FS_VS, SH_lightFS(defs), key); pr.hasShadow = shadow > 0; return pr; };
       if (!this.variants[key]) {
         try { this.variants[key] = make(); } catch (e) {
           // A driver that cannot build the full shader still gets a picture: drop the
           // costliest feature it was asked for and try again, down to the plainest variant.
-          if (!ssr && !detail && !caps) throw e;
+          if (!ssr && !detail && !caps && !shadow && !ssao) throw e;
           if (window.console) console.warn('shader ' + key + ' no compila; se simplifica: ' + String(e.message).slice(0, 200));
-          if (ssr) can.ssr = false; else if (detail) can.detail = false; else can.caps = false;
+          if (ssr) can.ssr = false; else if (ssao) can.ssao = false; else if (shadow) can.shadow = false; else if (detail) can.detail = false; else can.caps = false;
           return this.variant(kind);
         }
       }
@@ -6945,6 +7203,91 @@ class VxRenderer {
     return n + room;
   }
 
+  // ── shadow maps ─────────────────────────────────────────────────────────
+  shadowOn() { return !!(this.Q.shadow && (!this.can || this.can.shadow !== false) && (!this.sh || this.sh.ok)); }
+
+  ensureShadow(S) {
+    const gl = this.gl;
+    if (this.sh && this.sh.S === S) return this.sh;
+    if (this.sh) { gl.deleteFramebuffer(this.sh.fb); gl.deleteTexture(this.sh.tex); }
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, 2 * S, S);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const fb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, tex, 0);
+    gl.drawBuffers([gl.NONE]); gl.readBuffer(gl.NONE);
+    const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    const cas = () => ({ valid: false, vp: M4_new(), a: 0, b: 0, key: '', frame: -1e9 });
+    // half-widths in blocks: a near cascade sharp enough for a railing, a far one wide
+    // enough for the shadow of a tower to reach across a plaza
+    this.sh = { S: S, tex: tex, fb: fb, ok: ok, R: [40, S >= 2048 ? 190 : 150], c: [cas(), cas()], planes: new Float32Array(24) };
+    return this.sh;
+  }
+
+  // Redraws what needs it: any cascade not drawn yet; else the one the camera has
+  // wandered furthest across, or one whose chunks have changed. At most one of those
+  // a frame, so streaming in new chunks never costs two geometry passes at once.
+  updateShadows(cam, world, far) {
+    if (!this.shadowOn()) return;
+    const S = Math.max(512, Math.min(this.Q.shRes || 2048, Math.floor(this.maxTex / 2)));
+    const sh = this.ensureShadow(S);
+    if (!sh.ok) { if (this.can) this.can.shadow = false; return; }
+    const B = this.shBasis;
+    const a = cam.x * B.x[0] + cam.y * B.x[1] + cam.z * B.x[2], b = cam.x * B.y[0] + cam.y * B.y[1] + cam.z * B.y[2];
+    const key = (world.lightVer || 0) + ':' + (far ? far.stats.built : 0) + ':' + this.nearDist;
+    let pick = -1, worst = 0;
+    for (let c = 0; c < 2; c++) {
+      const cs = sh.c[c];
+      if (!cs.valid) { this.drawCascade(c, cam, world, far, key); continue; }
+      const moved = Math.max(Math.abs(a - cs.a), Math.abs(b - cs.b)) / (sh.R[c] * (c ? 0.22 : 0.28));
+      const stale = cs.key !== key && this.frame - cs.frame > (c ? 40 : 14) ? 0.9 : 0;
+      const need = Math.max(moved, stale);
+      if (need >= 0.9 && need > worst) { worst = need; pick = c; }
+    }
+    if (pick >= 0) this.drawCascade(pick, cam, world, far, key);
+  }
+
+  drawCascade(c, cam, world, far, key) {
+    const gl = this.gl, sh = this.sh, cs = sh.c[c], S = sh.S, R = sh.R[c], B = this.shBasis;
+    // centre on the camera, snapped to the texel grid across the beam, so a redrawn
+    // cascade puts every edge exactly where the last one did and nothing swims
+    const t = 2 * R / S;
+    const a = Math.round((cam.x * B.x[0] + cam.y * B.x[1] + cam.z * B.x[2]) / t) * t;
+    const b = Math.round((cam.x * B.y[0] + cam.y * B.y[1] + cam.z * B.y[2]) / t) * t;
+    const l = cam.x * B.z[0] + cam.y * B.z[1] + cam.z * B.z[2];
+    const cx = B.x[0] * a + B.y[0] * b + B.z[0] * l, cy = B.x[1] * a + B.y[1] * b + B.z[1] * l, cz = B.x[2] * a + B.y[2] * b + B.z[2] * l;
+    M4_look(this.shView, cx + B.z[0] * 400, cy + B.z[1] * 400, cz + B.z[2] * 400, cx, cy, cz, 0, 1, 0);
+    M4_ortho(this.shProj, -R, R, -R, R, 10, 900);
+    M4_mul(cs.vp, this.shProj, this.shView);
+    M4_planes(sh.planes, cs.vp);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, sh.fb);
+    gl.viewport(c * S, 0, S, S);
+    gl.enable(gl.SCISSOR_TEST); gl.scissor(c * S, 0, S, S);
+    gl.depthMask(true); gl.clearDepth(1); gl.clear(gl.DEPTH_BUFFER_BIT);
+    gl.disable(gl.SCISSOR_TEST);
+    gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LESS); gl.disable(gl.BLEND);
+    gl.enable(gl.CULL_FACE); gl.cullFace(gl.FRONT);
+    let p = this.prog.shadow;
+    gl.useProgram(p.id);
+    gl.uniformMatrix4fv(p.u('uVP'), false, cs.vp);
+    world.draw(p, sh.planes, cam.x, cam.z, 'o', this.nearDist, true);
+    if (far) {
+      p = this.prog.shadowFar;
+      gl.useProgram(p.id);
+      gl.uniformMatrix4fv(p.u('uVP'), false, cs.vp);
+      gl.uniform3f(p.u('uCam'), cam.x, cam.y, cam.z);
+      gl.uniform1f(p.u('uCut'), this.nearDist - 12);
+      far.draw(p, sh.planes, cam.x, cam.z, 'o', this.farDist);
+    }
+    gl.cullFace(gl.BACK); gl.depthFunc(gl.LEQUAL);
+    cs.valid = true; cs.a = a; cs.b = b; cs.key = key; cs.frame = this.frame;
+    this.stats.shadowDraws++;
+  }
+
   updateEnv(cam) {
     if (this.envReady && this.frame % 6 !== 0 && this.P.flash < 0.01) return;
     const gl = this.gl, p = this.prog.env;
@@ -6968,6 +7311,11 @@ class VxRenderer {
     cam.far = this.farDist + 80;
     cam.update();
     this.frame++;
+    // A cut — a teleport, a respawn, a new shot — leaves nothing for the history to
+    // say about this frame: start again rather than smear the old picture into it.
+    const lc = this.lastCam;
+    if (lc && (Math.hypot(cam.x - lc[0], cam.y - lc[1], cam.z - lc[2]) > 12 || cam.fx * lc[3] + cam.fy * lc[4] + cam.fz * lc[5] < 0.5)) this.histValid = false;
+    this.lastCam = [cam.x, cam.y, cam.z, cam.fx, cam.fy, cam.fz];
     const taa = !!Q.taa;
     let jx = 0, jy = 0;
     if (taa) { const i = this.frame % 16; jx = RD_JIT[i * 2] * 2 / W; jy = RD_JIT[i * 2 + 1] * 2 / H; }
@@ -6982,6 +7330,7 @@ class VxRenderer {
     this.updateLights(world, cam, far);
     const nVol = this.updateDynamic(cam);
     this.updateEnv(cam);
+    this.updateShadows(cam, world, far);
 
     // ── G-buffer ──
     gl.bindFramebuffer(gl.FRAMEBUFFER, G.fb);
@@ -7039,6 +7388,7 @@ class VxRenderer {
     gl.uniform1f(p.u('uBase'), WG_BASE);
     gl.uniform1f(p.u('uNear'), this.nearDist - 14);
     gl.uniform1f(p.u('uSpec'), P.spec);
+    gl.uniform1i(p.u('uDbg'), this.debug | 0);
     gl.uniform4fv(p.u('uDyn[0]'), this.dyn); gl.uniform4fv(p.u('uDynC[0]'), this.dynC); gl.uniform1i(p.u('uDynN'), this.dynN);
     const nc = Math.min(8, this.caps.length);
     for (let i = 0; i < nc; i++) {
@@ -7047,7 +7397,17 @@ class VxRenderer {
       this.capL[i * 4] = c.lx; this.capL[i * 4 + 1] = c.ly; this.capL[i * 4 + 2] = c.lz; this.capL[i * 4 + 3] = c.s;
     }
     gl.uniform4fv(p.u('uCap[0]'), this.capA); gl.uniform4fv(p.u('uCapL[0]'), this.capL); gl.uniform1i(p.u('uCapN'), nc);
+    // a variant with shadows must find a depth texture on its shadow samplers, never a colour one
+    const shOn = !!(p.hasShadow && this.sh);
+    if (shOn) {
+      const sh = this.sh;
+      gl.activeTexture(gl.TEXTURE13); gl.bindTexture(gl.TEXTURE_2D, sh.tex); gl.bindSampler(13, this.shCmp); gl.uniform1i(p.u('uShC'), 13);
+      gl.activeTexture(gl.TEXTURE14); gl.bindTexture(gl.TEXTURE_2D, sh.tex); gl.bindSampler(14, this.shRaw); gl.uniform1i(p.u('uShR'), 14);
+      gl.uniformMatrix4fv(p.u('uShVP0'), false, sh.c[0].vp); gl.uniformMatrix4fv(p.u('uShVP1'), false, sh.c[1].vp);
+      gl.uniform4f(p.u('uShK'), 2 * sh.R[0] / sh.S, 2 * sh.R[1] / sh.S, 890, 1 / sh.S);
+    }
     this.fullscreen();
+    if (shOn) { gl.bindSampler(13, null); gl.bindSampler(14, null); }
 
     // ── light in the air, beams ──
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
@@ -7120,6 +7480,22 @@ class VxRenderer {
       this.fullscreen();
       this.hi = to;
       scene = this.post;
+      // motion blur: the TAA input is free again, so the blurred picture goes there
+      if (Q.mblur > 0 && P.mblur > 0) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.lit.fb);
+        p = this.prog.mblur;
+        gl.useProgram(p.id);
+        this.tex(p, 'uTex', 0, this.post.tex); this.tex(p, 'uDepth', 1, G.depth); this.tex(p, 'uG3', 2, G.tex[3]);
+        gl.uniformMatrix4fv(p.u('uInvVPj'), false, this.invj);
+        gl.uniformMatrix4fv(p.u('uPrevVP'), false, this.prevVp);
+        gl.uniform2f(p.u('uRes'), W, H);
+        gl.uniform1f(p.u('uShutter'), P.mblur);
+        gl.uniform1f(p.u('uMaxLen'), 0.04 * W);
+        gl.uniform1i(p.u('uN'), Q.mblur | 0);
+        gl.uniform1f(p.u('uFrame'), this.frame % 64);
+        this.fullscreen();
+        scene = this.lit;
+      }
     }
     this.prevVp.set(vpClean);
     this.histValid = taa;
@@ -11369,11 +11745,11 @@ var VX_STEP = 1 / 120;
 // there is room. The player can also pin a rung from the pause screen; ULTRA is
 // only ever chosen by hand. Nothing here changes how the game plays.
 var VX_Q = [
-  { name: 'MÍNIMA', scale: 0.55, radius: 5, rain: 1100, g: { taa: 0, ssr: 0, vol: 0, lights: 4, detail: 0, caps: 0, splash: 0, streak: 0 } },
-  { name: 'BAJA', scale: 0.70, radius: 6, rain: 2200, g: { taa: 0, ssr: 0, vol: 2, lights: 8, detail: 1, caps: 1, splash: 300, streak: 0 } },
-  { name: 'MEDIA', scale: 0.85, radius: 7, rain: 3600, g: { taa: 1, ssr: 14, vol: 3, lights: 8, detail: 1, caps: 1, splash: 600, streak: 1 } },
-  { name: 'ALTA', scale: 1.00, radius: 8, rain: 5600, g: { taa: 1, ssr: 28, vol: 4, lights: 12, detail: 1, caps: 1, splash: 900, streak: 1 } },
-  { name: 'ULTRA', scale: 1.00, radius: 8, rain: 8000, dpr: 2.0, g: { taa: 1, ssr: 44, vol: 6, lights: 12, detail: 1, caps: 1, splash: 1500, streak: 1 } },
+  { name: 'MÍNIMA', scale: 0.55, radius: 5, rain: 1100, g: { taa: 0, ssr: 0, vol: 0, lights: 4, detail: 0, caps: 0, splash: 0, streak: 0, shadow: 0, shRes: 0, ssao: 0, shaft: 0, mblur: 0 } },
+  { name: 'BAJA', scale: 0.70, radius: 6, rain: 2200, g: { taa: 0, ssr: 0, vol: 2, lights: 8, detail: 1, caps: 1, splash: 300, streak: 0, shadow: 0, shRes: 0, ssao: 0, shaft: 0, mblur: 0 } },
+  { name: 'MEDIA', scale: 0.85, radius: 7, rain: 3600, g: { taa: 1, ssr: 14, vol: 3, lights: 8, detail: 1, caps: 1, splash: 600, streak: 1, shadow: 1, shRes: 1024, ssao: 4, shaft: 0, mblur: 6 } },
+  { name: 'ALTA', scale: 1.00, radius: 8, rain: 5600, g: { taa: 1, ssr: 28, vol: 4, lights: 12, detail: 1, caps: 1, splash: 900, streak: 1, shadow: 2, shRes: 2048, ssao: 8, shaft: 10, mblur: 8 } },
+  { name: 'ULTRA', scale: 1.00, radius: 8, rain: 8000, dpr: 2.0, g: { taa: 1, ssr: 44, vol: 6, lights: 12, detail: 1, caps: 1, splash: 1500, streak: 1, shadow: 3, shRes: 2048, ssao: 12, shaft: 16, mblur: 12 } },
 ];
 var VX_GFX_KEY = 'gotham-voxel-gfx';
 function VX_setQuality(q) {

@@ -4,11 +4,15 @@
 //  One frame:
 //    lights    lamps near the camera go into two small float textures: the list,
 //              and a grid that says which of them matter where
+//    shadows   the city's depth as the moon sees it, in two cascades (a near, sharp
+//              one and a wide one), kept between frames and redrawn only when the
+//              camera has moved far enough or new chunks have arrived
 //    env       a panorama of the sky, every few frames, for glossy reflections
 //    G-BUFFER  far city, chunks, characters, particles: what each pixel IS
 //    LIGHT     one fullscreen pass turns that into the lit, wet, foggy picture
 //    AIR       light scattered around lamps, beams — added on top, depth-aware
 //    TAA       the frame is jittered by a sub-pixel; this blends it with history
+//    BLUR      motion blur along each pixel's path on the screen
 //    RAIN      after TAA, so the streaks stay crisp
 //    POST      bloom pyramid, anamorphic streak, eye adaptation, tone curve,
 //              grade, sharpening, grain
@@ -78,7 +82,29 @@ class VxRenderer {
       streak: GL_prog(gl, SH_POST_VS, SH_STREAK_FS, 'streak'),
       expo: GL_prog(gl, SH_POST_VS, SH_EXPO_FS, 'expo'),
       comp: GL_prog(gl, SH_POST_VS, SH_COMP_FS, 'comp'),
+      mblur: GL_prog(gl, SH_POST_VS, SH_MBLUR_FS, 'mblur'),
+      shadow: GL_prog(gl, SH_SHADOW_VS, SH_shadowFS(false), 'shadow'),
+      shadowFar: GL_prog(gl, SH_SHADOW_VS, SH_shadowFS(true), 'shadowFar'),
     };
+    // One depth texture holds both shadow cascades; it is read through two samplers,
+    // one that compares (filtered: four taps for the price of one) and one that
+    // returns the raw depth, for finding how far away the blocker is.
+    this.sh = null;
+    this.shCmp = gl.createSampler();
+    this.shRaw = gl.createSampler();
+    for (const [s, f] of [[this.shCmp, gl.LINEAR], [this.shRaw, gl.NEAREST]]) {
+      gl.samplerParameteri(s, gl.TEXTURE_MIN_FILTER, f); gl.samplerParameteri(s, gl.TEXTURE_MAG_FILTER, f);
+      gl.samplerParameteri(s, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.samplerParameteri(s, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    }
+    gl.samplerParameteri(this.shCmp, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE);
+    gl.samplerParameteri(this.shCmp, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL);
+    gl.samplerParameteri(this.shRaw, gl.TEXTURE_COMPARE_MODE, gl.NONE);
+    this.maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE) || 2048;
+    // the light's frame: z towards the moon, x and y across its beam (as M4_look builds them)
+    const L = [BX_MOON.x, BX_MOON.y, BX_MOON.z], xl = Math.hypot(L[2], L[0]);
+    const X = [L[2] / xl, 0, -L[0] / xl];
+    this.shBasis = { z: L, x: X, y: [L[1] * X[2] - L[2] * X[1], L[2] * X[0] - L[0] * X[2], L[0] * X[1] - L[1] * X[0]] };
+    this.shView = M4_new(); this.shProj = M4_new();
     this.variants = {};          // programs compiled per quality setting, on first use
     this.emptyVao = gl.createVertexArray();
 
@@ -160,8 +186,9 @@ class VxRenderer {
     this.rain = true;
     this.beam = { on: true, p0: [0, 0, 0], p1: [0, 0, 0] };
     this.P = VxRenderer.defaults();
-    this.Q = { taa: 1, ssr: 28, vol: 4, lights: 12, detail: 1, caps: 1, splash: 900, streak: 1 };
-    this.stats = { lights: 0, vol: 0 };
+    this.Q = { taa: 1, ssr: 28, vol: 4, lights: 12, detail: 1, caps: 1, splash: 900, streak: 1, shadow: 2, shRes: 2048, ssao: 8, shaft: 10, mblur: 8 };
+    this.stats = { lights: 0, vol: 0, shadowDraws: 0 };
+    this.lastCam = null;
     // GPU time per frame, where the browser will tell us (it is what the quality
     // ladder steers by; 0 means unknown)
     this.tq = gl.getExtension('EXT_disjoint_timer_query_webgl2');
@@ -191,7 +218,7 @@ class VxRenderer {
   static defaults() {
     return {
       skyTint: [0.60, 0.70, 0.90], skyI: 2.1, blockI: 1.0,
-      fog: [0.082, 0.082, 0.092], fogD: 0.017, fogK: 0.045, fogB: 0.0010, fogBase: 22, fogFar: 4.6,
+      fog: [0.082, 0.082, 0.092], fogD: 0.017, fogK: 0.045, fogB: 0.0010, fogBase: 22, fogFar: 4.6, mblur: 0.5,
       horizon: [0.046, 0.058, 0.076], zenith: [0.005, 0.009, 0.019],
       cloudH: 175, storm: 0, flash: 0,
       bevel: 0.6, wet: 1.0, spec: 0.55, vol: 0.16, rainLit: 0.55,
@@ -279,21 +306,25 @@ class VxRenderer {
   // `can` remembers what this driver failed to build, so a feature that would not
   // compile once is not tried again at every change of quality.
   variant(kind) {
-    const Q = this.Q, gl = this.gl, can = this.can || (this.can = { ssr: true, detail: true, caps: true });
+    const Q = this.Q, gl = this.gl, can = this.can || (this.can = { ssr: true, detail: true, caps: true, shadow: true, ssao: true });
     let key, make;
     if (kind === 'light') {
       const lt = Math.max(1, Math.min(3, Math.ceil(Q.lights / 4)));
       const ssr = (Q.ssr && Q.taa && this.hdr && can.ssr) ? Q.ssr : 0, detail = Q.detail && can.detail ? 1 : 0, caps = Q.caps && can.caps ? 1 : 0;
-      key = 'light:' + ssr + ':' + lt + ':' + detail + ':' + caps;
-      make = () => GL_prog(gl, SH_FS_VS, SH_lightFS((ssr ? '#define Q_SSR ' + ssr + '\n' : '') + '#define Q_LTEX ' + lt + '\n' +
-        (detail ? '#define Q_DETAIL 1\n' : '') + (caps ? '#define Q_CAPS 1\n' : '')), key);
+      const shadow = this.shadowOn() ? Q.shadow : 0, ssao = (Q.ssao && Q.taa && can.ssao) ? Q.ssao : 0, shaft = shadow ? (Q.shaft | 0) : 0;
+      key = 'light:' + ssr + ':' + lt + ':' + detail + ':' + caps + ':' + shadow + ':' + ssao + ':' + shaft;
+      const defs = (ssr ? '#define Q_SSR ' + ssr + '\n' : '') + '#define Q_LTEX ' + lt + '\n' +
+        (detail ? '#define Q_DETAIL 1\n' : '') + (caps ? '#define Q_CAPS 1\n' : '') +
+        (shadow ? '#define Q_SHADOW 1\n#define Q_SHB ' + (shadow > 1 ? 5 : 3) + '\n#define Q_SHP ' + (shadow > 2 ? 8 : (shadow > 1 ? 6 : 4)) + '\n' : '') +
+        (shaft ? '#define Q_SHAFT ' + shaft + '\n' : '') + (ssao ? '#define Q_SSAO ' + ssao + '\n' : '');
+      make = () => { const pr = GL_prog(gl, SH_FS_VS, SH_lightFS(defs), key); pr.hasShadow = shadow > 0; return pr; };
       if (!this.variants[key]) {
         try { this.variants[key] = make(); } catch (e) {
           // A driver that cannot build the full shader still gets a picture: drop the
           // costliest feature it was asked for and try again, down to the plainest variant.
-          if (!ssr && !detail && !caps) throw e;
+          if (!ssr && !detail && !caps && !shadow && !ssao) throw e;
           if (window.console) console.warn('shader ' + key + ' no compila; se simplifica: ' + String(e.message).slice(0, 200));
-          if (ssr) can.ssr = false; else if (detail) can.detail = false; else can.caps = false;
+          if (ssr) can.ssr = false; else if (ssao) can.ssao = false; else if (shadow) can.shadow = false; else if (detail) can.detail = false; else can.caps = false;
           return this.variant(kind);
         }
       }
@@ -437,6 +468,91 @@ class VxRenderer {
     return n + room;
   }
 
+  // ── shadow maps ─────────────────────────────────────────────────────────
+  shadowOn() { return !!(this.Q.shadow && (!this.can || this.can.shadow !== false) && (!this.sh || this.sh.ok)); }
+
+  ensureShadow(S) {
+    const gl = this.gl;
+    if (this.sh && this.sh.S === S) return this.sh;
+    if (this.sh) { gl.deleteFramebuffer(this.sh.fb); gl.deleteTexture(this.sh.tex); }
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, 2 * S, S);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const fb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, tex, 0);
+    gl.drawBuffers([gl.NONE]); gl.readBuffer(gl.NONE);
+    const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    const cas = () => ({ valid: false, vp: M4_new(), a: 0, b: 0, key: '', frame: -1e9 });
+    // half-widths in blocks: a near cascade sharp enough for a railing, a far one wide
+    // enough for the shadow of a tower to reach across a plaza
+    this.sh = { S: S, tex: tex, fb: fb, ok: ok, R: [40, S >= 2048 ? 190 : 150], c: [cas(), cas()], planes: new Float32Array(24) };
+    return this.sh;
+  }
+
+  // Redraws what needs it: any cascade not drawn yet; else the one the camera has
+  // wandered furthest across, or one whose chunks have changed. At most one of those
+  // a frame, so streaming in new chunks never costs two geometry passes at once.
+  updateShadows(cam, world, far) {
+    if (!this.shadowOn()) return;
+    const S = Math.max(512, Math.min(this.Q.shRes || 2048, Math.floor(this.maxTex / 2)));
+    const sh = this.ensureShadow(S);
+    if (!sh.ok) { if (this.can) this.can.shadow = false; return; }
+    const B = this.shBasis;
+    const a = cam.x * B.x[0] + cam.y * B.x[1] + cam.z * B.x[2], b = cam.x * B.y[0] + cam.y * B.y[1] + cam.z * B.y[2];
+    const key = (world.lightVer || 0) + ':' + (far ? far.stats.built : 0) + ':' + this.nearDist;
+    let pick = -1, worst = 0;
+    for (let c = 0; c < 2; c++) {
+      const cs = sh.c[c];
+      if (!cs.valid) { this.drawCascade(c, cam, world, far, key); continue; }
+      const moved = Math.max(Math.abs(a - cs.a), Math.abs(b - cs.b)) / (sh.R[c] * (c ? 0.22 : 0.28));
+      const stale = cs.key !== key && this.frame - cs.frame > (c ? 40 : 14) ? 0.9 : 0;
+      const need = Math.max(moved, stale);
+      if (need >= 0.9 && need > worst) { worst = need; pick = c; }
+    }
+    if (pick >= 0) this.drawCascade(pick, cam, world, far, key);
+  }
+
+  drawCascade(c, cam, world, far, key) {
+    const gl = this.gl, sh = this.sh, cs = sh.c[c], S = sh.S, R = sh.R[c], B = this.shBasis;
+    // centre on the camera, snapped to the texel grid across the beam, so a redrawn
+    // cascade puts every edge exactly where the last one did and nothing swims
+    const t = 2 * R / S;
+    const a = Math.round((cam.x * B.x[0] + cam.y * B.x[1] + cam.z * B.x[2]) / t) * t;
+    const b = Math.round((cam.x * B.y[0] + cam.y * B.y[1] + cam.z * B.y[2]) / t) * t;
+    const l = cam.x * B.z[0] + cam.y * B.z[1] + cam.z * B.z[2];
+    const cx = B.x[0] * a + B.y[0] * b + B.z[0] * l, cy = B.x[1] * a + B.y[1] * b + B.z[1] * l, cz = B.x[2] * a + B.y[2] * b + B.z[2] * l;
+    M4_look(this.shView, cx + B.z[0] * 400, cy + B.z[1] * 400, cz + B.z[2] * 400, cx, cy, cz, 0, 1, 0);
+    M4_ortho(this.shProj, -R, R, -R, R, 10, 900);
+    M4_mul(cs.vp, this.shProj, this.shView);
+    M4_planes(sh.planes, cs.vp);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, sh.fb);
+    gl.viewport(c * S, 0, S, S);
+    gl.enable(gl.SCISSOR_TEST); gl.scissor(c * S, 0, S, S);
+    gl.depthMask(true); gl.clearDepth(1); gl.clear(gl.DEPTH_BUFFER_BIT);
+    gl.disable(gl.SCISSOR_TEST);
+    gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LESS); gl.disable(gl.BLEND);
+    gl.enable(gl.CULL_FACE); gl.cullFace(gl.FRONT);
+    let p = this.prog.shadow;
+    gl.useProgram(p.id);
+    gl.uniformMatrix4fv(p.u('uVP'), false, cs.vp);
+    world.draw(p, sh.planes, cam.x, cam.z, 'o', this.nearDist, true);
+    if (far) {
+      p = this.prog.shadowFar;
+      gl.useProgram(p.id);
+      gl.uniformMatrix4fv(p.u('uVP'), false, cs.vp);
+      gl.uniform3f(p.u('uCam'), cam.x, cam.y, cam.z);
+      gl.uniform1f(p.u('uCut'), this.nearDist - 12);
+      far.draw(p, sh.planes, cam.x, cam.z, 'o', this.farDist);
+    }
+    gl.cullFace(gl.BACK); gl.depthFunc(gl.LEQUAL);
+    cs.valid = true; cs.a = a; cs.b = b; cs.key = key; cs.frame = this.frame;
+    this.stats.shadowDraws++;
+  }
+
   updateEnv(cam) {
     if (this.envReady && this.frame % 6 !== 0 && this.P.flash < 0.01) return;
     const gl = this.gl, p = this.prog.env;
@@ -460,6 +576,11 @@ class VxRenderer {
     cam.far = this.farDist + 80;
     cam.update();
     this.frame++;
+    // A cut — a teleport, a respawn, a new shot — leaves nothing for the history to
+    // say about this frame: start again rather than smear the old picture into it.
+    const lc = this.lastCam;
+    if (lc && (Math.hypot(cam.x - lc[0], cam.y - lc[1], cam.z - lc[2]) > 12 || cam.fx * lc[3] + cam.fy * lc[4] + cam.fz * lc[5] < 0.5)) this.histValid = false;
+    this.lastCam = [cam.x, cam.y, cam.z, cam.fx, cam.fy, cam.fz];
     const taa = !!Q.taa;
     let jx = 0, jy = 0;
     if (taa) { const i = this.frame % 16; jx = RD_JIT[i * 2] * 2 / W; jy = RD_JIT[i * 2 + 1] * 2 / H; }
@@ -474,6 +595,7 @@ class VxRenderer {
     this.updateLights(world, cam, far);
     const nVol = this.updateDynamic(cam);
     this.updateEnv(cam);
+    this.updateShadows(cam, world, far);
 
     // ── G-buffer ──
     gl.bindFramebuffer(gl.FRAMEBUFFER, G.fb);
@@ -531,6 +653,7 @@ class VxRenderer {
     gl.uniform1f(p.u('uBase'), WG_BASE);
     gl.uniform1f(p.u('uNear'), this.nearDist - 14);
     gl.uniform1f(p.u('uSpec'), P.spec);
+    gl.uniform1i(p.u('uDbg'), this.debug | 0);
     gl.uniform4fv(p.u('uDyn[0]'), this.dyn); gl.uniform4fv(p.u('uDynC[0]'), this.dynC); gl.uniform1i(p.u('uDynN'), this.dynN);
     const nc = Math.min(8, this.caps.length);
     for (let i = 0; i < nc; i++) {
@@ -539,7 +662,17 @@ class VxRenderer {
       this.capL[i * 4] = c.lx; this.capL[i * 4 + 1] = c.ly; this.capL[i * 4 + 2] = c.lz; this.capL[i * 4 + 3] = c.s;
     }
     gl.uniform4fv(p.u('uCap[0]'), this.capA); gl.uniform4fv(p.u('uCapL[0]'), this.capL); gl.uniform1i(p.u('uCapN'), nc);
+    // a variant with shadows must find a depth texture on its shadow samplers, never a colour one
+    const shOn = !!(p.hasShadow && this.sh);
+    if (shOn) {
+      const sh = this.sh;
+      gl.activeTexture(gl.TEXTURE13); gl.bindTexture(gl.TEXTURE_2D, sh.tex); gl.bindSampler(13, this.shCmp); gl.uniform1i(p.u('uShC'), 13);
+      gl.activeTexture(gl.TEXTURE14); gl.bindTexture(gl.TEXTURE_2D, sh.tex); gl.bindSampler(14, this.shRaw); gl.uniform1i(p.u('uShR'), 14);
+      gl.uniformMatrix4fv(p.u('uShVP0'), false, sh.c[0].vp); gl.uniformMatrix4fv(p.u('uShVP1'), false, sh.c[1].vp);
+      gl.uniform4f(p.u('uShK'), 2 * sh.R[0] / sh.S, 2 * sh.R[1] / sh.S, 890, 1 / sh.S);
+    }
     this.fullscreen();
+    if (shOn) { gl.bindSampler(13, null); gl.bindSampler(14, null); }
 
     // ── light in the air, beams ──
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
@@ -612,6 +745,22 @@ class VxRenderer {
       this.fullscreen();
       this.hi = to;
       scene = this.post;
+      // motion blur: the TAA input is free again, so the blurred picture goes there
+      if (Q.mblur > 0 && P.mblur > 0) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.lit.fb);
+        p = this.prog.mblur;
+        gl.useProgram(p.id);
+        this.tex(p, 'uTex', 0, this.post.tex); this.tex(p, 'uDepth', 1, G.depth); this.tex(p, 'uG3', 2, G.tex[3]);
+        gl.uniformMatrix4fv(p.u('uInvVPj'), false, this.invj);
+        gl.uniformMatrix4fv(p.u('uPrevVP'), false, this.prevVp);
+        gl.uniform2f(p.u('uRes'), W, H);
+        gl.uniform1f(p.u('uShutter'), P.mblur);
+        gl.uniform1f(p.u('uMaxLen'), 0.04 * W);
+        gl.uniform1i(p.u('uN'), Q.mblur | 0);
+        gl.uniform1f(p.u('uFrame'), this.frame % 64);
+        this.fullscreen();
+        scene = this.lit;
+      }
     }
     this.prevVp.set(vpClean);
     this.histValid = taa;

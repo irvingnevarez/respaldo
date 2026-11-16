@@ -11,7 +11,8 @@
 //    0  albedo rgb (as authored, sRGB)        a  emission / 4
 //    1  normal * 0.5 + 0.5                    a  block id / 255   (255 entity, 254 particle)
 //    2  baked lamp rgb / 2                    a  baked sky visibility
-//    3  r baked moon visibility   g facade code / 255   b rim   a 1 for things that move
+//    3  r baked moon visibility   g facade code / 255   b corner occlusion (terrain) or
+//       rim (characters)   a 1 for things that move
 // ═══════════════════════════════════════════════════════════════════════
 
 var SH_HEAD = `#version 300 es
@@ -147,7 +148,7 @@ vec2 envUV(vec3 d) { return vec2(atan(d.z, d.x) * 0.15915494 + 0.5, d.y * 0.5 + 
 // ── terrain into the G-buffer ─────────────────────────────────────────────
 var SH_GBUF_VS = SH_HEAD + `
 layout(location = 0) in vec4 aPos;      // xyz inside the chunk, facade code
-layout(location = 1) in uvec4 aIds;     // block, face, baked moon visibility, flags
+layout(location = 1) in uvec4 aIds;     // block, face, moon visibility (6 bits) and corner occlusion (2 bits), flags
 layout(location = 2) in vec4 aCol;      // albedo rgb, emission
 layout(location = 3) in vec4 aLit;      // baked sky visibility, baked lamp rgb
 uniform mat4 uVP;
@@ -156,11 +157,14 @@ out vec3 vW;
 out vec4 vCol;
 out vec4 vLit;
 out float vMoon;
+out float vAO;
 flat out vec3 vInfo;                    // block, face, facade code
+  const float AOF[4] = float[4](0.50, 0.70, 0.86, 1.0);
 void main() {
   vec3 p = uOrg + aPos.xyz;
   if ((aIds.w & 4u) != 0u) p.y -= 0.14;           // a liquid's surface sits a little below the brim
-  vW = p; vCol = aCol; vLit = aLit; vMoon = float(aIds.z) / 255.0;
+  vAO = AOF[aIds.z & 3u];
+  vW = p; vCol = aCol; vLit = aLit; vMoon = float(aIds.z >> 2u) / 63.0 * vAO;
   vInfo = vec3(float(aIds.x), float(aIds.y), aPos.w);
   gl_Position = uVP * vec4(p, 1.0);
 }`;
@@ -171,6 +175,7 @@ in vec3 vW;
 in vec4 vCol;
 in vec4 vLit;
 in float vMoon;
+in float vAO;
 flat in vec3 vInfo;
 uniform vec3 uCam;
 uniform float uCut;       // the far pass discards everything inside this radius
@@ -187,7 +192,35 @@ void main() {
   o0 = vCol;
   o1 = vec4(VXN[int(vInfo.y + 0.5)] * 0.5 + 0.5, vInfo.x / 255.0);
   o2 = vec4(vLit.yzw, vLit.x);
-  o3 = vec4(vMoon, vInfo.z / 255.0, 0.0, 0.0);
+  o3 = vec4(vMoon, vInfo.z / 255.0, vAO, 0.0);
+}`;
+}
+
+// ── shadow maps: the world's depth as the moon sees it ─────────────────────
+// Only the faces turned AWAY from the moon are drawn (front faces are culled), so
+// what is stored is the far side of every solid. A lit face then always lies in
+// front of its own block's stored depth and cannot shadow itself, with no bias to
+// tune; anything behind a solid, seen from the moon, is in its shadow.
+var SH_SHADOW_VS = SH_HEAD + `
+layout(location = 0) in vec4 aPos;
+uniform mat4 uVP;
+uniform vec3 uOrg;
+out vec2 vXZ;
+void main() {
+  vec3 p = uOrg + aPos.xyz;
+  vXZ = p.xz;
+  gl_Position = uVP * vec4(p, 1.0);
+}`;
+function SH_shadowFS(cut) {
+  return SH_HEAD + (cut ? '#define CUT 1\n' : '') + `
+in vec2 vXZ;
+uniform vec3 uCam;
+uniform float uCut;
+void main() {
+#ifdef CUT
+  vec2 d = vXZ - uCam.xz;
+  if (dot(d, d) < uCut * uCut) discard;
+#endif
 }`;
 }
 

@@ -154,7 +154,7 @@ function FR_quad(m, f, x, y, z, w, hh, d, blk, vr, emit, sky, moon, code) {
   const x1 = x + w, y1 = y + hh, z1 = z + d;
   const r = BK_RGB[blk * 3] * vr, g = BK_RGB[blk * 3 + 1] * vr, b = BK_RGB[blk * 3 + 2] * vr;
   const v0 = m.nv, fl = BK_FLAGS[blk];
-  const s = Math.min(255, sky * 255), mo = Math.min(255, moon * 255), em = Math.min(255, Math.round(emit / 4 * 255));
+  const s = Math.min(255, sky * 255), mo = (Math.min(63, Math.round(moon * 63)) << 2) | 3, em = Math.min(255, Math.round(emit / 4 * 255));
   for (let c = 0; c < 4; c++) {
     const p = F.verts[c].p, o = (v0 + c) * 16, dd = m.v;
     dd[o] = p[0] ? x1 : x; dd[o + 1] = p[1] ? y1 : y; dd[o + 2] = p[2] ? z1 : z; dd[o + 3] = code;
@@ -205,7 +205,7 @@ function FR_water(m, bx, bz) {
   for (let c = 0; c < 4; c++) {
     const p = F.verts[c].p, o = (v0 + c) * 16, dd = m.v;
     dd[o] = bx + (p[0] ? FR_CELL : 0); dd[o + 1] = WG_SEA + 1; dd[o + 2] = bz + (p[2] ? FR_CELL : 0); dd[o + 3] = 0;
-    dd[o + 4] = BK.WATER; dd[o + 5] = 2; dd[o + 6] = 200; dd[o + 7] = 4;
+    dd[o + 4] = BK.WATER; dd[o + 5] = 2; dd[o + 6] = (49 << 2) | 3; dd[o + 7] = 4;
     dd[o + 8] = 16; dd[o + 9] = 42; dd[o + 10] = 62; dd[o + 11] = 0;
     dd[o + 12] = 215; dd[o + 13] = 0; dd[o + 14] = 0; dd[o + 15] = 0;
   }
